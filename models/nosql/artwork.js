@@ -4,7 +4,7 @@ const artworkSchema = new mongoose.Schema({
   title: { type: String, required: true },
   type: {
     type: String,
-    enum: ['cinema', 'music', 'literature', 'visual_art'],
+    enum: ['cinema', 'music', 'literature', 'visual_art', 'videogames'],
     required: true
   },
   genres: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Genre' }],

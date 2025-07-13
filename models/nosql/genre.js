@@ -5,7 +5,7 @@ const genreSchema = new mongoose.Schema({
   description: String,
   art_types: [{
     type: String,
-    enum: ['film', 'music', 'literature', 'visual_art']
+    enum: ['film', 'music', 'literature', 'visual_art', 'videogames']
   }]
 });
 

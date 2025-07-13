@@ -5,7 +5,6 @@ const emotionSchema = new mongoose.Schema({
   description: String,
   is_primary: { type: Boolean, default: false },
   parent_emotions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Emotion' }],
- 
 }, { timestamps: true });
 
 module.exports = mongoose.model('Emotion', emotionSchema);
