@@ -1,10 +1,15 @@
 const mongoose = require('mongoose');
 
 const emotionSchema = new mongoose.Schema({
-  name: { type: String, required: true, unique: true },
-  description: String,
-  is_primary: { type: Boolean, default: false },
-  parent_emotions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Emotion' }],
+  name: { type: String, required: true, unique: true }, 
+  description: { type: String, required: true },         
+  category: {
+    type: String,
+    enum: ['positive', 'negative', 'mixed', 'deep'], 
+    required: true
+  },
+  symbolic_tags: [String],       // Ej: ["nostalgia", "memoria", "soledad"]
+
 }, { timestamps: true });
 
 module.exports = mongoose.model('Emotion', emotionSchema);
