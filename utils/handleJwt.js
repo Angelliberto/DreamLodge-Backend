@@ -1,60 +1,48 @@
-const jwt = require('jsonwebtoken');
-const JWT_SECRET = process.env.JWT_SECRET;
+const jwt = require("jsonwebtoken");
+const JWT =  process.env.JWT_SECRET
 
-const tokenDoctor = (doctor) => {
-    const sign = jwt.sign(
-        {
-            _id: doctor._id
-        },
-        JWT_SECRET,
-        {
-            expiresIn: "4h"
-        }
-    )
-    return sign
+const tokenSign = (data) => {
+  const sign = jwt.sign(
+    {
+      _id: data._id,
+      name: data.name,
+      surname: data.surname,
+      email: data.email,
+      birthdate: data.birthdate,
+      gender: data.gender,
+    },
+    JWT,  // Signing secret
+    { expiresIn: "365d" } // Expiration time
+  );
+
+  return sign;
+};
+
+
+const verifyToken = (tokenJwt) => {
+  try{
+  return jwt.verify(tokenJwt,JWT)
+  }
+  catch (err) {
+  console.log(err)
+  }
 }
 
-const patientTokenSign = (patient) => {
-    const patientSign = jwt.sign(
-        {
-            _id: patient._id || patient.id,
-            role: "patient"
-        },
-        JWT_SECRET,
-        {
-            expiresIn: "7d"
-        }
-    );
-    return patientSign;
-};
 
-const adminToken = (admin) => {
-    const sign = jwt.sign(
-        {
-            _id: admin._id,
-            employeeId: admin.employeeId,
-            role: "admin"
-        },
-        JWT_SECRET,
-        {
-            expiresIn: "4h"
-        }
-    )
-    return sign
-}
-
-const verifyToken = (token) => {
-    try {
-        return jwt.verify(token, JWT_SECRET);
-    } catch (error) {
-        console.error("Error verifying token:\n", error);
-        return null;
-    }
-};
-
-module.exports = {
-    patientTokenSign,
-    verifyToken, tokenDoctor, adminToken
+const checkToken = async (req,res,next) => {
+  try{
+    const token = req.headers.authorization.split(" ").pop()
+    const dataToken = verifyToken(token)
+    const id = dataToken._id
+    return id
+    next()
+  }
+  catch(error){
+    console.log(error)
+    handleHttpError(res,"ERROR")
+  } 
 };
 
 
+
+module.exports = {tokenSign,verifyToken, checkToken}

@@ -1,26 +1,44 @@
-const { verifyToken } = require('../utils/handleJwt');
-const {} = require('../models');
-const { handleHTTPError } = require('../utils/handleHTTPError');
+const {verifyToken} = require("../utils/handleJwt");
+const {handleHTTPError} = require("../utils/handleHTTPError");
 
-const decodeToken = async (req) => {
-    try {
-        if (!req.headers.authorization) {
-            console.error("Authorization header is missing");
-            throw new Error({ message: "Authorization required" }, 401);
-        }
+const {UserModel} = require("../models");
 
-        const token = req.headers.authorization.split(" ").pop();
-        const tokenData = verifyToken(token);
+const authUser = async (req, res, next) => {
+  // Check for authorization header
+  if (!req.headers.authorization) {
+    return handleHTTPError(res, "No token provided", 401);
+  }
 
-        if (!tokenData || !tokenData._id) {
-            console.error("Invalid token data: ", tokenData);
-            throw new Error({ message: "Invalid token" }, 401);
-        }
-        return tokenData
-    } catch (err) {
-        throw new Error("Error decoding token")
+  try {
+    // Extract token from the authorization header (Bearer <token>)
+    const token = req.headers.authorization.split(" ").pop();
+    // Verify token and extract user data (e.g., _id)
+    const dataToken = verifyToken(token);
+  
+    const id = dataToken._id;
+
+    // Find the user by id
+    const user = await UserModel.findById(id);
+    if (!user) {
+      return handleHTTPError(res, "User not found", 404);
     }
-}
 
+    // Attach the user data to the request object
+    req.user = user;
 
-module.exports = {};
+    // Proceed to the next middleware or route handler
+    next();
+
+  } catch (error) {
+    console.error("Authentication Error:", error.message);
+    // Handle token verification failure (e.g., invalid/expired token)
+    if (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError") {
+      return handleHTTPError(res, "Invalid or expired token", 401);
+    }
+    // General error handling
+    handleHTTPError(res, "Authentication failed", 500);
+    console.error(error);
+  }
+};
+
+module.exports = { authUser };
