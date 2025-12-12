@@ -1,35 +1,52 @@
 // Imports
-const express = require("express"); //Framework
-const cors = require("cors"); //Access control
-require("dotenv").config(); //.env
-const port = process.env.PORT || 3000; //Listening port
-const dbConnect = require("./config/mongo"); //DB connection
+const express = require("express"); // Framework
+const cors = require("cors"); // Access control
+require("dotenv").config(); // .env
+const port = process.env.PORT || 3000; // Listening port
+const dbConnect = require("./config/mongo"); // DB connection
 
-//Documentation
+// Documentation
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpecs = require("./docs/swagger");
 
 // Create app
 const app = express();
 
-// Requirements
-app.use(cors({
-    origin: ["http://localhost:3000", "http://localhost:3001"
-    ],
-    credentials: true
-}));
-app.use(express.json());
-app.use("/api", require("./routes")); //goes to routes/index by default
-app.use("/api-docs",
-    swaggerUi.serve,
-    swaggerUi.setup(swaggerSpecs)
+// CORS configuration
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:8081",
+  "http://192.168.1.77:3000", // your local frontend
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (e.g. mobile apps, curl, Postman, Expo)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
 );
+
+// Middlewares
+app.use(express.json());
+
+// Routes
+app.use("/api", require("./routes")); // routes/index.js
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
 
 // Listening
 app.listen(port, () => {
-    console.log("Server listening on PORT " + port);
-    dbConnect();
+  console.log("✅ Server listening on PORT " + port);
+  dbConnect();
 });
 
 // Exports
-module.exports = app
+module.exports = app;

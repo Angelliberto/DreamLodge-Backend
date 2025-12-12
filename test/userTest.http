@@ -2,9 +2,9 @@ POST http://localhost:3000/api/users/register
 Content-Type: application/json
 
 {
-  "name": "Alice Example",
-  "birthdate": "1995-05-20",
-  "email": "alice@example.com",
+  "name": "Guioxxio baby",
+  "birthdate": "1995-55-20",
+  "email": "angel.dpsmswwz@gmail.com",
   "password": "securePass123"
 }
 
@@ -24,7 +24,7 @@ Content-Type: application/json
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGE3MDU5MjM0NGM2NzE0OWNhYThlMDMiLCJuYW1lIjoiQWxpY2UgRXhhbXBsZSIsImVtYWlsIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJiaXJ0aGRhdGUiOiIxOTk1LTA1LTIwVDAwOjAwOjAwLjAwMFoiLCJpYXQiOjE3NTU3ODk1ODMsImV4cCI6MTc4NzMyNTU4M30.AmppTKLapNPzb0VylsZ-tSTfZO5ck4G_pjnGM3BzekY
 
 {
-  "name": "Alice Examplehoe",
+  "name": "Alice Examplexxxx",
   "birthdate": "1995-05-20",
   "email": "alice@example.com",
   "password": "securePass123"
@@ -33,7 +33,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGE3MDU5M
 ###
 DELETE http://localhost:3000/api/users/delete
 Content-Type: application/json
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGE3MDU5MjM0NGM2NzE0OWNhYThlMDMiLCJuYW1lIjoiQWxpY2UgRXhhbXBsZSIsImVtYWlsIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJiaXJ0aGRhdGUiOiIxOTk1LTA1LTIwVDAwOjAwOjAwLjAwMFoiLCJpYXQiOjE3NTU3ODk1ODMsImV4cCI6MTc4NzMyNTU4M30.AmppTKLapNPzb0VylsZ-tSTfZO5ck4G_pjnGM3BzekY
+Authorization: Bearer eyJhbGciOJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGE3MDU5MjM0NGM2NzE0OWNhYThlMDMiLCJuYW1lIjoiQWxpY2UgRXhhbXBsZSIsImVtYWlsIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJiaXJ0aGRhdGUiOiIxOTk1LTA1LTIwVDAwOjAwOjAwLjAwMFoiLCJpYXQiOjE3NTU3ODk1ODMsImV4cCI6MTc4NzMyNTU4M30.AmppTKLapNPzb0VylsZ-tSTfZO5ck4G_pjnGM3BzekY
 
 ###
 GET http://localhost:3000/api/users/google

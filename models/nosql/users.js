@@ -6,13 +6,13 @@ const usersModel = new mongoose.Schema({
   email: { type: String, unique: true, required: true },
   password: String,
   preferences: {
-    favorite_types: [String],   // ["cinema", "literature"]
-    favorite_genres: [String]   // ["existential", "minimalist"]
+    favorite_types: [String],   
+    favorite_genres: [String]   
   },
   emotional_profile: {
     depth_preference: { type: String, enum: ['accesible', 'middle', 'deep', 'experimental'] },
-    common_emotions: [String], // ["melancholy", "awe"]
-    style: String              // ["surrealist", "narrative", etc.]
+    common_emotions: [String], 
+    style: String             
   },
   two_fa_enabled: { type: Boolean, default: false },
   reset_token: String,         // para recuperación de contraseña

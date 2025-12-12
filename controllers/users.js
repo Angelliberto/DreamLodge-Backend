@@ -14,14 +14,12 @@ const userRegister = async (req, res) => {
     
     const newUser = { ...validatedData, password };
     const userData = await UserModel.create(newUser);
-    
-    userData.password = undefined; // Hides password in response
+    userData.password = undefined; 
 
     const data = {token: tokenSign(userData), user: userData};
     
     return res.send(data); 
   } catch (error) {
-    console.error(error);
     handleHTTPError(res, error);
   }
 };
@@ -44,7 +42,6 @@ const userLogin = async (req,res) => {
 
   }
   catch(error){
-    console.error(error);
     handleHTTPError(res, error);
   }
 }
@@ -58,7 +55,6 @@ const userDelete = async (req,res) => {
     return res.status(200).json({message: "User deleted"})
   }
   catch(error){
-    console.error(error);
     handleHTTPError(res, error);
   }
 }
@@ -73,7 +69,6 @@ const userUpdate = async (req,res) => {
     return res.status(200).json(user)
   }
   catch(error){
-    console.error(error);
     handleHTTPError(res, error)
   }
 }
@@ -107,6 +102,89 @@ const googleCallback = async (req, res) => {
   }
 };
 
+const sendPasswordResetEmail = async (req, res) => {
+  try {
+    const email = req.params.email
+    const user = await UserModel.findOne({email: email})
+    if (!user) {
+      return handleHTTPError(res, {message: "User ID not found."}, 404)
+    }
+
+    const passwordResetToken = crypto.randomBytes(32).toString("hex");
+
+    user.resetPasswordToken = passwordResetToken
+    user.resetPasswordTokenExpiration = Date.now() + 5 * 60 * 1000;
+    await user.save()
+
+    const resetPasswordUrl = `${process.env.FRONTEND_URL}reset-password?token=${passwordResetToken}`;
+
+    sendEmail(user.email,
+                "Reset your password",
+                "Please click the following link to reset your password",
+                resetPasswordUrl,
+                "Reset Password"
+        );
+     res.send({ message: "Password reset email sent successfully. Please check your inbox." });
+
+  } catch (err) {
+    return handleHTTPError(res, { message: "Error sending password reset email" }, 500);
+  }
+}
+
+const checkPasswordResetToken = async (req, res) => {
+    try {
+        const { token } = req.query;
+        if (!token) {
+            return handleHTTPError(res, { message: "Token is required to check password reset" }, 400);
+        }
+
+        const user = await UserModel.findOne({
+            resetPasswordToken: token,
+            resetPasswordTokenExpiration: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            console.warn("No valid user found with provided token");
+            return handleHTTPError(res, { message: "Invalid or expired password reset token" }, 404);
+        }
+
+        res.send({ message: "Valid password reset token" });
+    } catch (error) {
+    
+        return handleHTTPError(res, { message: "Error checking password reset token" }, 500);
+    }
+};
+
+const resetPassword = async (req, res) => {
+    try {
+        const { token, newPassword } = req.body;
+
+        if (!token || !newPassword) {
+            return handleHTTPError(res, { message: "Token and new password are required to reset password" }, 400);
+        }
+
+        const user = await UserModel.findOne({
+            resetPasswordToken: token,
+            resetPasswordTokenExpiration: { $gt: Date.now() }
+        });
+
+        if (!user) {
+            console.warn("No valid user found with provided token");
+            return handleHTTPError(res, { message: "Invalid or expired password reset token" }, 404);
+        }   
+
+        user.password = await encrypt(newPassword);
+        user.resetPasswordToken = null;
+        user.resetPasswordTokenExpiration = null;
+        await user.save();
+
+        res.send({ message: "Password reset successfully. You can now log in with your new password." });
+    } catch (error) {
+        return handleHTTPError(res, { message: "Error resetting password" }, 500);
+    }
+};
 
 
-module.exports = {userRegister, userLogin, userDelete,userUpdate, googleCallback}
+
+
+module.exports = {userRegister, userLogin, userDelete,userUpdate, googleCallback, resetPassword,checkPasswordResetToken,sendPasswordResetEmail}

@@ -19,6 +19,11 @@ const userRegisterValidator = [
         .notEmpty().withMessage("Password cannot be empty")
         .isString().withMessage("Password must be a string")
         .isLength({ min: 8 }).withMessage("Password must be at least 6 characters"),
+    check("confirmPassword")
+    .exists().withMessage("Confirm Password is required")
+    .notEmpty().withMessage("Confirm Password cannot be empty")
+    .custom((value, { req }) => value === req.body.password).withMessage("Passwords do not match")
+        ,
     check("preferences.favorite_types")
         .optional()
         .isArray().withMessage("favorite_types must be an array of strings"),
