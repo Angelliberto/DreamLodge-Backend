@@ -5,15 +5,21 @@ const usersModel = new mongoose.Schema({
   birthdate: Date,
   email: { type: String, unique: true, required: true },
   password: String,
-  preferences: {
-    favorite_types: [String],   
-    favorite_genres: [String]   
+  // Referencia al modelo Ocean (resultados del test de personalidad del usuario)
+  oceanId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Ocean'
   },
-  emotional_profile: {
-    depth_preference: { type: String, enum: ['accesible', 'middle', 'deep', 'experimental'] },
-    common_emotions: [String], 
-    style: String             
-  },
+  // Obras favoritas del usuario
+  favoriteArtworks: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Artwork'
+  }],
+  // Obras que el usuario quiere ver o están pendientes
+  pendingArtworks: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Artwork'
+  }],
   two_fa_enabled: { type: Boolean, default: false },
   reset_token: String,         // para recuperación de contraseña
   deleted: { type: Boolean, default: false } // soft delete opcional
