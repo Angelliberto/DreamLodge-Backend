@@ -43,7 +43,7 @@ const artworkSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Índices para búsquedas más rápidas
-artworkSchema.index({ id: 1 });
+// Nota: 'id' ya tiene índice por 'unique: true', no duplicar
 artworkSchema.index({ category: 1 });
 artworkSchema.index({ source: 1 });
 

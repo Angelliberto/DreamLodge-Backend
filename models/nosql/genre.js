@@ -38,7 +38,7 @@ const genreSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Índices para búsquedas más rápidas
-genreSchema.index({ name: 1 });
+// Nota: 'name' ya tiene índice por 'unique: true', no duplicar
 genreSchema.index({ oceanId: 1 });
 
 module.exports = mongoose.model('Genre', genreSchema);
