@@ -22,6 +22,13 @@ const allowedOrigins = [
 
 app.use(
   cors({
+    origin: allowedOrigins,
+    credentials: true,
+  })
+);
+
+/*app.use(
+  cors({
     origin: function (origin, callback) {
       // Allow requests with no origin (e.g. mobile apps, curl, Postman, Expo)
       if (!origin) return callback(null, true);
@@ -34,7 +41,7 @@ app.use(
     },
     credentials: true,
   })
-);
+);*/
 
 // Middlewares
 app.use(express.json());
