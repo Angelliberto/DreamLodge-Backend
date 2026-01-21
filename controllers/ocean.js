@@ -180,9 +180,23 @@ const saveTestResults = async (req, res) => {
       session.endSession();
     }
 
-    // Obtener el resultado con la entidad poblada
-    const populatedResult = await OceanModel.findById(oceanResult._id)
-      .populate('entityId');
+    // Obtener el resultado (solo poblar para artwork y genre, no para user)
+    let populatedResult;
+    if (entityType === 'user') {
+      // No poblar datos del usuario, solo devolver los resultados del test
+      populatedResult = await OceanModel.findById(oceanResult._id);
+    } else {
+      // Poblar para artwork y genre
+      const modelMap = {
+        'artwork': 'Artwork',
+        'genre': 'Genre'
+      };
+      populatedResult = await OceanModel.findById(oceanResult._id)
+        .populate({
+          path: 'entityId',
+          model: modelMap[entityType]
+        });
+    }
 
     return res.status(200).json({
       message: "Resultados del test guardados correctamente",
@@ -232,11 +246,30 @@ const getTestResults = async (req, res) => {
       return handleHTTPError(res, { message: "entityId es requerido" }, 400);
     }
 
-    const oceanResult = await OceanModel.findOne({
-      entityType,
-      entityId,
-      deleted: false
-    }).populate('entityId');
+    // Buscar resultados del test (solo poblar para artwork y genre, no para user)
+    let oceanResult;
+    if (entityType === 'user') {
+      // No poblar datos del usuario, solo devolver los resultados del test
+      oceanResult = await OceanModel.findOne({
+        entityType,
+        entityId,
+        deleted: false
+      });
+    } else {
+      // Poblar para artwork y genre
+      const modelMap = {
+        'artwork': 'Artwork',
+        'genre': 'Genre'
+      };
+      oceanResult = await OceanModel.findOne({
+        entityType,
+        entityId,
+        deleted: false
+      }).populate({
+        path: 'entityId',
+        model: modelMap[entityType]
+      });
+    }
 
     if (!oceanResult) {
       return handleHTTPError(res, { message: "Resultados del test no encontrados" }, 404);
@@ -248,7 +281,11 @@ const getTestResults = async (req, res) => {
 
   } catch (error) {
     console.error("Error obteniendo resultados del test:", error);
-    return handleHTTPError(res, { message: "Error al obtener los resultados del test" }, 500);
+    console.error("Error stack:", error.stack);
+    return handleHTTPError(res, { 
+      message: "Error al obtener los resultados del test",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    }, 500);
   }
 };
 
@@ -274,20 +311,15 @@ const getUserTestResults = async (req, res) => {
       return handleHTTPError(res, { message: "Usuario no encontrado" }, 404);
     }
 
-    // Buscar resultados del test del usuario
-    // Usar $or para manejar casos donde deleted podría ser undefined o false
+    // Convertir userId a ObjectId para la consulta
     const oceanResults = await OceanModel.find({
       entityType: 'user',
       entityId: new mongoose.Types.ObjectId(userId),
-      $or: [
-        { deleted: false },
-        { deleted: { $exists: false } }
-      ]
+      deleted: false
     }).sort({ createdAt: -1 });
 
-    // Siempre devolver un array, incluso si está vacío
     return res.status(200).json({
-      data: Array.isArray(oceanResults) ? oceanResults : []
+      data: oceanResults
     });
 
   } catch (error) {

@@ -15,8 +15,8 @@ POST https://impressive-cathee-immune-angelceb-312ac472.koyeb.app/api/users/logi
 Content-Type: application/json
 
 {
-  "email": "alice@example.com",
-  "password": "securePass123"
+  "email": "angel@xoxo.com",
+  "password": "27486201"
 }
 
 ###
@@ -38,3 +38,15 @@ Authorization: Bearer eyJhbGciOJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGE3MDU5Mj
 
 ###
 GET http://localhost:3000/api/users/google
+
+###
+# Get user test results (OCEAN test)
+# Replace USER_ID with an actual user ID from your database
+GET http://localhost:3000/api/ocean/user/68b41d35238816729c62281f
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGI0MWQzNTIzODgxNjcyOWM2MjI4MWYiLCJuYW1lIjoiQW5nZWwiLCJlbWFpbCI6ImFuZ2VsQHhveG8uY29tIiwiYmlydGhkYXRlIjoiMTk5OS0xMi0yN1QwMDowMDowMC4wMDBaIiwiaWF0IjoxNzY5MDI4OTM4LCJleHAiOjE4MDA1NjQ5Mzh9.dT4t_nNtNM7B0omZFx86SO8eT72Qe-QVrFxHzqgFjWc
+
+###
+# Get user test results (Production)
+# Replace USER_ID with an actual user ID from your database
+GET https://impressive-cathee-immune-angelceb-312ac472.koyeb.app/api/ocean/user/68a70592344c67149caa8e03
+Authorization: Bearer YOUR_TOKEN_HERE
