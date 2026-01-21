@@ -264,24 +264,39 @@ const getUserTestResults = async (req, res) => {
       return handleHTTPError(res, { message: "userId es requerido" }, 400);
     }
 
+    // Validar formato de ObjectId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return handleHTTPError(res, { message: "userId debe ser un ObjectId válido" }, 400);
+    }
+
     const user = await UserModel.findById(userId);
     if (!user) {
       return handleHTTPError(res, { message: "Usuario no encontrado" }, 404);
     }
 
+    // Buscar resultados del test del usuario
+    // Usar $or para manejar casos donde deleted podría ser undefined o false
     const oceanResults = await OceanModel.find({
       entityType: 'user',
-      entityId: userId,
-      deleted: false
+      entityId: new mongoose.Types.ObjectId(userId),
+      $or: [
+        { deleted: false },
+        { deleted: { $exists: false } }
+      ]
     }).sort({ createdAt: -1 });
 
+    // Siempre devolver un array, incluso si está vacío
     return res.status(200).json({
-      data: oceanResults
+      data: Array.isArray(oceanResults) ? oceanResults : []
     });
 
   } catch (error) {
     console.error("Error obteniendo resultados del test del usuario:", error);
-    return handleHTTPError(res, { message: "Error al obtener los resultados del test del usuario" }, 500);
+    console.error("Error stack:", error.stack);
+    return handleHTTPError(res, { 
+      message: "Error al obtener los resultados del test del usuario",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    }, 500);
   }
 };
 
