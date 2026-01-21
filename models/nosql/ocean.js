@@ -62,6 +62,13 @@ const oceanSchema = new mongoose.Schema({
   // Puntuación total general (opcional)
   totalScore: Number,
   
+  // Tipo de test realizado (quick o deep)
+  testType: {
+    type: String,
+    enum: ['quick', 'deep'],
+    default: 'quick'
+  },
+  
   // Soft delete
   deleted: { type: Boolean, default: false }
 }, { timestamps: true });

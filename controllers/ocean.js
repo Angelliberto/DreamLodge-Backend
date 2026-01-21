@@ -48,7 +48,7 @@ const saveTestResults = async (req, res) => {
   let useTransaction = false;
 
   try {
-    const { entityType, entityId, scores, totalScore } = req.body;
+    const { entityType, entityId, scores, totalScore, testType } = req.body;
 
     // Validaciones básicas
     if (!entityType || !['user', 'artwork', 'genre'].includes(entityType)) {
@@ -126,6 +126,9 @@ const saveTestResults = async (req, res) => {
       if (totalScore !== undefined) {
         oceanResult.totalScore = totalScore;
       }
+      if (testType) {
+        oceanResult.testType = testType;
+      }
       if (useTransaction) {
         await oceanResult.save({ session });
       } else {
@@ -138,7 +141,8 @@ const saveTestResults = async (req, res) => {
           entityType,
           entityId,
           scores,
-          totalScore
+          totalScore,
+          testType: testType || 'quick'
         }], { session });
         oceanResult = created[0];
       } else {
@@ -146,7 +150,8 @@ const saveTestResults = async (req, res) => {
           entityType,
           entityId,
           scores,
-          totalScore
+          totalScore,
+          testType: testType || 'quick'
         });
       }
     }
