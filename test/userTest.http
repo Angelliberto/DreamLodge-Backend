@@ -1,16 +1,17 @@
-POST http://localhost:3000/api/users/register
+POST https://impressive-cathee-immune-angelceb-312ac472.koyeb.app/api/users/register
 Content-Type: application/json
 
 {
-  "name": "Guioxxio baby",
-  "birthdate": "1995-55-20",
-  "email": "angel.dpsmswwz@gmail.com",
-  "password": "securePass123"
+  "name": "jajajja",
+  "birthdate": "1999-01-13",
+  "email": "angelbaysexyyeahah@ahah.com",
+  "password": "securePass123",
+  "confirmPassword": "securePass123"
 }
 
 
 ###
-POST http://localhost:3000/api/users/login
+POST https://impressive-cathee-immune-angelceb-312ac472.koyeb.app/api/users/login
 Content-Type: application/json
 
 {
