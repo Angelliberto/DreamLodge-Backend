@@ -84,13 +84,10 @@ const googleCallback = async (req, res) => {
       return res.status(401).json({ message: "Google authentication failed - no user" });
     }
 
-    console.log(`Google Callback: Processing callback for user ${user.email} (ID: ${user._id})`);
-
     // Generate JWT for the user
     let token;
     try {
       token = tokenSign(user);
-      console.log(`Google Callback: Token generated successfully for user ${user.email}`);
     } catch (tokenError) {
       console.error("Google Callback: Error generating token:", tokenError);
       return res.status(500).json({ message: "Error generating authentication token" });
@@ -128,7 +125,6 @@ const googleCallback = async (req, res) => {
     });
   } catch (error) {
     console.error("Google callback error:", error);
-    console.error("Error stack:", error.stack);
     return handleHTTPError(res, error);
   }
 };

@@ -24,19 +24,16 @@ passport.use(new GoogleStrategy({
       }
 
       const email = profile.emails[0].value;
-      console.log(`Google OAuth: Processing authentication for email: ${email}`);
       
       // Check if user already exists (login case)
       let user = await UserModel.findOne({ email: email });
       
       if (user) {
         // User exists - login case
-        console.log(`Google OAuth: User found with email ${email}, logging in`);
         return done(null, user);
       }
       
       // User doesn't exist - registration case
-      console.log(`Google OAuth: User not found with email ${email}, creating new user`);
       const userName = profile.displayName || 
                       (profile.name ? `${profile.name.givenName || ''} ${profile.name.familyName || ''}`.trim() : '') || 
                       'User';
@@ -47,7 +44,6 @@ passport.use(new GoogleStrategy({
         password: undefined, // Google account - no password needed (undefined instead of empty string)
       });
       
-      console.log(`Google OAuth: New user created successfully with email ${email}`);
       return done(null, user);
     } catch (err) {
       console.error('Google OAuth Strategy Error:', err);
