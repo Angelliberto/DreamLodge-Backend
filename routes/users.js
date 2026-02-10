@@ -24,16 +24,18 @@ router.patch("/update",authUser,userUpdateValidator,userUpdate);
 
 router.get("/google", (req, res, next) => {
   // Store redirect_uri in session or pass via state
-  // For simplicity, we'll append it to the callback URL
   const redirectUri = req.query.redirect_uri;
   if (redirectUri) {
     // Pass redirect_uri through state parameter
+    // Google OAuth will preserve this state and return it in the callback
     const state = Buffer.from(JSON.stringify({ redirect_uri: redirectUri })).toString('base64');
+    console.log("Google OAuth: Starting with redirect_uri:", redirectUri.substring(0, 50) + "...");
     passport.authenticate("google", { 
       scope: ["profile", "email"],
       state: state
     })(req, res, next);
   } else {
+    console.log("Google OAuth: No redirect_uri provided");
     passport.authenticate("google", { scope: ["profile", "email"] })(req, res, next);
   }
 });
