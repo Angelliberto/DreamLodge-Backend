@@ -101,13 +101,21 @@ const googleCallback = async (req, res) => {
     };
 
     // Check if redirect_uri is provided (for mobile OAuth flow)
-    const redirectUri = req.query.redirect_uri;
+    // Try to get it from query, or from req.redirect_uri (set in route middleware)
+    const redirectUri = req.query.redirect_uri || req.redirect_uri;
+    
+    // Always redirect if redirect_uri is present (even if it's a deep link)
+    // The mobile app will handle the deep link, web browsers will show an error but that's expected
     if (redirectUri) {
+      // Log for debugging (remove in production if needed)
+      console.log("Google Callback: Redirecting to:", redirectUri.substring(0, 50) + "...");
       try {
         // Redirect to the deep link with token and user data
         const userDataEncoded = encodeURIComponent(JSON.stringify(userData));
         const redirectUrl = `${redirectUri}?token=${token}&user=${userDataEncoded}`;
-        return res.redirect(redirectUrl);
+        // Use 302 redirect to ensure the browser/app handles it
+        // For mobile apps, this will trigger the deep link handler
+        return res.redirect(302, redirectUrl);
       } catch (redirectError) {
         console.error("Error creating redirect URL:", redirectError);
         // Fall back to JSON response if redirect fails
@@ -118,7 +126,7 @@ const googleCallback = async (req, res) => {
       }
     }
 
-    // Otherwise, return JSON (for API calls)
+    // If no redirect_uri, return JSON (for direct API calls or web testing)
     return res.json({
       token,
       user: userData

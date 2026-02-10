@@ -65,13 +65,14 @@ router.get("/google/callback", (req, res, next) => {
       redirectUri = stateData.redirect_uri;
       // Store in req for later use, but don't modify req.query as it might interfere with passport
       req.redirect_uri = redirectUri;
+      console.log("Google Callback Route: Extracted redirect_uri from state:", redirectUri ? redirectUri.substring(0, 50) + "..." : "none");
     } catch (e) {
       // If state parsing fails, continue without redirect_uri
       console.error("Error parsing state:", e);
     }
+  } else {
+    console.log("Google Callback Route: No state parameter found");
   }
-
-  console.log("Google Callback: Processing OAuth callback with code");
   
   passport.authenticate("google", { 
     session: false,
