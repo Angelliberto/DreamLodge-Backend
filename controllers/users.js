@@ -108,7 +108,7 @@ const googleCallback = async (req, res) => {
     console.log("  - req.query.redirect_uri:", req.query.redirect_uri);
     console.log("  - req.redirect_uri:", req.redirect_uri);
     console.log("  - Final redirectUri:", redirectUri);
-    
+
     // Always redirect if redirect_uri is present (even if it's a deep link)
     // The mobile app will handle the deep link, web browsers will show an error but that's expected
     if (redirectUri) {
@@ -124,8 +124,8 @@ const googleCallback = async (req, res) => {
       } catch (redirectError) {
         console.error("Error creating redirect URL:", redirectError);
         // Fall back to JSON response if redirect fails
-        return res.json({
-          token,
+    return res.json({
+      token,
           user: userData
         });
       }
