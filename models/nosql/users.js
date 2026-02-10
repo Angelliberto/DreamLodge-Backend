@@ -22,6 +22,8 @@ const usersModel = new mongoose.Schema({
   }],
   two_fa_enabled: { type: Boolean, default: false },
   reset_token: String,         // para recuperación de contraseña
+  resetPasswordToken: String,   // token para reset de contraseña
+  resetPasswordTokenExpiration: Date, // expiración del token de reset
   deleted: { type: Boolean, default: false } // soft delete opcional
 }, { timestamps: true });
 

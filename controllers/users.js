@@ -80,25 +80,56 @@ const googleCallback = async (req, res) => {
     // Passport attaches the user to req.user after successful authentication
     const user = req.user;
     if (!user) {
-      return res.status(401).json({ message: "Google authentication failed" });
+      console.error("Google Callback: No user found in req.user");
+      return res.status(401).json({ message: "Google authentication failed - no user" });
     }
 
-    // Generate JWT for the user
-    const token = tokenSign(user);
+    console.log(`Google Callback: Processing callback for user ${user.email} (ID: ${user._id})`);
 
-    // You can redirect or send token/user data
+    // Generate JWT for the user
+    let token;
+    try {
+      token = tokenSign(user);
+      console.log(`Google Callback: Token generated successfully for user ${user.email}`);
+    } catch (tokenError) {
+      console.error("Google Callback: Error generating token:", tokenError);
+      return res.status(500).json({ message: "Error generating authentication token" });
+    }
+
+    const userData = {
+      _id: user._id,
+      name: user.name || '',
+      email: user.email,
+      birthdate: user.birthdate || null
+    };
+
+    // Check if redirect_uri is provided (for mobile OAuth flow)
+    const redirectUri = req.query.redirect_uri;
+    if (redirectUri) {
+      try {
+        // Redirect to the deep link with token and user data
+        const userDataEncoded = encodeURIComponent(JSON.stringify(userData));
+        const redirectUrl = `${redirectUri}?token=${token}&user=${userDataEncoded}`;
+        return res.redirect(redirectUrl);
+      } catch (redirectError) {
+        console.error("Error creating redirect URL:", redirectError);
+        // Fall back to JSON response if redirect fails
+        return res.json({
+          token,
+          user: userData
+        });
+      }
+    }
+
+    // Otherwise, return JSON (for API calls)
     return res.json({
       token,
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        birthdate: user.birthdate
-      }
+      user: userData
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Google sign-in error" });
+    console.error("Google callback error:", error);
+    console.error("Error stack:", error.stack);
+    return handleHTTPError(res, error);
   }
 };
 

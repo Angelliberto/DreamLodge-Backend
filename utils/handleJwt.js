@@ -2,15 +2,20 @@ const jwt = require("jsonwebtoken");
 const JWT =  process.env.JWT_SECRET
 
 const tokenSign = (data) => {
-  const sign = jwt.sign(
-    {
+  // Build token payload with only existing fields (handles Google users who might not have all fields)
+  const payload = {
       _id: data._id,
-      name: data.name,
-      surname: data.surname,
+      name: data.name || '',
       email: data.email,
-      birthdate: data.birthdate,
-      gender: data.gender,
-    },
+  };
+  
+  // Only include optional fields if they exist
+  if (data.surname) payload.surname = data.surname;
+  if (data.birthdate) payload.birthdate = data.birthdate;
+  if (data.gender) payload.gender = data.gender;
+  
+  const sign = jwt.sign(
+    payload,
     JWT,  // Signing secret
     { expiresIn: "365d" } // Expiration time
   );

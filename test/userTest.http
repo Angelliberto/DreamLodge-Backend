@@ -37,7 +37,67 @@ Content-Type: application/json
 Authorization: Bearer eyJhbGciOJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OGE3MDU5MjM0NGM2NzE0OWNhYThlMDMiLCJuYW1lIjoiQWxpY2UgRXhhbXBsZSIsImVtYWlsIjoiYWxpY2VAZXhhbXBsZS5jb20iLCJiaXJ0aGRhdGUiOiIxOTk1LTA1LTIwVDAwOjAwOjAwLjAwMFoiLCJpYXQiOjE3NTU3ODk1ODMsImV4cCI6MTc4NzMyNTU4M30.AmppTKLapNPzb0VylsZ-tSTfZO5ck4G_pjnGM3BzekY
 
 ###
+# ============================================
+# GOOGLE SIGN-IN TESTS
+# ============================================
+
+# Google OAuth Initiation (Local)
+# This will redirect to Google's OAuth consent screen
+# After user authorizes, Google redirects to /api/users/google/callback
 GET http://localhost:3000/api/users/google
+
+###
+# Google OAuth Initiation (Production)
+# This will redirect to Google's OAuth consent screen
+GET https://impressive-cathee-immune-angelceb-312ac472.koyeb.app/api/users/google
+
+###
+# Google OAuth Initiation with redirect_uri (for mobile apps)
+# The redirect_uri will be passed through the OAuth state parameter
+# After successful authentication, user will be redirected to the provided redirect_uri
+# with token and user data as query parameters
+GET http://localhost:3000/api/users/google?redirect_uri=myapp://oauth/callback
+
+###
+# Google OAuth Initiation with redirect_uri (Production)
+GET https://impressive-cathee-immune-angelceb-312ac472.koyeb.app/api/users/google?redirect_uri=myapp://oauth/callback
+
+###
+# Google OAuth Callback (Local)
+# NOTE: This endpoint is called by Google after user authorization
+# It cannot be tested directly via HTTP client as it requires:
+# 1. A valid authorization code from Google
+# 2. The code is only valid for a short time
+# 3. It must come from Google's redirect
+# 
+# To test the full flow:
+# 1. Visit GET /api/users/google in a browser
+# 2. Complete Google authentication
+# 3. Google will redirect to this callback with a code
+# 4. The callback will return JSON with token and user data (or redirect if redirect_uri is provided)
+#
+# Expected response (JSON):
+# {
+#   "token": "JWT_TOKEN_HERE",
+#   "user": {
+#     "_id": "USER_ID",
+#     "name": "User Name",
+#     "email": "user@example.com",
+#     "birthdate": "1990-01-01T00:00:00.000Z"
+#   }
+# }
+GET http://localhost:3000/api/users/google/callback?code=AUTHORIZATION_CODE&state=STATE_PARAMETER
+
+###
+# Google OAuth Callback (Production)
+# See notes above about testing this endpoint
+GET https://impressive-cathee-immune-angelceb-312ac472.koyeb.app/api/users/google/callback?code=AUTHORIZATION_CODE&state=STATE_PARAMETER
+
+###
+# Google OAuth Callback with redirect_uri (Local)
+# If redirect_uri is provided in the state parameter, this will redirect instead of returning JSON
+# Expected: HTTP 302 redirect to redirect_uri?token=JWT_TOKEN&user=ENCODED_USER_DATA
+GET http://localhost:3000/api/users/google/callback?code=AUTHORIZATION_CODE&state=STATE_WITH_REDIRECT_URI
 
 ###
 # Get user test results (OCEAN test)
