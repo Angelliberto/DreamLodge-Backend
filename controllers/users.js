@@ -118,14 +118,27 @@ const googleCallback = async (req, res) => {
         const userDataEncoded = encodeURIComponent(JSON.stringify(userData));
         const redirectUrl = `${redirectUri}?token=${token}&user=${userDataEncoded}`;
         console.log("Google Callback: Full redirect URL:", redirectUrl.substring(0, 100) + "...");
-        // Use 302 redirect to ensure the browser/app handles it
-        // For mobile apps, this will trigger the deep link handler
-        return res.redirect(302, redirectUrl);
+        
+        // Check if it's a deep link (custom scheme)
+        if (redirectUri.startsWith('dreamlodgefrontend://')) {
+          // For deep links, redirect to HTML page that will activate the deep link
+          // Build backend URL from request
+          const protocol = req.protocol || 'https';
+          const host = req.get('host') || process.env.BACKEND_URL || 'localhost:3000';
+          const backendUrl = `${protocol}://${host}`;
+          const htmlRedirectUrl = `${backendUrl}/oauth-redirect?deep_link=${encodeURIComponent(redirectUrl)}`;
+          console.log("Google Callback: Redirecting to HTML page for deep link activation");
+          console.log("Google Callback: HTML redirect URL:", htmlRedirectUrl);
+          return res.redirect(302, htmlRedirectUrl);
+        } else {
+          // For HTTP URLs (web), redirect directly
+          return res.redirect(302, redirectUrl);
+        }
       } catch (redirectError) {
         console.error("Error creating redirect URL:", redirectError);
         // Fall back to JSON response if redirect fails
-    return res.json({
-      token,
+        return res.json({
+          token,
           user: userData
         });
       }
