@@ -119,32 +119,10 @@ const googleCallback = async (req, res) => {
         const redirectUrl = `${redirectUri}?token=${token}&user=${userDataEncoded}`;
         console.log("Google Callback: Full redirect URL:", redirectUrl.substring(0, 100) + "...");
         
-        // Check if it's a deep link (custom scheme)
-        if (redirectUri.startsWith('dreamlodgefrontend://')) {
-          // Check User-Agent to see if it's an in-app browser
-          const userAgent = req.get('user-agent') || '';
-          const isInAppBrowser = userAgent.includes('Expo') || userAgent.includes('wv') || userAgent.includes('WebView');
-          
-          if (isInAppBrowser) {
-            // For in-app browsers (expo-web-browser), redirect directly to deep link
-            // The in-app browser will handle the deep link properly
-            console.log("Google Callback: In-app browser detected, redirecting directly to deep link");
-            return res.redirect(302, redirectUrl);
-          } else {
-            // For external browsers, use HTML page that will activate the deep link
-            // Build backend URL from request
-            const protocol = req.protocol || 'https';
-            const host = req.get('host') || process.env.BACKEND_URL || 'localhost:3000';
-            const backendUrl = `${protocol}://${host}`;
-            const htmlRedirectUrl = `${backendUrl}/oauth-redirect?deep_link=${encodeURIComponent(redirectUrl)}`;
-            console.log("Google Callback: External browser detected, redirecting to HTML page for deep link activation");
-            console.log("Google Callback: HTML redirect URL:", htmlRedirectUrl);
-            return res.redirect(302, htmlRedirectUrl);
-          }
-        } else {
-          // For HTTP URLs (web), redirect directly
-          return res.redirect(302, redirectUrl);
-        }
+        // Always redirect directly to the redirectUri (deep link or web URL)
+        // The WebView in the app will intercept the deep link
+        console.log("Google Callback: Redirecting directly to:", redirectUrl);
+        return res.redirect(302, redirectUrl);
       } catch (redirectError) {
         console.error("Error creating redirect URL:", redirectError);
         // Fall back to JSON response if redirect fails
