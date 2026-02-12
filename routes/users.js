@@ -7,7 +7,8 @@ const {
   userLogin,
   userDelete,
   userUpdate,
-  googleCallback} = require("../controllers/users")
+  googleCallback,
+  googleSignInWithToken} = require("../controllers/users")
 const {
   userRegisterValidator,
   userLoginValidator,
@@ -116,5 +117,7 @@ router.get("/google/callback", (req, res, next) => {
   })(req, res, next);
 }, googleCallback);
 
+// Endpoint for native Google Sign-In (accepts ID token directly)
+router.post("/google/token", googleSignInValidator, googleSignInWithToken);
 
 module.exports = router;

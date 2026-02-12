@@ -5,6 +5,7 @@ const {handleHTTPError} = require("../utils/handleHTTPError");
 const  {UserModel}  = require("../models");
 const { sendEmail } = require("../utils/sendMail");
 const crypto = require("crypto");
+const { OAuth2Client } = require('google-auth-library');
 
 
 const userRegister = async (req, res) => {
@@ -230,4 +231,70 @@ const resetPassword = async (req, res) => {
 
 
 
-module.exports = {userRegister, userLogin, userDelete,userUpdate, googleCallback, resetPassword,checkPasswordResetToken,sendPasswordResetEmail}
+const googleSignInWithToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({ message: "Google ID token is required" });
+    }
+
+    // Verify the Google ID token
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    
+    let ticket;
+    try {
+      ticket = await client.verifyIdToken({
+        idToken: token,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+    } catch (verifyError) {
+      console.error("Google token verification error:", verifyError);
+      return res.status(401).json({ 
+        message: "Invalid Google token",
+        error: verifyError.message 
+      });
+    }
+
+    const payload = ticket.getPayload();
+    
+    if (!payload || !payload.email) {
+      return res.status(400).json({ message: "Invalid Google token - no email found" });
+    }
+
+    const email = payload.email;
+    const name = payload.name || payload.given_name || 'User';
+    
+    // Check if user already exists
+    let user = await UserModel.findOne({ email: email });
+    
+    if (!user) {
+      // Create new user
+      user = await UserModel.create({
+        name: name,
+        email: email,
+        password: undefined, // Google account - no password needed
+      });
+    }
+
+    // Generate JWT token
+    const jwtToken = tokenSign(user);
+    
+    const userData = {
+      _id: user._id,
+      name: user.name || '',
+      email: user.email,
+      birthdate: user.birthdate || null
+    };
+
+    return res.json({
+      token: jwtToken,
+      user: userData
+    });
+  } catch (error) {
+    console.error("Google sign-in with token error:", error);
+    return handleHTTPError(res, error);
+  }
+};
+
+module.exports = {userRegister, userLogin, userDelete,userUpdate, googleCallback, googleSignInWithToken, resetPassword,checkPasswordResetToken,sendPasswordResetEmail}
