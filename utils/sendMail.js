@@ -72,16 +72,34 @@ const sendEmail = async (email, subject, message, url, buttonText = "Open link")
 
     transporter.sendMail(mailOptions, (error, info) => {
       if (error) {
-        console.error("Error while sending email:", error);
+        console.error("❌ Error while sending email:", error.message);
         console.error("Error details:", {
           code: error.code,
           command: error.command,
           response: error.response,
           responseCode: error.responseCode
         });
+        
+        // Mensaje más específico según el tipo de error
+        if (error.code === 'EAUTH') {
+          console.error("\n🔐 ERROR DE AUTENTICACIÓN DE GMAIL:");
+          console.error("   El problema es que las credenciales de Gmail no son válidas.");
+          console.error("   SOLUCIÓN:");
+          console.error("   1. Ve a tu cuenta de Google: https://myaccount.google.com/");
+          console.error("   2. Ve a 'Seguridad' → 'Verificación en dos pasos'");
+          console.error("   3. Habilita la verificación en dos pasos si no está activada");
+          console.error("   4. Ve a 'Contraseñas de aplicaciones' (App Passwords)");
+          console.error("   5. Genera una nueva contraseña para 'Correo'");
+          console.error("   6. Usa esa contraseña de 16 caracteres como EMAIL_PASS");
+          console.error("   7. Asegúrate de configurar EMAIL_USER y EMAIL_PASS en:");
+          console.error("      - Archivo .env (desarrollo local)");
+          console.error("      - Variables de entorno de Koyeb (producción)");
+          console.error("      → Panel de Koyeb → Tu app → Settings → Environment Variables\n");
+        }
+        
         return reject(error);
       } else {
-        console.log("Email sent successfully:", info.response);
+        console.log("✅ Email sent successfully:", info.response);
         console.log("Email details:", {
           messageId: info.messageId,
           accepted: info.accepted,

@@ -186,10 +186,19 @@ const sendPasswordResetEmail = async (req, res) => {
       user.resetPasswordTokenExpiration = null;
       await user.save();
       
-      // Retornar error específico si es un problema de configuración
+      // Retornar error específico según el tipo de error
       if (emailError.message && emailError.message.includes("EMAIL_USER")) {
         return res.status(500).json({ 
           message: "Error de configuración del servidor de correo. Por favor contacta al administrador." 
+        });
+      }
+      
+      // Error de autenticación de Gmail
+      if (emailError.code === 'EAUTH' || emailError.responseCode === 535) {
+        console.error("⚠️  CREDENCIALES DE GMAIL INVÁLIDAS");
+        console.error("   Revisa las instrucciones en los logs del servidor para configurar Gmail correctamente.");
+        return res.status(500).json({ 
+          message: "Error de configuración del servidor de correo. Las credenciales de Gmail no son válidas. Por favor contacta al administrador." 
         });
       }
       
