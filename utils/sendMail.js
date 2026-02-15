@@ -57,8 +57,12 @@ const sendEmail = async (email, subject, message, url, buttonText = "Open link")
              font-weight: bold;">
            ${buttonText}
         </a>
-        <p style="margin-top: 20px;">Si el botón no funciona, copia y pega este enlace en tu navegador:</p>
-        <p style="word-break: break-all;">${url}</p>
+        <p style="margin-top: 20px;">Si el botón no funciona, copia y pega este enlace:</p>
+        <p style="word-break: break-all; background-color: #f5f5f5; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px;">${url}</p>
+        <p style="margin-top: 20px; font-size: 12px; color: #666;">
+          <strong>Nota:</strong> Este enlace abrirá la app Dream Lodge en tu dispositivo móvil. 
+          Si no tienes la app instalada, por favor instálala primero.
+        </p>
       </div>
     `;
 
@@ -80,22 +84,7 @@ const sendEmail = async (email, subject, message, url, buttonText = "Open link")
           responseCode: error.responseCode
         });
         
-        // Mensaje más específico según el tipo de error
-        if (error.code === 'EAUTH') {
-          console.error("\n🔐 ERROR DE AUTENTICACIÓN DE GMAIL:");
-          console.error("   El problema es que las credenciales de Gmail no son válidas.");
-          console.error("   SOLUCIÓN:");
-          console.error("   1. Ve a tu cuenta de Google: https://myaccount.google.com/");
-          console.error("   2. Ve a 'Seguridad' → 'Verificación en dos pasos'");
-          console.error("   3. Habilita la verificación en dos pasos si no está activada");
-          console.error("   4. Ve a 'Contraseñas de aplicaciones' (App Passwords)");
-          console.error("   5. Genera una nueva contraseña para 'Correo'");
-          console.error("   6. Usa esa contraseña de 16 caracteres como EMAIL_PASS");
-          console.error("   7. Asegúrate de configurar EMAIL_USER y EMAIL_PASS en:");
-          console.error("      - Archivo .env (desarrollo local)");
-          console.error("      - Variables de entorno de Koyeb (producción)");
-          console.error("      → Panel de Koyeb → Tu app → Settings → Environment Variables\n");
-        }
+
         
         return reject(error);
       } else {
