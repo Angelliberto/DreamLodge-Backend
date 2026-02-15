@@ -8,7 +8,10 @@ const {
   userDelete,
   userUpdate,
   googleCallback,
-  googleSignInWithToken} = require("../controllers/users")
+  googleSignInWithToken,
+  sendPasswordResetEmail,
+  checkPasswordResetToken,
+  resetPassword} = require("../controllers/users")
 const {
   userRegisterValidator,
   userLoginValidator,
@@ -119,5 +122,10 @@ router.get("/google/callback", (req, res, next) => {
 
 // Endpoint for native Google Sign-In (accepts ID token directly)
 router.post("/google/token", googleSignInValidator, googleSignInWithToken);
+
+// Password reset endpoints
+router.post("/forgot-password", sendPasswordResetEmail);
+router.get("/check-reset-token", checkPasswordResetToken);
+router.post("/reset-password", resetPassword);
 
 module.exports = router;

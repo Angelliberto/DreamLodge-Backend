@@ -148,27 +148,33 @@ const googleCallback = async (req, res) => {
 
 const sendPasswordResetEmail = async (req, res) => {
   try {
-    const email = req.params.email
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "El email es requerido" });
+    }
     const user = await UserModel.findOne({email: email})
     if (!user) {
-      return handleHTTPError(res, {message: "User ID not found."}, 404)
+      // Por seguridad, no revelamos si el email existe o no
+      return res.status(200).json({ message: "Si el email existe, se enviará un correo con instrucciones para restablecer tu contraseña." });
     }
 
     const passwordResetToken = crypto.randomBytes(32).toString("hex");
 
     user.resetPasswordToken = passwordResetToken
-    user.resetPasswordTokenExpiration = Date.now() + 5 * 60 * 1000;
+    user.resetPasswordTokenExpiration = new Date(Date.now() + 5 * 60 * 1000); // 5 minutos
     await user.save()
 
-    const resetPasswordUrl = `${process.env.FRONTEND_URL}reset-password?token=${passwordResetToken}`;
+    // Para mobile apps, necesitamos un deep link o URL que la app pueda manejar
+    // Usaremos un formato que la app pueda interceptar
+    const resetPasswordUrl = `${process.env.FRONTEND_URL || 'dreamlodgefrontend://'}reset-password?token=${passwordResetToken}`;
 
     sendEmail(user.email,
-                "Reset your password",
-                "Please click the following link to reset your password",
+                "Restablece tu contraseña - Dream Lodge",
+                "Haz clic en el siguiente enlace para restablecer tu contraseña. Este enlace expirará en 5 minutos.",
                 resetPasswordUrl,
-                "Reset Password"
+                "Restablecer Contraseña"
         );
-     res.send({ message: "Password reset email sent successfully. Please check your inbox." });
+     res.status(200).json({ message: "Si el email existe, se enviará un correo con instrucciones para restablecer tu contraseña." });
 
   } catch (err) {
     return handleHTTPError(res, { message: "Error sending password reset email" }, 500);
@@ -217,7 +223,7 @@ const resetPassword = async (req, res) => {
             return handleHTTPError(res, { message: "Invalid or expired password reset token" }, 404);
         }   
 
-        user.password = await encrypt(newPassword);
+        user.password = await encryptPassword(newPassword);
         user.resetPasswordToken = null;
         user.resetPasswordTokenExpiration = null;
         await user.save();
