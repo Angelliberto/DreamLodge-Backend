@@ -177,7 +177,7 @@ const sendPasswordResetEmail = async (req, res) => {
         user.email,
         "Restablece tu contraseña - Dream Lodge",
         "Haz clic en el siguiente enlace para restablecer tu contraseña. Este enlace expirará en 5 minutos.",
-        resetPasswordUrl,
+                resetPasswordUrl,
         "Restablecer Contraseña"
       );
       console.log(`Password reset email sent successfully to ${user.email}`);

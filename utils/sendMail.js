@@ -41,41 +41,41 @@ const sendEmail = async (email, subject, message, url, buttonText = "Open link")
       return reject(error);
     }
 
-    const htmlContent = `
-      <div style="font-family: sans-serif; line-height: 1.5;">
+  const htmlContent = `
+    <div style="font-family: sans-serif; line-height: 1.5;">
         <h2>Hola! 👋</h2>
-        <p>${message}</p>
-        <a href="${url}"
-           style="
-             display: inline-block;
-             background-color: #4DC3BC;
-             color: white;
-             padding: 12px 24px;
-             margin-top: 10px;
-             text-decoration: none;
-             border-radius: 5px;
-             font-weight: bold;">
-           ${buttonText}
-        </a>
+      <p>${message}</p>
+      <a href="${url}"
+         style="
+           display: inline-block;
+           background-color: #4DC3BC;
+           color: white;
+           padding: 12px 24px;
+           margin-top: 10px;
+           text-decoration: none;
+           border-radius: 5px;
+           font-weight: bold;">
+         ${buttonText}
+      </a>
         <p style="margin-top: 20px;">Si el botón no funciona, copia y pega este enlace:</p>
         <p style="word-break: break-all; background-color: #f5f5f5; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px;">${url}</p>
         <p style="margin-top: 20px; font-size: 12px; color: #666;">
           <strong>Nota:</strong> Este enlace abrirá la app Dream Lodge en tu dispositivo móvil. 
           Si no tienes la app instalada, por favor instálala primero.
         </p>
-      </div>
-    `;
+    </div>
+  `;
 
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: subject,
-      text: `${message}: ${url}`,
-      html: htmlContent,
-    };
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: subject,
+    text: `${message}: ${url}`,
+    html: htmlContent,
+  };
 
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
+  transporter.sendMail(mailOptions, (error, info) => {
+    if (error) {
         console.error("❌ Error while sending email:", error.message);
         console.error("Error details:", {
           code: error.code,
@@ -87,7 +87,7 @@ const sendEmail = async (email, subject, message, url, buttonText = "Open link")
 
         
         return reject(error);
-      } else {
+    } else {
         console.log("✅ Email sent successfully:", info.response);
         console.log("Email details:", {
           messageId: info.messageId,
