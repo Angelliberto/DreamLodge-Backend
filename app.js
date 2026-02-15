@@ -50,12 +50,15 @@ app.use(express.json());
 app.use("/api", require("./routes")); // routes/index.js
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
 
-// OAuth redirect page - serves HTML that activates deep link
-app.get("/oauth-redirect", (req, res) => {
-  const deepLink = req.query.deep_link;
-  if (!deepLink) {
-    return res.status(400).send("Missing deep_link parameter");
+// Password reset redirect page - serves HTML that activates deep link to reset password
+app.get("/reset-password-redirect", (req, res) => {
+  const token = req.query.token;
+  if (!token) {
+    return res.status(400).send("Missing token parameter");
   }
+  
+  // Create deep link for the app
+  const deepLink = `dreamlodgefrontend://reset-password?token=${encodeURIComponent(token)}`;
   
   // Serve HTML page that activates the deep link
   const html = `
@@ -98,8 +101,8 @@ app.get("/oauth-redirect", (req, res) => {
 <body>
   <div class="container">
     <div class="spinner"></div>
-    <h2>Redirecting to Dream Lodge...</h2>
-    <p>If the app doesn't open automatically, <a href="${deepLink}" style="color: white; text-decoration: underline;">click here</a>.</p>
+    <h2>Redirigiendo a Dream Lodge...</h2>
+    <p>Si la app no se abre automáticamente, <a href="${deepLink}" style="color: white; text-decoration: underline;">haz clic aquí</a>.</p>
   </div>
   <script>
     // Try to activate the deep link immediately
@@ -147,7 +150,7 @@ app.get("/oauth-redirect", (req, res) => {
     setTimeout(() => {
       const container = document.querySelector('.container');
       const manualLink = document.createElement('p');
-      manualLink.innerHTML = '<a href="' + deepLink + '" style="color: white; text-decoration: underline; font-size: 1.2rem;">Tap here to open Dream Lodge</a>';
+      manualLink.innerHTML = '<a href="' + deepLink + '" style="color: white; text-decoration: underline; font-size: 1.2rem;">Toca aquí para abrir Dream Lodge</a>';
       container.appendChild(manualLink);
     }, 2000);
   </script>

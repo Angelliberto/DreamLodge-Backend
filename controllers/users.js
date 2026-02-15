@@ -165,9 +165,23 @@ const sendPasswordResetEmail = async (req, res) => {
     user.resetPasswordTokenExpiration = new Date(Date.now() + 5 * 60 * 1000); // 5 minutos
     await user.save()
 
-    // Para mobile apps, usamos un deep link que la app puede interceptar
-    // El formato debe ser: dreamlodgefrontend://reset-password?token=...
-    const resetPasswordUrl = `dreamlodgefrontend://reset-password?token=${passwordResetToken}`;
+    // Para mobile apps, usamos una URL web intermedia que redirige a la app
+    // Esto funciona mejor porque los correos se abren en navegadores
+    // Intentar obtener la URL del backend desde las variables de entorno o del request
+    let backendUrl = process.env.BACKEND_URL || process.env.FRONTEND_URL;
+    
+    // Si no está en variables de entorno, construir desde el request
+    if (!backendUrl) {
+      const protocol = req.protocol || 'https';
+      const host = req.get('host') || req.headers.host;
+      backendUrl = `${protocol}://${host}`;
+    }
+    
+    // Asegurar que no termine con /
+    backendUrl = backendUrl.replace(/\/+$/, '');
+    
+    const resetPasswordUrl = `${backendUrl}/reset-password-redirect?token=${passwordResetToken}`;
+    console.log('📧 Password reset URL generated:', resetPasswordUrl);
 
     try {
       await sendEmail(
