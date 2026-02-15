@@ -152,6 +152,7 @@ const sendPasswordResetEmail = async (req, res) => {
     if (!email) {
       return res.status(400).json({ message: "El email es requerido" });
     }
+    
     const user = await UserModel.findOne({email: email})
     if (!user) {
       // Por seguridad, no revelamos si el email existe o no
@@ -164,19 +165,41 @@ const sendPasswordResetEmail = async (req, res) => {
     user.resetPasswordTokenExpiration = new Date(Date.now() + 5 * 60 * 1000); // 5 minutos
     await user.save()
 
-    // Para mobile apps, necesitamos un deep link o URL que la app pueda manejar
-    // Usaremos un formato que la app pueda interceptar
-    const resetPasswordUrl = `${process.env.FRONTEND_URL || 'dreamlodgefrontend://'}reset-password?token=${passwordResetToken}`;
+    // Para mobile apps, usamos un deep link que la app puede interceptar
+    // El formato debe ser: dreamlodgefrontend://reset-password?token=...
+    const resetPasswordUrl = `dreamlodgefrontend://reset-password?token=${passwordResetToken}`;
 
-    sendEmail(user.email,
-                "Restablece tu contraseña - Dream Lodge",
-                "Haz clic en el siguiente enlace para restablecer tu contraseña. Este enlace expirará en 5 minutos.",
-                resetPasswordUrl,
-                "Restablecer Contraseña"
-        );
-     res.status(200).json({ message: "Si el email existe, se enviará un correo con instrucciones para restablecer tu contraseña." });
+    try {
+      await sendEmail(
+        user.email,
+        "Restablece tu contraseña - Dream Lodge",
+        "Haz clic en el siguiente enlace para restablecer tu contraseña. Este enlace expirará en 5 minutos.",
+        resetPasswordUrl,
+        "Restablecer Contraseña"
+      );
+      console.log(`Password reset email sent successfully to ${user.email}`);
+      return res.status(200).json({ message: "Si el email existe, se enviará un correo con instrucciones para restablecer tu contraseña." });
+    } catch (emailError) {
+      console.error("Error sending password reset email:", emailError);
+      // Si falla el envío del correo, limpiar el token para que el usuario pueda intentar de nuevo
+      user.resetPasswordToken = null;
+      user.resetPasswordTokenExpiration = null;
+      await user.save();
+      
+      // Retornar error específico si es un problema de configuración
+      if (emailError.message && emailError.message.includes("EMAIL_USER")) {
+        return res.status(500).json({ 
+          message: "Error de configuración del servidor de correo. Por favor contacta al administrador." 
+        });
+      }
+      
+      return res.status(500).json({ 
+        message: "Error al enviar el correo. Por favor intenta nuevamente más tarde." 
+      });
+    }
 
   } catch (err) {
+    console.error("Error in sendPasswordResetEmail:", err);
     return handleHTTPError(res, { message: "Error sending password reset email" }, 500);
   }
 }
