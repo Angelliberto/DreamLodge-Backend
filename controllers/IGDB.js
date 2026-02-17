@@ -46,9 +46,9 @@ const searchGames = async (req, res) => {
         // 1. Obtenemos token (el backend se encarga)
         const token = await getInternalToken();
 
-        // 2. Preparamos la query de IGDB
+        // 2. Preparamos la query de IGDB con más campos para tags
         const igdbBody = `
-            fields name, cover.url, rating, summary, first_release_date;
+            fields name, cover.url, rating, summary, first_release_date, genres.name, platforms.name, platforms.abbreviation, game_modes.name, involved_companies.company.name;
             search "${search}";
             limit 20;
         `;
