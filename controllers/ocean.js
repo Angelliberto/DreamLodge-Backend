@@ -122,7 +122,9 @@ const saveTestResults = async (req, res) => {
 
     if (oceanResult) {
       // Actualizar registro existente
+      // Marcar scores como modificado para asegurar que se guarde completamente
       oceanResult.scores = scores;
+      oceanResult.markModified('scores');
       if (totalScore !== undefined) {
         oceanResult.totalScore = totalScore;
       }
