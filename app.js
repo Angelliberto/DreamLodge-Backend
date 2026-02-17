@@ -4,6 +4,7 @@ const cors = require("cors"); // Access control
 require("dotenv").config(); // .env
 const port = process.env.PORT || 3000; // Listening port
 const dbConnect = require("./config/mongo"); // DB connection
+const mongoose = require("mongoose"); // For graceful shutdown
 
 // Documentation
 const swaggerUi = require("swagger-ui-express");
@@ -162,10 +163,72 @@ app.get("/reset-password-redirect", (req, res) => {
   res.send(html);
 });
 
-// Listening
-app.listen(port, () => {
+// Health check endpoint (required by Koyeb)
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Dream Lodge API is running',
+    version: '1.0.0',
+    health: '/health'
+  });
+});
+
+// Start server
+const server = app.listen(port, () => {
   console.log("✅ Server listening on PORT " + port);
   dbConnect();
+});
+
+// Graceful shutdown handlers
+const gracefulShutdown = (signal) => {
+  console.log(`\n${signal} received. Starting graceful shutdown...`);
+  
+  server.close(() => {
+    console.log('✅ HTTP server closed');
+    
+    // Close MongoDB connection
+    if (mongoose.connection.readyState === 1) {
+      mongoose.connection.close(false, () => {
+        console.log('✅ MongoDB connection closed');
+        console.log('✅ Graceful shutdown completed');
+        process.exit(0);
+      });
+    } else {
+      console.log('✅ MongoDB connection already closed');
+      console.log('✅ Graceful shutdown completed');
+      process.exit(0);
+    }
+  });
+  
+  // Force shutdown after 10 seconds
+  setTimeout(() => {
+    console.error('⚠️ Forcing shutdown after timeout');
+    process.exit(1);
+  }, 10000);
+};
+
+// Handle termination signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  gracefulShutdown('uncaughtException');
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit on unhandled rejection, just log it
 });
 
 // Exports
