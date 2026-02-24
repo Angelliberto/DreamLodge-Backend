@@ -6,6 +6,7 @@ const  {UserModel}  = require("../models");
 const { sendEmail } = require("../utils/sendMail");
 const crypto = require("crypto");
 const { OAuth2Client } = require('google-auth-library');
+const authSessionStore = require("../utils/authSession");
 
 
 const userRegister = async (req, res) => {
@@ -110,20 +111,28 @@ const googleCallback = async (req, res) => {
     console.log("  - req.redirect_uri:", req.redirect_uri);
     console.log("  - Final redirectUri:", redirectUri);
 
-    // Always redirect if redirect_uri is present (even if it's a deep link)
-    // The mobile app will handle the deep link, web browsers will show an error but that's expected
+    // Always redirect if redirect_uri is present
     if (redirectUri) {
       console.log("Google Callback: Redirecting to:", redirectUri);
       try {
-        // Redirect to the deep link with token and user data
-        const userDataEncoded = encodeURIComponent(JSON.stringify(userData));
-        const redirectUrl = `${redirectUri}?token=${token}&user=${userDataEncoded}`;
-        console.log("Google Callback: Full redirect URL:", redirectUrl.substring(0, 100) + "...");
+        // Check if this is a web redirect (HTTP/HTTPS) or a deep link
+        const isWebRedirect = redirectUri.startsWith('http://') || redirectUri.startsWith('https://');
         
-        // Always redirect directly to the redirectUri (deep link or web URL)
-        // The WebView in the app will intercept the deep link
-        console.log("Google Callback: Redirecting directly to:", redirectUrl);
+        if (isWebRedirect) {
+          // For web redirects, use secure session-based approach
+          // Create a temporary session and redirect with a code instead of the token
+          const sessionCode = authSessionStore.createSession(token, userData);
+          const redirectUrl = `${redirectUri}?session=${sessionCode}`;
+          console.log("Google Callback: Using secure session-based redirect for web");
+          return res.redirect(302, redirectUrl);
+        } else {
+          // For deep links (mobile apps), use the direct approach
+          // Mobile apps can handle tokens in deep links more securely
+          const userDataEncoded = encodeURIComponent(JSON.stringify(userData));
+          const redirectUrl = `${redirectUri}?token=${token}&user=${userDataEncoded}`;
+          console.log("Google Callback: Using direct redirect for deep link");
         return res.redirect(302, redirectUrl);
+        }
       } catch (redirectError) {
         console.error("Error creating redirect URL:", redirectError);
         // Fall back to JSON response if redirect fails
@@ -338,4 +347,36 @@ const googleSignInWithToken = async (req, res) => {
   }
 };
 
-module.exports = {userRegister, userLogin, userDelete,userUpdate, googleCallback, googleSignInWithToken, resetPassword,checkPasswordResetToken,sendPasswordResetEmail}
+const exchangeAuthSession = async (req, res) => {
+  try {
+    const { session } = req.query;
+    
+    if (!session) {
+      return res.status(400).json({ 
+        message: "Session code is required",
+        error: "Missing 'session' parameter"
+      });
+    }
+
+    // Retrieve and delete the session (one-time use)
+    const sessionData = authSessionStore.getAndDeleteSession(session);
+    
+    if (!sessionData) {
+      return res.status(400).json({ 
+        message: "Invalid or expired session code",
+        error: "The session code is invalid, expired, or has already been used"
+      });
+    }
+
+    // Return token and user data
+    return res.json({
+      token: sessionData.token,
+      user: sessionData.userData
+    });
+  } catch (error) {
+    console.error("Error exchanging auth session:", error);
+    return handleHTTPError(res, error);
+  }
+};
+
+module.exports = {userRegister, userLogin, userDelete,userUpdate, googleCallback, googleSignInWithToken, resetPassword,checkPasswordResetToken,sendPasswordResetEmail, exchangeAuthSession}
