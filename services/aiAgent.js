@@ -112,24 +112,35 @@ class AIAgent {
 
       // 3. Analizar el mensaje del usuario y buscar información relevante
       // Siempre intentamos buscar obras relevantes para dar respuestas más contextuales
+      console.log('🔍 Analizando mensaje:', userMessage.substring(0, 100));
       const toolsToUse = await this.analyzeMessageAndSelectTools(userMessage, {
         contextItems,
         conversationHistory,
         userId,
       });
+      console.log('🛠️ Herramientas detectadas:', toolsToUse);
 
       // 4. Ejecutar búsquedas en base de datos para obtener contexto
       let toolResults = {};
       if (toolsToUse.length > 0) {
+        console.log('⚙️ Ejecutando herramientas...');
         toolResults = await this.executeTools(toolsToUse, userMessage, {
           userId,
           contextItems,
         });
+        console.log('✅ Resultados de herramientas:', {
+          artworks: toolResults.artworks?.data?.length || 0,
+          oceanResults: toolResults.oceanResults?.data ? 'Sí' : 'No',
+          favorites: toolResults.favorites?.data?.length || 0,
+        });
       } else {
         // Siempre intentar búsqueda general si el mensaje parece una petición (flexible)
+        console.log('🔎 No se detectaron herramientas específicas, intentando búsqueda automática...');
         const searchParams = this.extractSearchParams(userMessage);
+        console.log('📋 Parámetros de búsqueda extraídos:', searchParams);
         if (Object.keys(searchParams).length > 0 || userMessage.length > 6) {
           try {
+            console.log('🔍 Ejecutando búsqueda automática en MongoDB...');
             // Agregar timeout a la búsqueda automática
             const searchPromise = this.searchArtworks(searchParams);
             const timeoutPromise = new Promise((_, reject) => 
@@ -137,11 +148,14 @@ class AIAgent {
             );
             
             const searchResults = await Promise.race([searchPromise, timeoutPromise]);
+            console.log('📊 Resultados de búsqueda:', searchResults?.data?.length || 0, 'obras encontradas');
             if (searchResults && searchResults.data && searchResults.data.length > 0) {
               toolResults.artworks = searchResults;
+            } else {
+              console.log('⚠️ Búsqueda no devolvió resultados');
             }
           } catch (error) {
-            console.warn('Error en búsqueda automática:', error.message);
+            console.warn('❌ Error en búsqueda automática:', error.message);
             // Continuar sin resultados de búsqueda, el agente puede responder igual
           }
         }
@@ -156,12 +170,23 @@ class AIAgent {
       }
 
       // 5. Generar respuesta usando el LLM
+      console.log('🤖 Generando respuesta con LLM...');
+      console.log('📦 Contexto disponible:', {
+        hasArtworks: !!(toolResults.artworks && toolResults.artworks.data && toolResults.artworks.data.length > 0),
+        artworksCount: toolResults.artworks?.data?.length || 0,
+        hasOcean: !!(toolResults.oceanResults && toolResults.oceanResults.data),
+        hasFavorites: !!(toolResults.favorites && toolResults.favorites.data),
+        favoritesCount: toolResults.favorites?.data?.length || 0,
+      });
+      
       const aiResponse = await this.generateResponse(
         userMessage,
         systemPrompt,
         conversationHistory,
         toolResults
       );
+
+      console.log('✅ Respuesta generada:', aiResponse.substring(0, 100) + '...');
 
       return {
         response: aiResponse,
@@ -170,6 +195,7 @@ class AIAgent {
           hasOceanResults: !!oceanResults,
           favoritesCount: favorites.length,
           contextItemsCount: contextItems.length,
+          artworksFound: toolResults.artworks?.data?.length || 0,
         },
       };
     } catch (error) {
@@ -345,8 +371,9 @@ class AIAgent {
   /**
    * Busca artworks en la base de datos
    */
-  async searchArtworks({ category, source, title, limit = 20, page = 1 }) {
+  async searchArtworks({ category, source, title, genre, limit = 20, page = 1 }) {
     try {
+      console.log('🔍 Buscando artworks con parámetros:', { category, source, title, genre, limit, page });
       const query = {};
 
       if (category) {
@@ -361,7 +388,33 @@ class AIAgent {
         query.title = { $regex: title, $options: 'i' };
       }
 
+      // Si hay un género, buscar en descripción, tags o campo genre
+      if (genre) {
+        const genreQuery = {
+          $or: [
+            { description: { $regex: genre, $options: 'i' } },
+            { tags: { $regex: genre, $options: 'i' } },
+            { genre: { $regex: genre, $options: 'i' } }
+          ]
+        };
+        
+        // Si ya hay condiciones en query, usar $and, si no, agregar directamente
+        if (Object.keys(query).length > 0) {
+          query.$and = [genreQuery];
+        } else {
+          Object.assign(query, genreQuery);
+        }
+      }
+
+      // Si no hay parámetros específicos pero el usuario menciona un género, buscar por descripción o tags
+      // Por ahora, si no hay query, buscar obras recientes
+      if (Object.keys(query).length === 0) {
+        console.log('⚠️ No hay parámetros de búsqueda específicos, buscando obras recientes');
+      }
+
       const skip = (page - 1) * limit;
+      console.log('📊 Ejecutando query en MongoDB:', JSON.stringify(query));
+      
       const artworks = await ArtworkModel.find(query)
         .limit(limit)
         .skip(skip)
@@ -369,6 +422,8 @@ class AIAgent {
         .lean();
 
       const total = await ArtworkModel.countDocuments(query);
+
+      console.log(`✅ Búsqueda completada: ${artworks.length} obras encontradas de ${total} totales`);
 
       return {
         data: artworks,
@@ -380,7 +435,8 @@ class AIAgent {
         }
       };
     } catch (error) {
-      console.error('Error buscando artworks:', error);
+      console.error('❌ Error buscando artworks:', error);
+      console.error('Error stack:', error.stack);
       return { error: error.message, data: [] };
     }
   }
@@ -477,10 +533,10 @@ class AIAgent {
 
     // Detectar categoría con más variaciones (sin tildes para coincidir normalizado)
     const categoryMap = {
-      'cine': ['cine', 'pelicula', 'peliculas', 'peli', 'pelis', 'movie', 'film', 'films'],
-      'música': ['musica', 'cancion', 'canciones', 'song', 'songs', 'album', 'albums', 'disco'],
-      'literatura': ['literatura', 'libro', 'libros', 'book', 'books', 'novela', 'novelas', 'leer'],
-      'arte-visual': ['arte', 'artista', 'artistas', 'pintura', 'pinturas', 'art', 'visual'],
+      'cine': ['cine', 'pelicula', 'peliculas', 'peli', 'pelis', 'movie', 'film', 'films', 'cinema'],
+      'música': ['musica', 'cancion', 'canciones', 'song', 'songs', 'album', 'albums', 'disco', 'musical'],
+      'literatura': ['literatura', 'libro', 'libros', 'book', 'books', 'novela', 'novelas', 'leer', 'lectura'],
+      'arte-visual': ['arte', 'artista', 'artistas', 'pintura', 'pinturas', 'art', 'visual', 'cuadro', 'cuadros'],
       'videojuegos': ['videojuego', 'videojuegos', 'juego', 'juegos', 'game', 'games', 'gaming']
     };
 
@@ -492,6 +548,35 @@ class AIAgent {
         }
       }
       if (params.category) break;
+    }
+
+    // Detectar géneros comunes para buscar en descripción o tags
+    const generos = {
+      'drama': ['drama', 'dramatico', 'dramatica', 'dramaticos', 'dramaticas'],
+      'comedia': ['comedia', 'comico', 'comica', 'comicos', 'comicas', 'humor', 'gracioso', 'graciosa'],
+      'ciencia ficción': ['ciencia ficcion', 'scifi', 'sci-fi', 'futurista', 'futuro', 'espacial'],
+      'fantasía': ['fantasia', 'fantasioso', 'fantasiosa', 'magia', 'magico', 'magica'],
+      'terror': ['terror', 'horror', 'miedo', 'escalofriante', 'suspenso'],
+      'acción': ['accion', 'aventura', 'aventurero', 'aventurera'],
+      'romance': ['romance', 'romantico', 'romantica', 'amor', 'amoroso', 'amorosa'],
+      'thriller': ['thriller', 'suspense', 'intriga', 'misterio'],
+    };
+
+    // Si el mensaje menciona un género, intentar buscarlo en la descripción
+    for (const [genero, keywords] of Object.entries(generos)) {
+      for (const keyword of keywords) {
+        if (normalized.includes(keyword)) {
+          // Si no hay categoría específica, buscar en todas las categorías pero filtrar por género
+          if (!params.category) {
+            // Buscar en descripción o tags
+            params.genre = genero;
+          } else {
+            params.genre = genero;
+          }
+          break;
+        }
+      }
+      if (params.genre) break;
     }
 
     // Detectar fuente (menos común, pero posible)
@@ -696,6 +781,12 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
     if (this.geminiClient) {
       try {
         console.log('🤖 Generando respuesta con Gemini para el mensaje:', userMessage.substring(0, 50) + '...');
+        console.log('📊 Datos disponibles para Gemini:', {
+          hasArtworks: !!(toolResults.artworks && toolResults.artworks.data),
+          artworksCount: toolResults.artworks?.data?.length || 0,
+          hasOcean: !!(toolResults.oceanResults && toolResults.oceanResults.data),
+          hasFavorites: !!(toolResults.favorites && toolResults.favorites.data),
+        });
         const model = this.geminiClient.getGenerativeModel({ model: 'gemini-pro' });
         
         // Construir el contexto de la conversación
@@ -711,17 +802,23 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
         }
         
         // Agregar resultados de herramientas al contexto
-        if (toolResults.artworks && toolResults.artworks.data) {
+        if (toolResults.artworks && toolResults.artworks.data && toolResults.artworks.data.length > 0) {
           const artworks = toolResults.artworks.data;
-          contextText += `Obras encontradas (${artworks.length} resultados):\n`;
+          console.log(`📚 Agregando ${artworks.length} obras al contexto de Gemini`);
+          contextText += `Obras encontradas en la base de datos de Dream Lodge (${artworks.length} resultados):\n`;
           artworks.slice(0, 10).forEach((artwork, index) => {
             contextText += `${index + 1}. ${artwork.title} (${artwork.category})`;
             if (artwork.creator) contextText += ` - Por ${artwork.creator}`;
             if (artwork.year) contextText += ` (${artwork.year})`;
-            if (artwork.description) contextText += `\n   ${artwork.description.substring(0, 150)}`;
+            if (artwork.description) {
+              contextText += `\n   ${artwork.description.substring(0, 200)}`;
+            }
+            if (artwork.rating) contextText += `\n   Calificación: ${artwork.rating}/10`;
             contextText += '\n';
           });
-          contextText += '\n';
+          contextText += '\nIMPORTANTE: Estas obras están en la base de datos de Dream Lodge. Preséntalas de manera atractiva y específica, mencionando detalles relevantes.\n\n';
+        } else {
+          console.log('⚠️ No hay obras en toolResults.artworks para agregar al contexto');
         }
         
         if (toolResults.artwork && toolResults.artwork.data) {

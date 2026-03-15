@@ -36,12 +36,19 @@ const sendMessage = async (req, res) => {
     // En el futuro, se puede almacenar en MongoDB
     const conversationHistory = [];
 
+    console.log('📨 Procesando mensaje del usuario:', message.substring(0, 100));
+    console.log('👤 UserId:', userId?.toString() || 'No autenticado');
+    console.log('📦 ContextItems:', contextItems?.length || 0);
+
     // Procesar el mensaje con el agente IA
     const result = await aiAgent.processMessage(message.trim(), {
       userId: userId?.toString(),
       conversationHistory,
       contextItems: contextItems || [],
     });
+
+    console.log('✅ Respuesta generada, enviando al cliente');
+    console.log('📊 Contexto:', result.context);
 
     return res.status(200).json({
       message: "Mensaje procesado correctamente",
