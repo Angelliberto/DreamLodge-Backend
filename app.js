@@ -188,23 +188,25 @@ const server = app.listen(port, () => {
 });
 
 // Graceful shutdown handlers
-const gracefulShutdown = (signal) => {
+const gracefulShutdown = async (signal) => {
   console.log(`\n${signal} received. Starting graceful shutdown...`);
   
-  server.close(() => {
+  server.close(async () => {
     console.log('✅ HTTP server closed');
     
     // Close MongoDB connection
-    if (mongoose.connection.readyState === 1) {
-      mongoose.connection.close(false, () => {
+    try {
+      if (mongoose.connection.readyState === 1) {
+        await mongoose.connection.close();
         console.log('✅ MongoDB connection closed');
-        console.log('✅ Graceful shutdown completed');
-        process.exit(0);
-      });
-    } else {
-      console.log('✅ MongoDB connection already closed');
+      } else {
+        console.log('✅ MongoDB connection already closed');
+      }
       console.log('✅ Graceful shutdown completed');
       process.exit(0);
+    } catch (error) {
+      console.error('❌ Error closing MongoDB connection:', error);
+      process.exit(1);
     }
   });
   
