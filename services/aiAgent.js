@@ -635,14 +635,41 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
         // Construir el prompt completo
         const fullPrompt = `${contextText}Mensaje del usuario: ${userMessage}\n\nResponde de manera natural, amigable y útil. Si hay obras encontradas, preséntalas de forma atractiva. Si no hay resultados específicos, ofrece ayuda para refinar la búsqueda.`;
         
-        const result = await model.generateContent(fullPrompt);
-        const response = result.response;
-        const text = response.text();
+        // Agregar timeout a la llamada de Gemini (50 segundos)
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Timeout: La generación de respuesta tardó demasiado')), 50000);
+        });
         
-        return text.trim();
+        try {
+          const result = await Promise.race([
+            model.generateContent(fullPrompt),
+            timeoutPromise
+          ]);
+          
+          const response = result.response;
+          const text = response.text();
+          
+          return text.trim();
+        } catch (timeoutError) {
+          // Si es un timeout, lanzar el error para que se maneje en el catch externo
+          if (timeoutError.message?.includes('Timeout')) {
+            throw timeoutError;
+          }
+          // Si es otro error, también lanzarlo
+          throw timeoutError;
+        }
       } catch (error) {
         console.error('Error generando respuesta con Gemini:', error);
-        // Fallback a implementación básica si Gemini falla
+        console.error('Error details:', error.message);
+        console.error('Error stack:', error.stack);
+        
+        // Si es un timeout, usar respuesta básica inmediatamente
+        if (error.message?.includes('Timeout') || error.message?.includes('timeout')) {
+          console.warn('⚠️ Timeout en Gemini, usando respuesta básica');
+          return this.generateBasicResponse(userMessage, toolResults);
+        }
+        
+        // Fallback a implementación básica si Gemini falla por cualquier razón
         return this.generateBasicResponse(userMessage, toolResults);
       }
     }
