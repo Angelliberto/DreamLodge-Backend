@@ -69,6 +69,12 @@ const oceanSchema = new mongoose.Schema({
     default: 'quick'
   },
   
+  // Descripción artística generada por el agente IA
+  artisticDescription: {
+    type: String,
+    default: null
+  },
+  
   // Soft delete
   deleted: { type: Boolean, default: false }
 }, { timestamps: true });

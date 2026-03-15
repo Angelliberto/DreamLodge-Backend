@@ -1,6 +1,7 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
 const { OceanModel, UserModel, ArtworkModel, GenreModel } = require("../models");
 const mongoose = require("mongoose");
+const aiAgent = require("../services/aiAgent");
 
 /**
  * Validar la estructura de scores según el schema OCEAN
@@ -373,9 +374,81 @@ const deleteTestResults = async (req, res) => {
   }
 };
 
+/**
+ * Generar o obtener la descripción artística del usuario basada en sus resultados OCEAN
+ * POST /api/ocean/user/:userId/artistic-description
+ */
+const generateArtisticDescription = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return handleHTTPError(res, { message: "userId es requerido" }, 400);
+    }
+
+    // Validar formato de ObjectId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return handleHTTPError(res, { message: "userId debe ser un ObjectId válido" }, 400);
+    }
+
+    // Buscar el resultado OCEAN más reciente del usuario
+    const oceanResult = await OceanModel.findOne({
+      entityType: 'user',
+      entityId: new mongoose.Types.ObjectId(userId),
+      deleted: false
+    }).sort({ createdAt: -1 });
+
+    if (!oceanResult) {
+      return handleHTTPError(res, { message: "No se encontraron resultados del test para este usuario" }, 404);
+    }
+
+    // Si ya tiene una descripción artística generada, devolverla
+    if (oceanResult.artisticDescription) {
+      try {
+        const description = JSON.parse(oceanResult.artisticDescription);
+        return res.status(200).json({
+          message: "Descripción artística obtenida correctamente",
+          data: description
+        });
+      } catch (parseError) {
+        // Si no es JSON válido, tratarlo como texto plano
+        return res.status(200).json({
+          message: "Descripción artística obtenida correctamente",
+          data: {
+            profile: "Personalizado",
+            description: oceanResult.artisticDescription,
+            recommendations: []
+          }
+        });
+      }
+    }
+
+    // Generar nueva descripción artística usando el agente IA
+    const artisticDescription = await aiAgent.generateArtisticDescription(oceanResult);
+
+    // Guardar la descripción en el modelo Ocean
+    oceanResult.artisticDescription = JSON.stringify(artisticDescription);
+    await oceanResult.save();
+
+    return res.status(200).json({
+      message: "Descripción artística generada correctamente",
+      data: artisticDescription
+    });
+
+  } catch (error) {
+    console.error("Error generando descripción artística:", error);
+    console.error("Error stack:", error.stack);
+    return handleHTTPError(res, {
+      message: "Error al generar la descripción artística",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    }, 500);
+  }
+};
+
 module.exports = {
   saveTestResults,
   getTestResults,
   getUserTestResults,
-  deleteTestResults
+  deleteTestResults,
+  generateArtisticDescription
 };
