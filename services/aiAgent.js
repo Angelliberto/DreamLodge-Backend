@@ -22,11 +22,11 @@ class AIAgent {
           console.warn('⚠️ GEMINI_API_KEY está vacía. El agente usará respuestas básicas.');
         } else {
           this.geminiClient = new GoogleGenerativeAI(this.geminiApiKey);
-          console.log('✅ Gemini API inicializada correctamente');
-          console.log('🔑 API Key configurada (primeros 10 caracteres):', this.geminiApiKey.substring(0, 10) + '...');
+          console.log('Gemini API inicializada correctamente');
+          console.log('API Key configurada (primeros 10 caracteres):', this.geminiApiKey.substring(0, 10) + '...');
         }
       } catch (error) {
-        console.error('❌ Error inicializando Gemini API:', error.message);
+        console.error('Error inicializando Gemini API:', error.message);
         console.error('Error stack:', error.stack);
       }
     } else {
@@ -126,11 +126,9 @@ class AIAgent {
           contextItems,
         });
       } else {
-        // Si no se detectaron herramientas específicas, intentar una búsqueda general
-        // para dar respuestas más útiles
+        // Siempre intentar búsqueda general si el mensaje parece una petición (flexible)
         const searchParams = this.extractSearchParams(userMessage);
-        if (Object.keys(searchParams).length > 0 || userMessage.length > 10) {
-          // Si hay parámetros de búsqueda o el mensaje es suficientemente largo, buscar
+        if (Object.keys(searchParams).length > 0 || userMessage.length > 6) {
           try {
             const searchResults = await this.searchArtworks(searchParams);
             if (searchResults && searchResults.data && searchResults.data.length > 0) {
@@ -174,91 +172,84 @@ class AIAgent {
   }
 
   /**
-   * Analiza el mensaje del usuario y determina qué búsquedas realizar
+   * Normaliza texto para detección flexible: quita tildes, minúsculas, colapsa espacios
+   */
+  normalizeForIntent(text) {
+    if (!text || typeof text !== 'string') return '';
+    return text
+      .toLowerCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/\u0300-\u036f/g, '') // quitar acentos
+      .replace(/\s+/g, ' ');
+  }
+
+  /**
+   * Comprueba si el mensaje contiene alguna de las palabras/frases (flexible a typos y variantes)
+   */
+  messageMatches(message, keywords) {
+    const normalized = this.normalizeForIntent(message);
+    return keywords.some(kw => {
+      const n = this.normalizeForIntent(kw);
+      return normalized.includes(n) || normalized.split(/\s+/).some(word => word.includes(n) || n.includes(word));
+    });
+  }
+
+  /**
+   * Analiza el mensaje del usuario y determina qué búsquedas realizar (flexible a typos y redacción)
    */
   async analyzeMessageAndSelectTools(userMessage, options = {}) {
     const { contextItems = [], conversationHistory = [], userId = null } = options;
     const message = userMessage.toLowerCase().trim();
+    const normalized = this.normalizeForIntent(userMessage);
     const tools = [];
 
-    // Detectar solicitudes de recomendaciones (más común)
-    if (
-      message.includes('recomiéndame') ||
-      message.includes('recomienda') ||
-      message.includes('sugerencia') ||
-      message.includes('sugiere') ||
-      message.includes('qué debería') ||
-      message.includes('qué me recomiendas') ||
-      message.includes('qué puedo ver') ||
-      message.includes('qué puedo escuchar') ||
-      message.includes('qué puedo leer') ||
-      message.includes('dame recomendaciones') ||
-      message.includes('quiero ver') ||
-      message.includes('quiero escuchar') ||
-      message.includes('quiero leer')
-    ) {
+    const recomienda = [
+      'recomiendame', 'recomienda', 'recomiendame', 'sugerencia', 'sugiere', 'sugerir',
+      'que deberia', 'qué debería', 'q me recomiendas', 'que me recomiendas',
+      'que puedo ver', 'que puedo escuchar', 'que puedo leer', 'que deberia ver',
+      'dame recomendaciones', 'recomendaciones', 'algo para ver', 'algo para leer', 'algo para escuchar',
+      'quiero ver', 'quiero escuchar', 'quiero leer', 'algo de', 'algo como'
+    ];
+    const buscar = [
+      'buscar', 'busca', 'encuentra', 'encontrar', 'muestrame', 'muéstrame', 'dame',
+      'pelicula', 'película', 'peli', 'pelis', 'cine', 'film', 'movie',
+      'musica', 'música', 'cancion', 'canción', 'disco', 'album',
+      'libro', 'libros', 'novela', 'lectura', 'leer',
+      'videojuego', 'juego', 'juegos', 'game', 'gaming',
+      'arte', 'artista', 'pintura', 'visual'
+    ];
+    const categorias = [
+      'pelicula', 'película', 'peli', 'cine', 'film', 'peliculas', 'películas',
+      'musica', 'música', 'cancion', 'cancion', 'canciones', 'disco', 'album',
+      'libro', 'libros', 'novela', 'literatura', 'book',
+      'videojuego', 'videojuegos', 'juego', 'juegos', 'game',
+      'arte', 'artista', 'artistas', 'pintura', 'art'
+    ];
+    const infoObra = [
+      'informacion sobre', 'información sobre', 'detalles de', 'que es', 'qué es',
+      'quien es', 'quién es', 'cuentame sobre', 'cuéntame sobre', 'hablame de', 'háblame de',
+      'sabes de', 'conoces', 'info de', 'sobre la pelicula', 'sobre el libro'
+    ];
+
+    // Recomendaciones: amplio para capturar typos y variantes
+    if (recomienda.some(k => normalized.includes(this.normalizeForIntent(k)))) {
       tools.push('search_artworks');
       if (userId) {
         tools.push('get_user_ocean_results');
         tools.push('get_user_favorites');
       }
     }
-
-    // Detectar búsquedas explícitas
-    else if (
-      message.includes('buscar') ||
-      message.includes('encontrar') ||
-      message.includes('busca') ||
-      message.includes('encuentra') ||
-      message.includes('muéstrame') ||
-      message.includes('dame') ||
-      message.includes('quiero ver') ||
-      message.includes('quiero escuchar') ||
-      message.includes('quiero leer')
-    ) {
+    // Búsqueda explícita o menciones de categorías
+    else if (buscar.some(k => normalized.includes(this.normalizeForIntent(k))) ||
+             categorias.some(k => normalized.includes(this.normalizeForIntent(k)))) {
       tools.push('search_artworks');
     }
 
-    // Detectar menciones de categorías específicas
-    else if (
-      message.includes('película') ||
-      message.includes('pelicula') ||
-      message.includes('cine') ||
-      message.includes('películas') ||
-      message.includes('peliculas') ||
-      message.includes('música') ||
-      message.includes('musica') ||
-      message.includes('canción') ||
-      message.includes('cancion') ||
-      message.includes('libro') ||
-      message.includes('libros') ||
-      message.includes('videojuego') ||
-      message.includes('videojuegos') ||
-      message.includes('juego') ||
-      message.includes('juegos') ||
-      message.includes('arte') ||
-      message.includes('artista') ||
-      message.includes('artistas')
-    ) {
-      tools.push('search_artworks');
-    }
-
-    // Detectar preguntas sobre obras específicas
-    if (
-      message.includes('información sobre') ||
-      message.includes('detalles de') ||
-      message.includes('qué es') ||
-      message.includes('quien es') ||
-      message.includes('quién es') ||
-      message.includes('cuéntame sobre') ||
-      message.includes('cuentame sobre') ||
-      message.includes('hablame de') ||
-      message.includes('háblame de')
-    ) {
+    // Preguntas sobre obras o información
+    if (infoObra.some(k => normalized.includes(this.normalizeForIntent(k)))) {
       tools.push('get_artwork_by_id');
     }
-
-    // Si hay contextItems, también buscar información sobre ellos
     if (contextItems && contextItems.length > 0) {
       tools.push('get_artwork_by_id');
     }
@@ -441,24 +432,24 @@ class AIAgent {
   }
 
   /**
-   * Extrae parámetros de búsqueda del mensaje del usuario
+   * Extrae parámetros de búsqueda del mensaje del usuario (tolera typos y variantes)
    */
   extractSearchParams(message) {
     const params = {};
-    const lowerMessage = message.toLowerCase();
+    const normalized = this.normalizeForIntent(message);
 
-    // Detectar categoría con más variaciones
+    // Detectar categoría con más variaciones (sin tildes para coincidir normalizado)
     const categoryMap = {
-      'cine': ['cine', 'película', 'pelicula', 'películas', 'peliculas', 'movie', 'movies', 'film', 'films'],
-      'música': ['música', 'musica', 'canción', 'cancion', 'canciones', 'canciones', 'song', 'songs', 'album', 'albums'],
-      'literatura': ['literatura', 'libro', 'libros', 'book', 'books', 'novela', 'novelas'],
+      'cine': ['cine', 'pelicula', 'peliculas', 'peli', 'pelis', 'movie', 'film', 'films'],
+      'música': ['musica', 'cancion', 'canciones', 'song', 'songs', 'album', 'albums', 'disco'],
+      'literatura': ['literatura', 'libro', 'libros', 'book', 'books', 'novela', 'novelas', 'leer'],
       'arte-visual': ['arte', 'artista', 'artistas', 'pintura', 'pinturas', 'art', 'visual'],
       'videojuegos': ['videojuego', 'videojuegos', 'juego', 'juegos', 'game', 'games', 'gaming']
     };
 
     for (const [category, keywords] of Object.entries(categoryMap)) {
       for (const keyword of keywords) {
-        if (lowerMessage.includes(keyword)) {
+        if (normalized.includes(keyword)) {
           params.category = category;
           break;
         }
@@ -469,7 +460,7 @@ class AIAgent {
     // Detectar fuente (menos común, pero posible)
     const sources = ['tmdb', 'spotify', 'igdb', 'googlebooks'];
     for (const source of sources) {
-      if (lowerMessage.includes(source)) {
+      if (normalized.includes(source)) {
         params.source = source.toUpperCase();
         break;
       }
@@ -483,14 +474,12 @@ class AIAgent {
     if (titleMatch) {
       params.title = titleMatch[1].trim();
     } else {
-      // Si no hay comillas, intentar extraer palabras clave del mensaje
-      // (solo si el mensaje no es muy genérico)
-      const genericWords = ['buscar', 'encontrar', 'recomiéndame', 'recomienda', 'sugerencia', 'qué', 'que', 'sobre', 'de', 'la', 'el', 'un', 'una', 'me', 'te', 'le', 'nos', 'os', 'les'];
-      const words = message.split(/\s+/).filter(word => 
-        word.length > 3 && !genericWords.includes(word.toLowerCase())
-      );
-      if (words.length > 0 && words.length <= 5) {
-        // Si hay pocas palabras no genéricas, podrían ser un título
+      const genericWords = ['buscar', 'encontrar', 'recomiendame', 'recomienda', 'sugerencia', 'que', 'sobre', 'de', 'la', 'el', 'un', 'una', 'me', 'te', 'le', 'algo', 'dame', 'quiero'];
+      const words = message.split(/\s+/).filter(word => {
+        const w = word.replace(/[^\w\u00C0-\u024f]/gi, '').toLowerCase();
+        return w.length > 2 && !genericWords.includes(w);
+      });
+      if (words.length > 0 && words.length <= 6) {
         params.title = words.join(' ');
       }
     }
@@ -736,11 +725,7 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
         } else if (toolResults.favorites && toolResults.favorites.data && toolResults.favorites.data.length > 0) {
           fullPrompt += `INSTRUCCIONES: Conoce los gustos del usuario a través de sus favoritos. Haz recomendaciones similares o complementarias. Sé específico y menciona obras concretas si es posible.\n\n`;
         } else {
-          fullPrompt += `INSTRUCCIONES: El usuario está buscando ayuda con contenido cultural. Sé proactivo y útil:\n`;
-          fullPrompt += `- Si el mensaje es vago, ofrece opciones específicas o haz preguntas de seguimiento útiles\n`;
-          fullPrompt += `- Sugiere formas de refinar la búsqueda\n`;
-          fullPrompt += `- Ofrece ejemplos concretos de lo que puedes ayudar\n`;
-          fullPrompt += `- NUNCA respondas solo con "Entiendo que estás buscando información sobre contenido cultural" - siempre ofrece algo útil\n\n`;
+          fullPrompt += `INSTRUCCIONES: Responde siempre con algo útil. NUNCA digas "no pude encontrar", "no pude satisfacer tu solicitud" o "no entendí" como mensaje principal. Interpreta la intención aunque haya typos. Si no tienes datos en la base, usa tu conocimiento general o sugiere opciones/géneros. Sé proactivo y amigable.\n\n`;
         }
         
         fullPrompt += `Responde de manera natural, amigable y útil. Sé específico y evita respuestas genéricas.`;
@@ -835,44 +820,29 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
       response += `¿Te gustaría que te recomiende obras similares o relacionadas?`;
     }
 
-    // Si no hay resultados específicos, proporcionar una respuesta más útil y contextual
+    // Si no hay resultados específicos, SIEMPRE dar algo útil (nunca "no pude encontrar/satisfacer")
     if (!response) {
-      const lowerMessage = userMessage.toLowerCase();
-      
-      // Detectar el tipo de mensaje para dar una respuesta más específica
-      if (lowerMessage.includes('hola') || lowerMessage.includes('hi') || lowerMessage.includes('hello')) {
+      const normalized = this.normalizeForIntent(userMessage);
+
+      if (normalized.includes('hola') || normalized.includes('hi') || normalized.includes('hello') || normalized.length < 4) {
         response = `¡Hola! 👋 Soy tu asistente de Dream Lodge. `;
-        response += `Estoy aquí para ayudarte a descubrir contenido cultural que se alinee con tu personalidad. `;
         if (toolResults.oceanResults && toolResults.oceanResults.data) {
-          response += `Veo que has completado tu perfil de personalidad, así que puedo hacerte recomendaciones personalizadas. `;
+          response += `Tengo tu perfil de personalidad, así que puedo recomendarte cosas que encajen contigo. `;
         }
-        response += `\n\n¿Qué te gustaría explorar hoy? Puedo ayudarte a:\n`;
-        response += `- Buscar películas, música, libros, videojuegos o arte\n`;
-        response += `- Hacerte recomendaciones personalizadas\n`;
-        response += `- Darte información sobre obras específicas\n`;
-        response += `- Sugerirte contenido basado en tus gustos`;
-      } else if (lowerMessage.includes('recomiéndame') || lowerMessage.includes('recomienda') || lowerMessage.includes('sugerencia')) {
-        response = `¡Me encantaría ayudarte con recomendaciones! `;
+        response += `Puedo ayudarte a buscar películas, música, libros, videojuegos o arte, y explicarte por qué te podrían gustar.\n\n¿Qué te apetece explorar?`;
+      } else if (this.messageMatches(userMessage, ['recomienda', 'recomiendame', 'sugerencia', 'sugiere', 'algo para', 'que deberia', 'algo de'])) {
+        response = `¡Claro! `;
         if (toolResults.oceanResults && toolResults.oceanResults.data) {
-          response += `Tengo tu perfil de personalidad, así que puedo hacerte recomendaciones personalizadas. `;
+          response += `Con tu perfil puedo afinar recomendaciones. `;
         }
-        response += `\n\n¿Qué tipo de contenido te interesa? Por ejemplo:\n`;
-        response += `- "Recomiéndame películas de drama"\n`;
-        response += `- "Sugiere música para relajarme"\n`;
-        response += `- "Qué libros debería leer"\n`;
-        response += `- O simplemente dime qué te gusta y te haré recomendaciones personalizadas`;
+        response += `¿Qué te gusta más: películas, música, libros, videojuegos o arte? O dime un género (drama, comedia, sci-fi, etc.) y te sugiero cosas.`;
       } else {
-        response = `Entiendo que estás buscando información sobre contenido cultural. `;
-        
+        // Cualquier otro mensaje: ofrecer ayuda concreta sin decir que no entendimos
+        response = `Puedo ayudarte a buscar y recomendar contenido. `;
         if (toolResults.oceanResults && toolResults.oceanResults.data) {
-          response += `Veo que has completado tu perfil de personalidad, así que puedo hacerte recomendaciones personalizadas basadas en tus rasgos. `;
+          response += `Tengo tu perfil de personalidad para sugerirte cosas que encajen contigo. `;
         }
-        
-        response += `\n\nPuedo ayudarte de varias formas:\n`;
-        response += `- **Buscar contenido**: "Busca películas de ciencia ficción" o "Encuentra música de jazz"\n`;
-        response += `- **Recomendaciones**: "Recomiéndame libros" o "Qué debería ver"\n`;
-        response += `- **Información**: "Cuéntame sobre [obra específica]"\n\n`;
-        response += `¿Hay algo específico que te gustaría explorar?`;
+        response += `Prueba por ejemplo: "recomiéndame películas", "busca música de rock" o "algo para leer". ¿Qué te apetece?`;
       }
     }
 
