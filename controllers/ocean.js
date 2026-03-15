@@ -381,6 +381,11 @@ const deleteTestResults = async (req, res) => {
 const generateArtisticDescription = async (req, res) => {
   try {
     const { userId } = req.params;
+    
+    console.log('generateArtisticDescription called with userId:', userId);
+    console.log('Request method:', req.method);
+    console.log('Request path:', req.path);
+    console.log('Request originalUrl:', req.originalUrl);
 
     if (!userId) {
       return handleHTTPError(res, { message: "userId es requerido" }, 400);

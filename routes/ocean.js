@@ -14,20 +14,22 @@ const {
 // Body: { entityType: 'user'|'artwork'|'genre', entityId: ObjectId, scores: {...}, totalScore: Number }
 router.post("/", authUser, saveTestResults);
 
-// Obtener resultados del test por entityType y entityId
-// GET /api/ocean/:entityType/:entityId
-router.get("/:entityType/:entityId", authUser, getTestResults);
-
+// Rutas específicas de usuario (deben ir antes de las rutas genéricas)
 // Obtener todos los resultados del test de un usuario
 // GET /api/ocean/user/:userId
 router.get("/user/:userId", authUser, getUserTestResults);
 
-// Eliminar resultados del test (soft delete)
-// DELETE /api/ocean/:entityType/:entityId
-router.delete("/:entityType/:entityId", authUser, deleteTestResults);
-
 // Generar o obtener descripción artística del usuario
 // POST /api/ocean/user/:userId/artistic-description
 router.post("/user/:userId/artistic-description", authUser, generateArtisticDescription);
+
+// Rutas genéricas (deben ir después de las rutas específicas)
+// Obtener resultados del test por entityType y entityId
+// GET /api/ocean/:entityType/:entityId
+router.get("/:entityType/:entityId", authUser, getTestResults);
+
+// Eliminar resultados del test (soft delete)
+// DELETE /api/ocean/:entityType/:entityId
+router.delete("/:entityType/:entityId", authUser, deleteTestResults);
 
 module.exports = router;
