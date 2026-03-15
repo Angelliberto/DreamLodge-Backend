@@ -17,13 +17,21 @@ class AIAgent {
     // Inicializar Gemini si la API key está disponible
     if (this.geminiApiKey) {
       try {
-        this.geminiClient = new GoogleGenerativeAI(this.geminiApiKey);
-        console.log('✅ Gemini API inicializada correctamente');
+        // Validar que la API key no esté vacía
+        if (this.geminiApiKey.trim() === '') {
+          console.warn('⚠️ GEMINI_API_KEY está vacía. El agente usará respuestas básicas.');
+        } else {
+          this.geminiClient = new GoogleGenerativeAI(this.geminiApiKey);
+          console.log('✅ Gemini API inicializada correctamente');
+          console.log('🔑 API Key configurada (primeros 10 caracteres):', this.geminiApiKey.substring(0, 10) + '...');
+        }
       } catch (error) {
         console.error('❌ Error inicializando Gemini API:', error.message);
+        console.error('Error stack:', error.stack);
       }
     } else {
       console.warn('⚠️ GEMINI_API_KEY no está configurada. El agente usará respuestas básicas.');
+      console.warn('💡 Para habilitar Gemini, configura la variable de entorno GEMINI_API_KEY en Koyeb');
     }
   }
 
@@ -472,26 +480,35 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
       // Si Gemini está disponible, usarlo para generar la descripción
       if (this.geminiClient) {
         try {
+          console.log('🤖 Generando descripción artística con Gemini...');
           const model = this.geminiClient.getGenerativeModel({ model: 'gemini-pro' });
           const result = await model.generateContent(prompt);
           const response = result.response;
           const text = response.text().trim();
           
+          console.log('📝 Respuesta de Gemini recibida (primeros 200 caracteres):', text.substring(0, 200));
+          
           // Intentar extraer JSON de la respuesta
           let jsonMatch = text.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const jsonResult = JSON.parse(jsonMatch[0]);
+            console.log('✅ Descripción artística generada exitosamente con Gemini');
             return jsonResult;
           } else {
             // Si no se puede parsear, usar fallback
-            console.warn('No se pudo extraer JSON de la respuesta de Gemini, usando fallback');
+            console.warn('⚠️ No se pudo extraer JSON de la respuesta de Gemini, usando fallback');
+            console.warn('Respuesta completa:', text);
             return this.generateArtisticDescriptionFromScores(scores, oceanResult.testType);
           }
         } catch (error) {
-          console.error('Error generando descripción artística con Gemini:', error);
+          console.error('❌ Error generando descripción artística con Gemini:', error);
+          console.error('Error details:', error.message);
+          console.error('Error stack:', error.stack);
           // Fallback a implementación basada en reglas
           return this.generateArtisticDescriptionFromScores(scores, oceanResult.testType);
         }
+      } else {
+        console.warn('⚠️ Gemini no está disponible, usando descripción basada en reglas');
       }
       
       // Fallback a implementación basada en reglas si Gemini no está disponible
@@ -559,6 +576,7 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
     // Si Gemini está disponible, usarlo para generar una respuesta inteligente
     if (this.geminiClient) {
       try {
+        console.log('🤖 Generando respuesta con Gemini para el mensaje:', userMessage.substring(0, 50) + '...');
         const model = this.geminiClient.getGenerativeModel({ model: 'gemini-pro' });
         
         // Construir el contexto de la conversación
