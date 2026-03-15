@@ -130,12 +130,19 @@ class AIAgent {
         const searchParams = this.extractSearchParams(userMessage);
         if (Object.keys(searchParams).length > 0 || userMessage.length > 6) {
           try {
-            const searchResults = await this.searchArtworks(searchParams);
+            // Agregar timeout a la búsqueda automática
+            const searchPromise = this.searchArtworks(searchParams);
+            const timeoutPromise = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Timeout en búsqueda automática')), 15000)
+            );
+            
+            const searchResults = await Promise.race([searchPromise, timeoutPromise]);
             if (searchResults && searchResults.data && searchResults.data.length > 0) {
               toolResults.artworks = searchResults;
             }
           } catch (error) {
             console.warn('Error en búsqueda automática:', error.message);
+            // Continuar sin resultados de búsqueda, el agente puede responder igual
           }
         }
       }
@@ -258,11 +265,21 @@ class AIAgent {
   }
 
   /**
-   * Ejecuta las herramientas de base de datos seleccionadas
+   * Ejecuta las herramientas de base de datos seleccionadas con timeouts
    */
   async executeTools(tools, userMessage, options = {}) {
     const { userId = null, contextItems = [] } = options;
     const results = {};
+
+    // Función helper para agregar timeout a promesas
+    const withTimeout = (promise, timeoutMs, toolName) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(`Timeout ejecutando ${toolName} después de ${timeoutMs}ms`)), timeoutMs)
+        )
+      ]);
+    };
 
     for (const tool of tools) {
       try {
@@ -270,18 +287,30 @@ class AIAgent {
           case 'search_artworks':
             // Extraer parámetros de búsqueda del mensaje
             const searchParams = this.extractSearchParams(userMessage);
-            results.artworks = await this.searchArtworks(searchParams);
+            results.artworks = await withTimeout(
+              this.searchArtworks(searchParams),
+              15000, // 15 segundos para búsquedas
+              'search_artworks'
+            );
             break;
 
           case 'get_user_ocean_results':
             if (userId) {
-              results.oceanResults = await this.getUserOceanResults(userId);
+              results.oceanResults = await withTimeout(
+                this.getUserOceanResults(userId),
+                10000, // 10 segundos para obtener OCEAN
+                'get_user_ocean_results'
+              );
             }
             break;
 
           case 'get_user_favorites':
             if (userId) {
-              results.favorites = await this.getUserFavorites(userId);
+              results.favorites = await withTimeout(
+                this.getUserFavorites(userId),
+                10000, // 10 segundos para obtener favoritos
+                'get_user_favorites'
+              );
             }
             break;
 
@@ -289,7 +318,11 @@ class AIAgent {
             // Intentar extraer ID de artwork del mensaje o contexto
             const artworkId = this.extractArtworkId(userMessage, contextItems);
             if (artworkId) {
-              results.artwork = await this.getArtworkById(artworkId);
+              results.artwork = await withTimeout(
+                this.getArtworkById(artworkId),
+                10000, // 10 segundos para obtener artwork
+                'get_artwork_by_id'
+              );
             }
             break;
 
@@ -298,7 +331,11 @@ class AIAgent {
         }
       } catch (error) {
         console.error(`Error ejecutando herramienta ${tool}:`, error.message);
-        results[tool] = { error: error.message };
+        // No agregar error al resultado para que el agente pueda seguir funcionando
+        // Solo loguear el error
+        if (error.message?.includes('Timeout')) {
+          console.warn(`⚠️ Timeout en ${tool}, continuando sin resultados de esta herramienta`);
+        }
       }
     }
 
@@ -719,20 +756,44 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
         
         // Agregar instrucciones específicas según el contexto
         if (toolResults.artworks && toolResults.artworks.data && toolResults.artworks.data.length > 0) {
-          fullPrompt += `INSTRUCCIONES: Has encontrado obras relevantes en la base de datos. Preséntalas de manera atractiva, mencionando detalles como título, creador, año y categoría. Explica por qué podrían interesarle al usuario. Si tienes información del perfil OCEAN del usuario, conecta las recomendaciones con su personalidad.\n\n`;
+          fullPrompt += `INSTRUCCIONES IMPORTANTES:\n`;
+          fullPrompt += `- Has encontrado ${toolResults.artworks.data.length} obra(s) en la base de datos.\n`;
+          fullPrompt += `- Preséntalas de manera atractiva y específica, mencionando título, creador, año y categoría.\n`;
+          fullPrompt += `- Explica brevemente por qué cada obra podría interesarle al usuario.\n`;
+          if (toolResults.oceanResults && toolResults.oceanResults.data) {
+            fullPrompt += `- Conecta las recomendaciones con su perfil de personalidad OCEAN si es relevante.\n`;
+          }
+          fullPrompt += `- Si hay muchas obras, menciona las 3-5 más relevantes y ofrece mostrar más si quiere.\n`;
+          fullPrompt += `- Sé entusiasta y específico, evita listas genéricas.\n\n`;
         } else if (toolResults.oceanResults && toolResults.oceanResults.data) {
-          fullPrompt += `INSTRUCCIONES: El usuario tiene un perfil de personalidad OCEAN disponible. Haz recomendaciones personalizadas basándote en sus rasgos de personalidad. Sé específico y explica por qué estas recomendaciones se alinean con su perfil. Si no tienes obras específicas, sugiere categorías o géneros que podrían gustarle.\n\n`;
+          fullPrompt += `INSTRUCCIONES IMPORTANTES:\n`;
+          fullPrompt += `- El usuario tiene un perfil de personalidad OCEAN disponible.\n`;
+          fullPrompt += `- Haz recomendaciones personalizadas basándote en sus rasgos de personalidad.\n`;
+          fullPrompt += `- Sé específico: menciona géneros, estilos o tipos de contenido que se alineen con su perfil.\n`;
+          fullPrompt += `- Explica brevemente por qué estas recomendaciones encajan con su personalidad.\n`;
+          fullPrompt += `- Si no tienes obras específicas en la base de datos, usa tu conocimiento general para sugerir contenido conocido.\n`;
+          fullPrompt += `- NUNCA digas "no tengo información" - siempre ofrece algo útil.\n\n`;
         } else if (toolResults.favorites && toolResults.favorites.data && toolResults.favorites.data.length > 0) {
-          fullPrompt += `INSTRUCCIONES: Conoce los gustos del usuario a través de sus favoritos. Haz recomendaciones similares o complementarias. Sé específico y menciona obras concretas si es posible.\n\n`;
+          fullPrompt += `INSTRUCCIONES IMPORTANTES:\n`;
+          fullPrompt += `- Conoces los gustos del usuario a través de sus ${toolResults.favorites.data.length} favorito(s).\n`;
+          fullPrompt += `- Haz recomendaciones similares o complementarias basándote en sus favoritos.\n`;
+          fullPrompt += `- Sé específico: menciona obras concretas, géneros o estilos relacionados.\n`;
+          fullPrompt += `- Si no tienes obras específicas en la base, usa tu conocimiento para sugerir contenido conocido que sea similar.\n\n`;
         } else {
-          fullPrompt += `INSTRUCCIONES: Responde siempre con algo útil. NUNCA digas "no pude encontrar", "no pude satisfacer tu solicitud" o "no entendí" como mensaje principal. Interpreta la intención aunque haya typos. Si no tienes datos en la base, usa tu conocimiento general o sugiere opciones/géneros. Sé proactivo y amigable.\n\n`;
+          fullPrompt += `INSTRUCCIONES IMPORTANTES:\n`;
+          fullPrompt += `- Responde siempre con algo útil y específico.\n`;
+          fullPrompt += `- NUNCA digas "no pude encontrar", "no pude satisfacer tu solicitud" o "no entendí" como mensaje principal.\n`;
+          fullPrompt += `- Interpreta la intención aunque haya typos o escritura informal.\n`;
+          fullPrompt += `- Si no tienes datos en la base de datos, usa tu conocimiento general para sugerir contenido conocido, géneros o estilos.\n`;
+          fullPrompt += `- Sé proactivo: ofrece opciones concretas o haz preguntas útiles para refinar la búsqueda.\n`;
+          fullPrompt += `- Mantén un tono amigable y entusiasta.\n\n`;
         }
         
-        fullPrompt += `Responde de manera natural, amigable y útil. Sé específico y evita respuestas genéricas.`;
+        fullPrompt += `Responde de manera natural, conversacional y útil. Sé específico y evita respuestas genéricas o vagas.`;
         
-        // Agregar timeout a la llamada de Gemini (50 segundos)
+        // Agregar timeout a la llamada de Gemini (80 segundos para dar más margen)
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Timeout: La generación de respuesta tardó demasiado')), 50000);
+          setTimeout(() => reject(new Error('Timeout: La generación de respuesta tardó demasiado')), 80000);
         });
         
         try {
@@ -744,10 +805,17 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
           const response = result.response;
           const text = response.text();
           
+          // Validar que la respuesta no esté vacía
+          if (!text || text.trim().length === 0) {
+            console.warn('⚠️ Gemini devolvió respuesta vacía, usando fallback');
+            return this.generateBasicResponse(userMessage, toolResults);
+          }
+          
           return text.trim();
         } catch (timeoutError) {
           // Si es un timeout, lanzar el error para que se maneje en el catch externo
           if (timeoutError.message?.includes('Timeout')) {
+            console.warn('⚠️ Timeout en Gemini después de 80 segundos, usando respuesta básica');
             throw timeoutError;
           }
           // Si es otro error, también lanzarlo
@@ -756,15 +824,21 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
       } catch (error) {
         console.error('Error generando respuesta con Gemini:', error);
         console.error('Error details:', error.message);
-        console.error('Error stack:', error.stack);
         
-        // Si es un timeout, usar respuesta básica inmediatamente
+        // Si es un timeout o error de API, usar respuesta básica inmediatamente
         if (error.message?.includes('Timeout') || error.message?.includes('timeout')) {
           console.warn('⚠️ Timeout en Gemini, usando respuesta básica');
           return this.generateBasicResponse(userMessage, toolResults);
         }
         
+        // Si es un error de API de Gemini (rate limit, etc), usar fallback
+        if (error.message?.includes('API') || error.message?.includes('quota') || error.message?.includes('429')) {
+          console.warn('⚠️ Error de API de Gemini, usando respuesta básica');
+          return this.generateBasicResponse(userMessage, toolResults);
+        }
+        
         // Fallback a implementación básica si Gemini falla por cualquier razón
+        console.warn('⚠️ Error desconocido en Gemini, usando respuesta básica');
         return this.generateBasicResponse(userMessage, toolResults);
       }
     }
