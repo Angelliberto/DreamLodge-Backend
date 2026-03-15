@@ -1,6 +1,23 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
-const aiAgent = require("../services/aiAgent");
 const { UserModel } = require("../models");
+
+// Cargar aiAgent de forma segura
+let aiAgent;
+try {
+  aiAgent = require("../services/aiAgent");
+} catch (error) {
+  console.error('Error cargando aiAgent:', error);
+  // Crear un objeto mock para evitar que el módulo falle completamente
+  aiAgent = {
+    processMessage: async () => {
+      return {
+        response: 'El servicio de IA no está disponible en este momento.',
+        toolsUsed: [],
+        context: {}
+      };
+    }
+  };
+}
 
 /**
  * Enviar un mensaje al agente IA

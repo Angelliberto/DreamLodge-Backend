@@ -1,7 +1,21 @@
 const express = require("express");
 const router = express.Router();
 const { sendMessage, getRecommendations } = require("../controllers/chat");
-const { sessionMiddleware } = require("../middleware/session");
+const { authUser } = require("../middleware/session");
+
+// Validar que las funciones existan antes de usarlas
+if (typeof sendMessage !== 'function') {
+  console.error('ERROR: sendMessage no es una función. Tipo:', typeof sendMessage);
+  throw new Error('sendMessage debe ser una función');
+}
+if (typeof getRecommendations !== 'function') {
+  console.error('ERROR: getRecommendations no es una función. Tipo:', typeof getRecommendations);
+  throw new Error('getRecommendations debe ser una función');
+}
+if (typeof authUser !== 'function') {
+  console.error('ERROR: authUser no es una función. Tipo:', typeof authUser);
+  throw new Error('authUser debe ser una función');
+}
 
 /**
  * @swagger
@@ -39,7 +53,7 @@ const { sessionMiddleware } = require("../middleware/session");
  *       500:
  *         description: Error del servidor
  */
-router.post("/message", sessionMiddleware, sendMessage);
+router.post("/message", authUser, sendMessage);
 
 /**
  * @swagger
@@ -70,6 +84,6 @@ router.post("/message", sessionMiddleware, sendMessage);
  *       500:
  *         description: Error del servidor
  */
-router.get("/recommendations", sessionMiddleware, getRecommendations);
+router.get("/recommendations", authUser, getRecommendations);
 
 module.exports = router;
