@@ -8,6 +8,16 @@ const { buildSystemPrompt } = require('../prompts/systemPrompts');
 const { UserModel, ArtworkModel, OceanModel } = require('../models');
 const mongoose = require('mongoose');
 
+// Permite forzar un modelo por env y, si falla, prueba otros compatibles.
+const GEMINI_CANDIDATE_MODELS = [
+  process.env.GEMINI_MODEL,
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
+  'gemini-1.0-pro',
+].filter(Boolean);
+
 class AIAgent {
   constructor(llmProvider) {
     this.llmProvider = llmProvider || this.getDefaultLLMProvider();
@@ -40,6 +50,59 @@ class AIAgent {
    */
   getDefaultLLMProvider() {
     return this.geminiClient ? 'gemini' : null;
+  }
+
+  getCandidateGeminiModels() {
+    return GEMINI_CANDIDATE_MODELS;
+  }
+
+  isModelNotSupportedError(error) {
+    const message = String(error?.message || '').toLowerCase();
+    return (
+      error?.status === 404 ||
+      message.includes('not found') ||
+      message.includes('is not found for api version') ||
+      message.includes('not supported for generatecontent')
+    );
+  }
+
+  async generateWithGemini(prompt, { purpose = 'respuesta', timeoutMs = 40000 } = {}) {
+    if (!this.geminiClient) {
+      throw new Error('El servicio de IA no está configurado (Gemini no disponible).');
+    }
+
+    const candidates = this.getCandidateGeminiModels();
+    const triedModels = [];
+
+    for (const modelName of candidates) {
+      triedModels.push(modelName);
+      try {
+        console.log(`🤖 Probando modelo Gemini para ${purpose}: ${modelName}`);
+        const model = this.geminiClient.getGenerativeModel({ model: modelName });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout generando ${purpose} con ${modelName}`)), timeoutMs)
+        );
+        const result = await Promise.race([model.generateContent(prompt), timeoutPromise]);
+        const text = result?.response?.text?.();
+
+        if (!text || text.trim().length === 0) {
+          throw new Error(`El modelo ${modelName} no generó ninguna respuesta.`);
+        }
+
+        console.log(`✅ Modelo Gemini seleccionado para ${purpose}: ${modelName}`);
+        return text.trim();
+      } catch (error) {
+        if (this.isModelNotSupportedError(error)) {
+          console.warn(`⚠️ Modelo no soportado o no encontrado (${modelName}), probando siguiente...`);
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new Error(
+      `No hay modelos Gemini compatibles para esta API key/version. Modelos probados: ${triedModels.join(', ')}`
+    );
   }
 
   /**
@@ -699,11 +762,10 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
       // Si Gemini está disponible, usarlo para generar la descripción
       if (this.geminiClient) {
         try {
-          console.log('🤖 Generando descripción artística con Gemini (gemini-1.5-flash)...');
-          const model = this.geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash' });
-          const result = await model.generateContent(prompt);
-          const response = result.response;
-          const text = response.text().trim();
+          const text = await this.generateWithGemini(prompt, {
+            purpose: 'descripción artística',
+            timeoutMs: 30000,
+          });
           
           console.log('📝 Respuesta de Gemini recibida (primeros 200 caracteres):', text.substring(0, 200));
           
@@ -795,14 +857,13 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
     // Si Gemini está disponible, usarlo para generar una respuesta inteligente
     if (this.geminiClient) {
       try {
-        console.log('🤖 Generando respuesta con Gemini (gemini-1.5-flash) para el mensaje:', userMessage.substring(0, 50) + '...');
+        console.log('🤖 Generando respuesta con Gemini para el mensaje:', userMessage.substring(0, 50) + '...');
         console.log('📊 Datos disponibles para Gemini:', {
           hasArtworks: !!(toolResults.artworks && toolResults.artworks.data),
           artworksCount: toolResults.artworks?.data?.length || 0,
           hasOcean: !!(toolResults.oceanResults && toolResults.oceanResults.data),
           hasFavorites: !!(toolResults.favorites && toolResults.favorites.data),
         });
-        const model = this.geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash' });
         
         // Construir el contexto de la conversación
         let contextText = systemPrompt + '\n\n';
@@ -903,30 +964,10 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
         
         fullPrompt += `Responde de manera natural, conversacional y útil. Sé específico y evita respuestas genéricas o vagas.`;
         
-        // Agregar timeout a la llamada de Gemini (80 segundos para dar más margen)
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Timeout: La generación de respuesta tardó demasiado')), 80000);
+        return await this.generateWithGemini(fullPrompt, {
+          purpose: 'respuesta de chat',
+          timeoutMs: 45000,
         });
-        
-        try {
-          const result = await Promise.race([
-            model.generateContent(fullPrompt),
-            timeoutPromise
-          ]);
-          
-          const response = result.response;
-          const text = response.text();
-          
-          // Validar que la respuesta no esté vacía
-          if (!text || text.trim().length === 0) {
-            console.warn('⚠️ Gemini devolvió respuesta vacía');
-            throw new Error('El modelo no generó ninguna respuesta.');
-          }
-          
-          return text.trim();
-        } catch (timeoutError) {
-          throw timeoutError;
-        }
       } catch (error) {
         console.error('Error generando respuesta con Gemini:', error);
         console.error('Error details:', error.message);
