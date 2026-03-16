@@ -186,18 +186,8 @@ class AIAgent {
       
       // Verificar si Gemini está disponible antes de intentar usarlo
       if (!this.geminiClient) {
-        console.warn('⚠️ Gemini no está disponible, usando respuesta básica');
-        const basicResponse = this.generateBasicResponse(userMessage, toolResults);
-        return {
-          response: basicResponse,
-          toolsUsed: toolsToUse,
-          context: {
-            hasOceanResults: !!oceanResults,
-            favoritesCount: favorites.length,
-            contextItemsCount: contextItems.length,
-            artworksFound: toolResults.artworks?.data?.length || 0,
-          },
-        };
+        console.warn('⚠️ Gemini no está disponible');
+        throw new Error('El servicio de IA no está configurado (Gemini no disponible). Configura GEMINI_API_KEY.');
       }
       
       const aiResponse = await this.generateResponse(
@@ -709,8 +699,8 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
       // Si Gemini está disponible, usarlo para generar la descripción
       if (this.geminiClient) {
         try {
-          console.log('🤖 Generando descripción artística con Gemini...');
-          const model = this.geminiClient.getGenerativeModel({ model: 'gemini-pro' });
+          console.log('🤖 Generando descripción artística con Gemini (gemini-1.5-flash)...');
+          const model = this.geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash' });
           const result = await model.generateContent(prompt);
           const response = result.response;
           const text = response.text().trim();
@@ -805,14 +795,14 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
     // Si Gemini está disponible, usarlo para generar una respuesta inteligente
     if (this.geminiClient) {
       try {
-        console.log('🤖 Generando respuesta con Gemini para el mensaje:', userMessage.substring(0, 50) + '...');
+        console.log('🤖 Generando respuesta con Gemini (gemini-1.5-flash) para el mensaje:', userMessage.substring(0, 50) + '...');
         console.log('📊 Datos disponibles para Gemini:', {
           hasArtworks: !!(toolResults.artworks && toolResults.artworks.data),
           artworksCount: toolResults.artworks?.data?.length || 0,
           hasOcean: !!(toolResults.oceanResults && toolResults.oceanResults.data),
           hasFavorites: !!(toolResults.favorites && toolResults.favorites.data),
         });
-        const model = this.geminiClient.getGenerativeModel({ model: 'gemini-pro' });
+        const model = this.geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash' });
         
         // Construir el contexto de la conversación
         let contextText = systemPrompt + '\n\n';
@@ -929,44 +919,22 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
           
           // Validar que la respuesta no esté vacía
           if (!text || text.trim().length === 0) {
-            console.warn('⚠️ Gemini devolvió respuesta vacía, usando fallback');
-            return this.generateBasicResponse(userMessage, toolResults);
+            console.warn('⚠️ Gemini devolvió respuesta vacía');
+            throw new Error('El modelo no generó ninguna respuesta.');
           }
           
           return text.trim();
         } catch (timeoutError) {
-          // Si es un timeout, lanzar el error para que se maneje en el catch externo
-          if (timeoutError.message?.includes('Timeout')) {
-            console.warn('⚠️ Timeout en Gemini después de 80 segundos, usando respuesta básica');
-            throw timeoutError;
-          }
-          // Si es otro error, también lanzarlo
           throw timeoutError;
         }
       } catch (error) {
         console.error('Error generando respuesta con Gemini:', error);
         console.error('Error details:', error.message);
-        
-        // Si es un timeout o error de API, usar respuesta básica inmediatamente
-        if (error.message?.includes('Timeout') || error.message?.includes('timeout')) {
-          console.warn('⚠️ Timeout en Gemini, usando respuesta básica');
-          return this.generateBasicResponse(userMessage, toolResults);
-        }
-        
-        // Si es un error de API de Gemini (rate limit, etc), usar fallback
-        if (error.message?.includes('API') || error.message?.includes('quota') || error.message?.includes('429')) {
-          console.warn('⚠️ Error de API de Gemini, usando respuesta básica');
-          return this.generateBasicResponse(userMessage, toolResults);
-        }
-        
-        // Fallback a implementación básica si Gemini falla por cualquier razón
-        console.warn('⚠️ Error desconocido en Gemini, usando respuesta básica');
-        return this.generateBasicResponse(userMessage, toolResults);
+        throw error;
       }
     }
     
-    // Fallback a implementación básica si Gemini no está disponible
-    return this.generateBasicResponse(userMessage, toolResults);
+    throw new Error('El servicio de IA no está configurado (Gemini no disponible).');
   }
 
   /**

@@ -60,10 +60,8 @@ const sendMessage = async (req, res) => {
     });
   } catch (error) {
     console.error("Error procesando mensaje:", error);
-    return handleHTTPError(res, {
-      message: "Error al procesar el mensaje",
-      details: process.env.NODE_ENV === "development" ? error.message : undefined,
-    }, 500);
+    const message = error && typeof error.message === 'string' ? error.message : 'Error al procesar el mensaje';
+    return handleHTTPError(res, message, 500);
   }
 };
 
@@ -98,10 +96,8 @@ const getRecommendations = async (req, res) => {
     });
   } catch (error) {
     console.error("Error generando recomendaciones:", error);
-    return handleHTTPError(res, {
-      message: "Error al generar recomendaciones",
-      details: process.env.NODE_ENV === "development" ? error.message : undefined,
-    }, 500);
+    const message = error && typeof error.message === 'string' ? error.message : 'Error al generar recomendaciones';
+    return handleHTTPError(res, message, 500);
   }
 };
 
