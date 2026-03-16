@@ -23,6 +23,8 @@ class AIAgent {
     this.llmProvider = llmProvider || this.getDefaultLLMProvider();
     this.geminiApiKey = process.env.GEMINI_API_KEY;
     this.geminiClient = null;
+    this.availableModelsCache = null;
+    this.availableModelsCacheAt = 0;
     
     // Inicializar Gemini si la API key está disponible
     if (this.geminiApiKey) {
@@ -34,6 +36,15 @@ class AIAgent {
           this.geminiClient = new GoogleGenerativeAI(this.geminiApiKey);
           console.log('Gemini API inicializada correctamente');
           console.log('API Key configurada (primeros 10 caracteres):', this.geminiApiKey.substring(0, 10) + '...');
+          // Diagnóstico de despliegue: verificar modelos disponibles al arrancar (sin exponer la key)
+          this.getAvailableGeminiModels()
+            .then((models) => {
+              console.log('🔎 Modelos Gemini con generateContent disponibles:', models.length);
+              console.log('🔎 Primeros modelos disponibles:', models.slice(0, 10).join(', '));
+            })
+            .catch((err) => {
+              console.error('❌ Error listando modelos Gemini en arranque:', err.message);
+            });
         }
       } catch (error) {
         console.error('Error inicializando Gemini API:', error.message);
@@ -56,6 +67,35 @@ class AIAgent {
     return GEMINI_CANDIDATE_MODELS;
   }
 
+  async getAvailableGeminiModels() {
+    if (!this.geminiApiKey) return [];
+
+    const now = Date.now();
+    // Cache por 10 minutos para evitar llamadas extra
+    if (this.availableModelsCache && (now - this.availableModelsCacheAt) < 10 * 60 * 1000) {
+      return this.availableModelsCache;
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${this.geminiApiKey}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`No se pudo listar modelos Gemini (${response.status}): ${body}`);
+    }
+
+    const json = await response.json();
+    const models = Array.isArray(json.models) ? json.models : [];
+
+    const modelNames = models
+      .filter(model => Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent'))
+      .map(model => String(model.name || '').replace(/^models\//, ''))
+      .filter(Boolean);
+
+    this.availableModelsCache = modelNames;
+    this.availableModelsCacheAt = now;
+    return modelNames;
+  }
+
   isModelNotSupportedError(error) {
     const message = String(error?.message || '').toLowerCase();
     return (
@@ -66,13 +106,56 @@ class AIAgent {
     );
   }
 
+  isQuotaError(error) {
+    const message = String(error?.message || '').toLowerCase();
+    return (
+      error?.status === 429 ||
+      message.includes('too many requests') ||
+      message.includes('quota exceeded') ||
+      message.includes('rate limit')
+    );
+  }
+
+  extractRetryDelaySeconds(error) {
+    const details = Array.isArray(error?.errorDetails) ? error.errorDetails : [];
+    const retryInfo = details.find(item => item && item['@type'] === 'type.googleapis.com/google.rpc.RetryInfo');
+    const raw = retryInfo?.retryDelay;
+    if (typeof raw === 'string' && raw.endsWith('s')) {
+      const seconds = Number(raw.replace('s', ''));
+      return Number.isFinite(seconds) ? Math.ceil(seconds) : null;
+    }
+    const msg = String(error?.message || '');
+    const match = msg.match(/retry in ([\d.]+)s/i);
+    if (match) {
+      const seconds = Number(match[1]);
+      return Number.isFinite(seconds) ? Math.ceil(seconds) : null;
+    }
+    return null;
+  }
+
   async generateWithGemini(prompt, { purpose = 'respuesta', timeoutMs = 40000 } = {}) {
     if (!this.geminiClient) {
       throw new Error('El servicio de IA no está configurado (Gemini no disponible).');
     }
 
-    const candidates = this.getCandidateGeminiModels();
+    let candidates = this.getCandidateGeminiModels();
+    try {
+      const available = await this.getAvailableGeminiModels();
+      if (available.length > 0) {
+        const preferred = candidates.filter(name => available.includes(name));
+        const extras = available.filter(name => !preferred.includes(name));
+        candidates = [...preferred, ...extras];
+      }
+    } catch (error) {
+      console.warn('⚠️ No se pudo obtener lista de modelos disponibles, usando candidatos por defecto:', error.message);
+    }
+
+    if (!candidates.length) {
+      throw new Error('No hay modelos Gemini disponibles para generateContent con esta API key.');
+    }
     const triedModels = [];
+    const quotaBlockedModels = [];
+    let retryAfterSeconds = null;
 
     for (const modelName of candidates) {
       triedModels.push(modelName);
@@ -96,8 +179,21 @@ class AIAgent {
           console.warn(`⚠️ Modelo no soportado o no encontrado (${modelName}), probando siguiente...`);
           continue;
         }
+        if (this.isQuotaError(error)) {
+          const retryDelay = this.extractRetryDelaySeconds(error);
+          retryAfterSeconds = retryDelay || retryAfterSeconds;
+          quotaBlockedModels.push(modelName);
+          console.warn(`⚠️ Cuota agotada para ${modelName}${retryDelay ? ` (retry sugerido: ${retryDelay}s)` : ''}`);
+          continue;
+        }
         throw error;
       }
+    }
+
+    if (quotaBlockedModels.length > 0) {
+      throw new Error(
+        `Gemini sin cuota disponible (429). Modelos afectados: ${quotaBlockedModels.join(', ')}.${retryAfterSeconds ? ` Reintentar en ~${retryAfterSeconds}s.` : ''}`
+      );
     }
 
     throw new Error(
@@ -276,7 +372,10 @@ class AIAgent {
         },
       };
     } catch (error) {
-      console.error('Error procesando mensaje:', error);
+      console.error('Error procesando mensaje:', {
+        status: error?.status,
+        message: error?.message,
+      });
       throw error;
     }
   }
@@ -920,8 +1019,10 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
           timeoutMs: 45000,
         });
       } catch (error) {
-        console.error('Error generando respuesta con Gemini:', error);
-        console.error('Error details:', error.message);
+        console.error('Error generando respuesta con Gemini:', {
+          status: error?.status,
+          message: error?.message,
+        });
         throw error;
       }
     }
