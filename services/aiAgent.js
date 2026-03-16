@@ -131,7 +131,7 @@ class AIAgent {
               email: user.email,
             };
 
-            // Obtener resultados OCEAN del usuario
+            // Obtener resultados OCEAN del usuario para personalización contextual
             try {
               const oceanDataList = await OceanModel.find({
                 entityType: 'user',
@@ -148,7 +148,7 @@ class AIAgent {
               console.warn('No se pudieron obtener resultados OCEAN:', error.message);
             }
 
-            // Obtener favoritos del usuario
+            // Obtener favoritos del usuario para inferir gustos
             try {
               const userWithFavorites = await UserModel.findById(userId).populate('favoriteArtworks');
               if (userWithFavorites && userWithFavorites.favoriteArtworks) {
@@ -186,9 +186,13 @@ class AIAgent {
       // 4. Ejecutar búsquedas en base de datos para obtener contexto
       let toolResults = {};
       
-      // SIEMPRE extraer parámetros de búsqueda del mensaje
+      // Extraer parámetros para búsquedas contextuales (solo cuando aplique)
       const searchParams = this.extractSearchParams(userMessage);
       console.log('📋 Parámetros de búsqueda extraídos:', searchParams);
+      const shouldSearchInDb =
+        toolsToUse.includes('search_artworks') ||
+        toolsToUse.includes('get_artwork_by_id') ||
+        (contextItems && contextItems.length > 0);
       
       if (toolsToUse.length > 0) {
         console.log('⚙️ Ejecutando herramientas detectadas...');
@@ -203,9 +207,8 @@ class AIAgent {
         });
       }
       
-      // SIEMPRE intentar búsqueda si hay parámetros o el mensaje es suficientemente largo
-      // Incluso si ya se ejecutaron herramientas, puede que necesitemos buscar más
-      if (Object.keys(searchParams).length > 0 || userMessage.length > 5) {
+      // Solo intentar búsqueda adicional si hay intención real de consulta a artworks
+      if (shouldSearchInDb && Object.keys(searchParams).length > 0) {
         // Solo buscar si no tenemos resultados ya o si los parámetros son diferentes
         if (!toolResults.artworks || !toolResults.artworks.data || toolResults.artworks.data.length === 0) {
           try {
@@ -306,62 +309,19 @@ class AIAgent {
    * Analiza el mensaje del usuario y determina qué búsquedas realizar (flexible a typos y redacción)
    */
   async analyzeMessageAndSelectTools(userMessage, options = {}) {
-    const { contextItems = [], conversationHistory = [], userId = null } = options;
-    const message = userMessage.toLowerCase().trim();
-    const normalized = this.normalizeForIntent(userMessage);
+    const { contextItems = [] } = options;
     const tools = [];
+    const searchParams = this.extractSearchParams(userMessage);
+    const hasStructuredSearchParams = !!(searchParams.category || searchParams.genre || searchParams.source || searchParams.title);
+    const artworkId = this.extractArtworkId(userMessage, contextItems);
 
-    const recomienda = [
-      'recomiendame', 'recomienda', 'recomiendame', 'sugerencia', 'sugiere', 'sugerir',
-      'que deberia', 'qué debería', 'q me recomiendas', 'que me recomiendas',
-      'que puedo ver', 'que puedo escuchar', 'que puedo leer', 'que deberia ver',
-      'dame recomendaciones', 'recomendaciones', 'algo para ver', 'algo para leer', 'algo para escuchar',
-      'quiero ver', 'quiero escuchar', 'quiero leer', 'algo de', 'algo como'
-    ];
-    const buscar = [
-      'buscar', 'busca', 'encuentra', 'encontrar', 'muestrame', 'muéstrame', 'dame',
-      'pelicula', 'película', 'peli', 'pelis', 'cine', 'film', 'movie',
-      'musica', 'música', 'cancion', 'canción', 'disco', 'album',
-      'libro', 'libros', 'novela', 'lectura', 'leer',
-      'videojuego', 'juego', 'juegos', 'game', 'gaming',
-      'arte', 'artista', 'pintura', 'visual'
-    ];
-    const categorias = [
-      'pelicula', 'película', 'peli', 'cine', 'film', 'peliculas', 'películas',
-      'musica', 'música', 'cancion', 'cancion', 'canciones', 'disco', 'album',
-      'libro', 'libros', 'novela', 'literatura', 'book',
-      'videojuego', 'videojuegos', 'juego', 'juegos', 'game',
-      'arte', 'artista', 'artistas', 'pintura', 'art'
-    ];
-    const infoObra = [
-      'informacion sobre', 'información sobre', 'detalles de', 'que es', 'qué es',
-      'quien es', 'quién es', 'cuentame sobre', 'cuéntame sobre', 'hablame de', 'háblame de',
-      'sabes de', 'conoces', 'info de', 'sobre la pelicula', 'sobre el libro'
-    ];
-
-    // SIEMPRE buscar si hay recomendaciones, búsquedas o menciones de categorías/géneros
-    const tieneRecomendacion = recomienda.some(k => normalized.includes(this.normalizeForIntent(k)));
-    const tieneBusqueda = buscar.some(k => normalized.includes(this.normalizeForIntent(k)));
-    const tieneCategoria = categorias.some(k => normalized.includes(this.normalizeForIntent(k)));
-    
-    // Detectar géneros comunes
-    const generos = ['drama', 'comedia', 'accion', 'terror', 'romance', 'fantasia', 'scifi', 'ciencia ficcion', 'thriller', 'suspenso'];
-    const tieneGenero = generos.some(g => normalized.includes(g));
-    
-    // Si hay cualquier indicio de búsqueda/recomendación/categoría/género, buscar
-    if (tieneRecomendacion || tieneBusqueda || tieneCategoria || tieneGenero || userMessage.length > 10) {
+    if (hasStructuredSearchParams) {
       tools.push('search_artworks');
-      if (userId && tieneRecomendacion) {
-        tools.push('get_user_ocean_results');
-        tools.push('get_user_favorites');
-      }
     }
-
-    // Preguntas sobre obras o información
-    if (infoObra.some(k => normalized.includes(this.normalizeForIntent(k)))) {
+    if (artworkId) {
       tools.push('get_artwork_by_id');
     }
-    if (contextItems && contextItems.length > 0) {
+    if (contextItems && contextItems.length > 0 && !tools.includes('get_artwork_by_id')) {
       tools.push('get_artwork_by_id');
     }
 
@@ -673,15 +633,6 @@ class AIAgent {
                       message.match(/titulad[oa][:\s]+(.+?)(?:\.|$)/i);
     if (titleMatch) {
       params.title = titleMatch[1].trim();
-    } else {
-      const genericWords = ['buscar', 'encontrar', 'recomiendame', 'recomienda', 'sugerencia', 'que', 'sobre', 'de', 'la', 'el', 'un', 'una', 'me', 'te', 'le', 'algo', 'dame', 'quiero'];
-      const words = message.split(/\s+/).filter(word => {
-        const w = word.replace(/[^\w\u00C0-\u024f]/gi, '').toLowerCase();
-        return w.length > 2 && !genericWords.includes(w);
-      });
-      if (words.length > 0 && words.length <= 6) {
-        params.title = words.join(' ');
-      }
     }
 
     return params;
