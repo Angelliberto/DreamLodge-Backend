@@ -3,6 +3,62 @@ const { OceanModel, UserModel, ArtworkModel, GenreModel } = require("../models")
 const mongoose = require("mongoose");
 const aiAgent = require("../services/aiAgent");
 
+const BIG_FIVE_TRAITS = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism'];
+
+/**
+ * Convierte un documento Ocean guardado al formato que consume el frontend (test_results, etc.).
+ * - dimensions: totales 0–5 por rasgo
+ * - subfacetas (solo test deep): valores en escala -2..+2 como arrays de un elemento (como tras calcular en cliente)
+ * Incluye `scores` crudo por compatibilidad.
+ */
+const formatOceanForFrontend = (doc) => {
+  if (!doc) return null;
+  const plain = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
+  const scores = plain.scores && typeof plain.scores === 'object' ? plain.scores : {};
+  const testType = plain.testType || 'quick';
+
+  const dimensions = {};
+  const subfacets = {};
+
+  for (const trait of BIG_FIVE_TRAITS) {
+    const scoreObj = scores[trait];
+    if (!scoreObj || typeof scoreObj !== 'object') continue;
+
+    if (typeof scoreObj.total === 'number') {
+      dimensions[trait] = scoreObj.total;
+    }
+
+    if (testType === 'deep') {
+      const facetEntries = {};
+      for (const key of Object.keys(scoreObj)) {
+        if (key === 'total') continue;
+        const val = scoreObj[key];
+        if (typeof val !== 'number') continue;
+        // Backend almacena subfacetas en 0–5; frontend espera -2..+2 en arrays
+        const onNegTwoToTwo = ((val / 5) * 4) - 2;
+        facetEntries[key] = [onNegTwoToTwo];
+      }
+      if (Object.keys(facetEntries).length > 0) {
+        subfacets[trait] = facetEntries;
+      }
+    }
+  }
+
+  return {
+    _id: plain._id,
+    entityType: plain.entityType,
+    entityId: plain.entityId,
+    testType,
+    timestamp: plain.createdAt,
+    createdAt: plain.createdAt,
+    updatedAt: plain.updatedAt,
+    totalScore: plain.totalScore,
+    dimensions,
+    ...(testType === 'deep' && Object.keys(subfacets).length > 0 ? { subfacets } : {}),
+    scores
+  };
+};
+
 /**
  * Validar la estructura de scores según el schema OCEAN
  */
@@ -203,7 +259,7 @@ const saveTestResults = async (req, res) => {
 
     return res.status(200).json({
       message: "Resultados del test guardados correctamente",
-      data: populatedResult
+      data: formatOceanForFrontend(populatedResult)
     });
 
   } catch (error) {
@@ -279,7 +335,7 @@ const getTestResults = async (req, res) => {
     }
 
     return res.status(200).json({
-      data: oceanResult
+      data: formatOceanForFrontend(oceanResult)
     });
 
   } catch (error) {
@@ -319,10 +375,14 @@ const getUserTestResults = async (req, res) => {
       entityType: 'user',
       entityId: new mongoose.Types.ObjectId(userId),
       deleted: false
-    }).sort({ createdAt: -1 });
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formatted = oceanResults.map((doc) => formatOceanForFrontend(doc));
 
     return res.status(200).json({
-      data: oceanResults
+      data: formatted
     });
 
   } catch (error) {

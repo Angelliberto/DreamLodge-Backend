@@ -1031,6 +1031,50 @@ IMPORTANTE: Responde SOLO con un JSON válido en el siguiente formato, sin texto
   }
 
   /**
+   * Genera un título corto para la conversación usando el turno actual.
+   */
+  async generateConversationTitle(inputData) {
+    const fallback = 'Nueva conversación';
+    const userMessage = String(inputData?.userMessage || '').trim();
+    const assistantMessage = String(inputData?.assistantMessage || '').trim();
+    const currentTitle = String(inputData?.currentTitle || '').trim();
+    if (!userMessage) return fallback;
+
+    if (!this.geminiClient) {
+      return currentTitle || userMessage.slice(0, 40);
+    }
+
+    const prompt = [
+      'Genera o mejora un título MUY corto en español para una conversación de chat.',
+      'Reglas:',
+      '- Máximo 5 palabras.',
+      '- Sin comillas, sin emojis, sin punto final.',
+      '- Debe sonar natural y específico al contexto.',
+      currentTitle ? `Título actual: "${currentTitle}"` : 'Título actual: (sin título útil aún)',
+      `Último mensaje del usuario: "${userMessage}"`,
+      assistantMessage ? `Última respuesta del asistente: "${assistantMessage.slice(0, 240)}"` : '',
+      'Devuelve SOLO el título.'
+    ].join('\n');
+
+    try {
+      const text = await this.generateWithGemini(prompt, {
+        purpose: 'título de conversación',
+        timeoutMs: 12000,
+      });
+      const cleaned = String(text || '')
+        .replace(/^["'`]+|["'`]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 60);
+
+      return cleaned || currentTitle || userMessage.slice(0, 40);
+    } catch (error) {
+      console.warn('⚠️ No se pudo generar título con IA, usando fallback:', error.message);
+      return currentTitle || userMessage.slice(0, 40);
+    }
+  }
+
+  /**
    * Genera una respuesta básica cuando Gemini no está disponible
    */
   generateBasicResponse(userMessage, toolResults) {

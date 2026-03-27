@@ -15,48 +15,11 @@ const oceanSchema = new mongoose.Schema({
     refPath: 'entityType'
   },
   
-  // Puntuaciones por dimensión (facetas principales)
+  // Puntuaciones por dimensión: { trait: { total: number, ...subfacetScores } }
+  // Mixed permite Mini-IPIP (solo total) y test profundo AB5C/IPIP (múltiples subfacetas).
   scores: {
-    openness: {
-      imagination: Number,
-      aesthetics: Number,
-      feelings: Number,
-      intellectual_curiosity: Number,
-      values_and_new_ideas: Number,
-      total: Number  // Suma de todas las subfacetas de openness
-    },
-    conscientiousness: {
-      order: Number,
-      competence: Number,
-      dutifulness: Number,
-      self_discipline: Number,
-      deliberation: Number,
-      total: Number
-    },
-    extraversion: {
-      friendliness: Number,
-      gregariousness: Number,
-      assertiveness: Number,
-      activity: Number,
-      excitement_seeking: Number,
-      total: Number
-    },
-    agreeableness: {
-      trust: Number,
-      morality: Number,
-      altruism: Number,
-      cooperation: Number,
-      modesty: Number,
-      total: Number
-    },
-    neuroticism: {
-      anxiety: Number,
-      anger: Number,
-      depression: Number,
-      self_consciousness: Number,
-      immoderation: Number,
-      total: Number
-    }
+    type: mongoose.Schema.Types.Mixed,
+    required: true
   },
   
   // Puntuación total general (opcional)

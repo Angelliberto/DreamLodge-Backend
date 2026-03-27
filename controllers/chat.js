@@ -25,7 +25,7 @@ try {
  */
 const sendMessage = async (req, res) => {
   try {
-    const { message, conversationId, contextItems = [] } = req.body;
+    const { message, conversationId, contextItems = [], currentTitle = '' } = req.body;
     const userId = req.user?._id || null;
 
     if (!message || !message.trim()) {
@@ -40,12 +40,27 @@ const sendMessage = async (req, res) => {
     console.log('👤 UserId:', userId?.toString() || 'No autenticado');
     console.log('📦 ContextItems:', contextItems?.length || 0);
 
+    const trimmedMessage = message.trim();
+
     // Procesar el mensaje con el agente IA
-    const result = await aiAgent.processMessage(message.trim(), {
+    const result = await aiAgent.processMessage(trimmedMessage, {
       userId: userId?.toString(),
       conversationHistory,
       contextItems: contextItems || [],
     });
+
+    let suggestedTitle = null;
+    try {
+      if (typeof aiAgent.generateConversationTitle === 'function') {
+        suggestedTitle = await aiAgent.generateConversationTitle({
+          userMessage: trimmedMessage,
+          assistantMessage: result.response,
+          currentTitle
+        });
+      }
+    } catch (titleError) {
+      console.warn('No se pudo generar título de conversación:', titleError?.message);
+    }
 
     console.log('✅ Respuesta generada, enviando al cliente');
     console.log('📊 Contexto:', result.context);
@@ -56,6 +71,7 @@ const sendMessage = async (req, res) => {
         response: result.response,
         toolsUsed: result.toolsUsed,
         context: result.context,
+        suggestedTitle,
       },
     });
   } catch (error) {
