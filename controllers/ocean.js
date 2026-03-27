@@ -202,6 +202,10 @@ const saveTestResults = async (req, res) => {
         oceanResult.totalScore = totalScore;
       }
       oceanResult.testType = testType || 'quick';
+      // Nuevo test: invalidar descripción IA para que se regenere con los scores actuales
+      if (entityType === 'user') {
+        oceanResult.artisticDescription = null;
+      }
       if (useTransaction) {
         await oceanResult.save({ session });
       } else {
