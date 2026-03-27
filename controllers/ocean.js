@@ -5,6 +5,19 @@ const aiAgent = require("../services/aiAgent");
 
 const BIG_FIVE_TRAITS = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism'];
 
+/** Hay subfacetas guardadas (no solo total) → corresponde a test profundo. */
+const scoresHaveSubfacetDetail = (scores) => {
+  if (!scores || typeof scores !== 'object') return false;
+  for (const trait of BIG_FIVE_TRAITS) {
+    const o = scores[trait];
+    if (!o || typeof o !== 'object') continue;
+    for (const k of Object.keys(o)) {
+      if (k !== 'total' && typeof o[k] === 'number') return true;
+    }
+  }
+  return false;
+};
+
 /**
  * Convierte un documento Ocean guardado al formato que consume el frontend (test_results, etc.).
  * - dimensions: totales 0–5 por rasgo
@@ -15,7 +28,10 @@ const formatOceanForFrontend = (doc) => {
   if (!doc) return null;
   const plain = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
   const scores = plain.scores && typeof plain.scores === 'object' ? plain.scores : {};
-  const testType = plain.testType || 'quick';
+  let testType = plain.testType === 'deep' ? 'deep' : 'quick';
+  if (testType === 'quick' && scoresHaveSubfacetDetail(scores)) {
+    testType = 'deep';
+  }
 
   const dimensions = {};
   const subfacets = {};
@@ -49,7 +65,7 @@ const formatOceanForFrontend = (doc) => {
     entityType: plain.entityType,
     entityId: plain.entityId,
     testType,
-    timestamp: plain.createdAt,
+    timestamp: plain.updatedAt || plain.createdAt,
     createdAt: plain.createdAt,
     updatedAt: plain.updatedAt,
     totalScore: plain.totalScore,
@@ -164,17 +180,17 @@ const saveTestResults = async (req, res) => {
       return handleHTTPError(res, { message: `${entityType} no encontrado` }, 404);
     }
 
-    // Buscar si ya existe un registro Ocean para esta entidad
+    // Buscar registro Ocean (si hay varios legados, actualizar el más recientemente modificado)
     const oceanQuery = OceanModel.findOne({
       entityType,
       entityId,
       deleted: false
-    });
-    
+    }).sort({ updatedAt: -1 });
+
     if (useTransaction) {
       oceanQuery.session(session);
     }
-    
+
     let oceanResult = await oceanQuery;
 
     if (oceanResult) {
@@ -185,9 +201,7 @@ const saveTestResults = async (req, res) => {
       if (totalScore !== undefined) {
         oceanResult.totalScore = totalScore;
       }
-      if (testType) {
-        oceanResult.testType = testType;
-      }
+      oceanResult.testType = testType || 'quick';
       if (useTransaction) {
         await oceanResult.save({ session });
       } else {
@@ -376,7 +390,7 @@ const getUserTestResults = async (req, res) => {
       entityId: new mongoose.Types.ObjectId(userId),
       deleted: false
     })
-      .sort({ createdAt: -1 })
+      .sort({ updatedAt: -1 })
       .lean();
 
     const formatted = oceanResults.map((doc) => formatOceanForFrontend(doc));
@@ -456,12 +470,12 @@ const generateArtisticDescription = async (req, res) => {
       return handleHTTPError(res, { message: "userId debe ser un ObjectId válido" }, 400);
     }
 
-    // Buscar el resultado OCEAN más reciente del usuario
+    // Buscar el resultado OCEAN más recientemente actualizado del usuario
     const oceanResult = await OceanModel.findOne({
       entityType: 'user',
       entityId: new mongoose.Types.ObjectId(userId),
       deleted: false
-    }).sort({ createdAt: -1 });
+    }).sort({ updatedAt: -1 });
 
     if (!oceanResult) {
       return handleHTTPError(res, { message: "No se encontraron resultados del test para este usuario" }, 404);
