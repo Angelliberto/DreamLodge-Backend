@@ -539,7 +539,11 @@ const generateArtisticDescription = async (req, res) => {
 
     let artisticDescription;
     try {
-      artisticDescription = await mcpAi.generateArtisticDescription(oceanJsonSafe);
+      artisticDescription = await mcpAi.postMcpAi(
+        "/ai/v1/ocean/artistic-description",
+        { oceanResult: oceanJsonSafe },
+        { timeoutMs: 90000 }
+      );
     } catch (mcpErr) {
       console.error("[ocean artistic-description] fallo MCP:", mcpErr?.message || mcpErr);
       if (mcpErr.details) {

@@ -1,7 +1,32 @@
 const axios = require("axios");
 
 /**
- * Origen del servidor MCP (sin barra final).
+ * Añade https:// o http:// si falta el esquema (axios exige URL absoluta).
+ */
+function normalizeMcpBaseUrl(raw) {
+  let u = raw.trim().replace(/\/$/, "");
+  if (!u) return "";
+  if (/^https?:\/\//i.test(u)) return u;
+
+  const hostOnly = u.split("/")[0].split(":")[0].toLowerCase();
+  const useHttp =
+    hostOnly === "localhost" ||
+    hostOnly.startsWith("127.") ||
+    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostOnly) ||
+    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostOnly);
+  const withScheme = `${useHttp ? "http" : "https"}://${u}`;
+
+  if (isDebug()) {
+    console.log(
+      "[MCP IA] URL base sin esquema; usando:",
+      withScheme.replace(/:[^:@/]+@/, ":****@")
+    );
+  }
+  return withScheme;
+}
+
+/**
+ * Origen del servidor MCP (sin barra final, con esquema).
  * Preferido: MCP_AI_BASE_URL. Compatibilidad: MCP_SERVER_URL.
  */
 function getBaseUrl() {
@@ -12,7 +37,7 @@ function getBaseUrl() {
   )
     .trim()
     .replace(/\/$/, "");
-  return raw;
+  return normalizeMcpBaseUrl(raw);
 }
 
 function buildHeaders() {
@@ -167,20 +192,8 @@ async function processChatMessage({
   );
 }
 
-/**
- * oceanResult: documento serializable (ObjectId/fechas como en JSON).
- */
-async function generateArtisticDescription(oceanResult) {
-  return postMcpAi(
-    "/ai/v1/ocean/artistic-description",
-    { oceanResult },
-    { timeoutMs: 90000 }
-  );
-}
-
 module.exports = {
   postMcpAi,
   processChatMessage,
-  generateArtisticDescription,
   getBaseUrl,
 };
