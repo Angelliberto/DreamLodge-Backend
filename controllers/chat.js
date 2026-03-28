@@ -1,23 +1,5 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
-const { UserModel } = require("../models");
-
-// Cargar aiAgent de forma segura
-let aiAgent;
-try {
-  aiAgent = require("../services/aiAgent");
-} catch (error) {
-  console.error('Error cargando aiAgent:', error);
-  // Crear un objeto mock para evitar que el módulo falle completamente
-  aiAgent = {
-    processMessage: async () => {
-      return {
-        response: 'El servicio de IA no está disponible en este momento.',
-        toolsUsed: [],
-        context: {}
-      };
-    }
-  };
-}
+const mcpAi = require("../utils/mcpAiClient");
 
 /**
  * Enviar un mensaje al agente IA
@@ -42,25 +24,29 @@ const sendMessage = async (req, res) => {
 
     const trimmedMessage = message.trim();
 
-    // Procesar el mensaje con el agente IA
-    const result = await aiAgent.processMessage(trimmedMessage, {
-      userId: userId?.toString(),
-      conversationHistory,
-      contextItems: contextItems || [],
-    });
-
-    let suggestedTitle = null;
+    let result;
     try {
-      if (typeof aiAgent.generateConversationTitle === 'function') {
-        suggestedTitle = await aiAgent.generateConversationTitle({
-          userMessage: trimmedMessage,
-          assistantMessage: result.response,
-          currentTitle
-        });
-      }
-    } catch (titleError) {
-      console.warn('No se pudo generar título de conversación:', titleError?.message);
+      result = await mcpAi.processChatMessage({
+        message: trimmedMessage,
+        userId: userId?.toString(),
+        conversationHistory,
+        contextItems: contextItems || [],
+        currentTitle: currentTitle || '',
+      });
+    } catch (mcpErr) {
+      console.error('Error MCP IA (chat):', mcpErr?.message || mcpErr);
+      const msg =
+        mcpErr?.response?.data?.error ||
+        mcpErr?.message ||
+        'El servicio de IA no está disponible.';
+      return handleHTTPError(
+        res,
+        { message: msg },
+        mcpErr.statusCode || mcpErr?.response?.status || 502
+      );
     }
+
+    const suggestedTitle = result.suggestedTitle ?? null;
 
     console.log('✅ Respuesta generada, enviando al cliente');
     console.log('📊 Contexto:', result.context);
@@ -100,11 +86,27 @@ const getRecommendations = async (req, res) => {
       ? `Recomiéndame ${limit} obras de la categoría ${category}`
       : `Recomiéndame ${limit} obras culturales`;
 
-    const result = await aiAgent.processMessage(message, {
-      userId: userId.toString(),
-      conversationHistory: [],
-      contextItems: [],
-    });
+    let result;
+    try {
+      result = await mcpAi.processChatMessage({
+        message,
+        userId: userId.toString(),
+        conversationHistory: [],
+        contextItems: [],
+        currentTitle: '',
+      });
+    } catch (mcpErr) {
+      console.error('Error MCP IA (recommendations):', mcpErr?.message || mcpErr);
+      const msg =
+        mcpErr?.response?.data?.error ||
+        mcpErr?.message ||
+        'El servicio de IA no está disponible.';
+      return handleHTTPError(
+        res,
+        { message: msg },
+        mcpErr.statusCode || mcpErr?.response?.status || 502
+      );
+    }
 
     return res.status(200).json({
       message: "Recomendaciones generadas correctamente",

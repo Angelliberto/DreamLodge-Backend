@@ -52,6 +52,8 @@ if (typeof authUser !== 'function') {
  *         description: Error en la petición
  *       500:
  *         description: Error del servidor
+ *       502:
+ *         description: Servicio de IA (MCP) no disponible o error al contactarlo
  */
 router.post("/message", authUser, sendMessage);
 
@@ -83,6 +85,8 @@ router.post("/message", authUser, sendMessage);
  *         description: Usuario no autenticado
  *       500:
  *         description: Error del servidor
+ *       502:
+ *         description: Servicio de IA (MCP) no disponible o error al contactarlo
  */
 router.get("/recommendations", authUser, getRecommendations);
 

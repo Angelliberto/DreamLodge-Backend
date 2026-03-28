@@ -1,7 +1,7 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
 const { OceanModel, UserModel, ArtworkModel, GenreModel } = require("../models");
 const mongoose = require("mongoose");
-const aiAgent = require("../services/aiAgent");
+const mcpAi = require("../utils/mcpAiClient");
 
 const BIG_FIVE_TRAITS = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism'];
 
@@ -506,8 +506,27 @@ const generateArtisticDescription = async (req, res) => {
       }
     }
 
-    // Generar nueva descripción artística usando el agente IA
-    const artisticDescription = await aiAgent.generateArtisticDescription(oceanResult);
+    // Generar descripción artística vía servidor MCP (Gemini)
+    const oceanPlain =
+      typeof oceanResult.toObject === "function"
+        ? oceanResult.toObject()
+        : { ...oceanResult };
+    let artisticDescription;
+    try {
+      artisticDescription = await mcpAi.generateArtisticDescription(oceanPlain);
+    } catch (mcpErr) {
+      console.error("Error MCP IA (artistic-description):", mcpErr?.message || mcpErr);
+      return handleHTTPError(
+        res,
+        {
+          message:
+            mcpErr?.response?.data?.error ||
+            mcpErr?.message ||
+            "Error al generar la descripción artística",
+        },
+        mcpErr.statusCode || mcpErr?.response?.status || 502
+      );
+    }
 
     // Guardar la descripción en el modelo Ocean
     oceanResult.artisticDescription = JSON.stringify(artisticDescription);
