@@ -509,13 +509,45 @@ const generateArtisticDescription = async (req, res) => {
     // Generar descripción artística vía servidor MCP (Gemini)
     const oceanPlain =
       typeof oceanResult.toObject === "function"
-        ? oceanResult.toObject()
+        ? oceanResult.toObject({ flattenMaps: true })
         : { ...oceanResult };
+    let oceanJsonSafe;
+    try {
+      oceanJsonSafe = JSON.parse(JSON.stringify(oceanPlain));
+    } catch (serErr) {
+      console.error(
+        "[ocean artistic-description] no se pudo serializar oceanResult:",
+        serErr?.message || serErr
+      );
+      return handleHTTPError(
+        res,
+        { message: "Error interno preparando datos para el servicio de IA" },
+        500
+      );
+    }
+
+    const mcpBase = mcpAi.getBaseUrl();
+    console.log("[ocean artistic-description] MCP base URL configurada:", mcpBase ? "sí" : "no");
+    if (mcpBase) {
+      console.log(
+        "[ocean artistic-description] enviando a MCP, scores keys:",
+        oceanJsonSafe.scores && typeof oceanJsonSafe.scores === "object"
+          ? Object.keys(oceanJsonSafe.scores)
+          : "(sin scores)"
+      );
+    }
+
     let artisticDescription;
     try {
-      artisticDescription = await mcpAi.generateArtisticDescription(oceanPlain);
+      artisticDescription = await mcpAi.generateArtisticDescription(oceanJsonSafe);
     } catch (mcpErr) {
-      console.error("Error MCP IA (artistic-description):", mcpErr?.message || mcpErr);
+      console.error("[ocean artistic-description] fallo MCP:", mcpErr?.message || mcpErr);
+      if (mcpErr.details) {
+        console.error("[ocean artistic-description] detalle red:", mcpErr.details);
+      }
+      if (mcpErr.mcpPayload) {
+        console.error("[ocean artistic-description] payload MCP:", mcpErr.mcpPayload);
+      }
       return handleHTTPError(
         res,
         {
