@@ -260,6 +260,15 @@ const saveTestResults = async (req, res) => {
       });
     }
 
+    if (entityType === "user") {
+      try {
+        const { clearPersonalizedFeedCacheForUser } = require("./feed");
+        clearPersonalizedFeedCacheForUser(entityId);
+      } catch (_) {
+        /* opcional */
+      }
+    }
+
     return res.status(200).json({
       message: "Resultados del test guardados correctamente",
       data: formatOceanForFrontend(populatedResult)
@@ -563,6 +572,13 @@ const generateArtisticDescription = async (req, res) => {
     // Guardar la descripción en el modelo Ocean
     oceanResult.artisticDescription = JSON.stringify(artisticDescription);
     await oceanResult.save();
+
+    try {
+      const { clearPersonalizedFeedCacheForUser } = require("./feed");
+      clearPersonalizedFeedCacheForUser(userId);
+    } catch (_) {
+      /* evitar ciclo o fallo opcional */
+    }
 
     return res.status(200).json({
       message: "Descripción artística generada correctamente",
