@@ -1,5 +1,5 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
-const { OceanModel, UserModel, ArtworkModel, TagModel } = require("../models");
+const { OceanModel, UserModel, ArtworkModel } = require("../models");
 const mongoose = require("mongoose");
 const mcpAi = require("../utils/mcpAiClient");
 
@@ -124,8 +124,8 @@ const saveTestResults = async (req, res) => {
     const { entityType, entityId, scores, totalScore, testType } = req.body;
 
     // Validaciones básicas
-    if (!entityType || !['user', 'artwork', 'tag'].includes(entityType)) {
-      return handleHTTPError(res, { message: "entityType debe ser 'user', 'artwork' o 'tag'" }, 400);
+    if (!entityType || !['user', 'artwork'].includes(entityType)) {
+      return handleHTTPError(res, { message: "entityType debe ser 'user' o 'artwork'" }, 400);
     }
 
     if (!entityId) {
@@ -162,10 +162,8 @@ const saveTestResults = async (req, res) => {
     let entityModel;
     if (entityType === 'user') {
       entityModel = UserModel;
-    } else if (entityType === 'artwork') {
+    } else {
       entityModel = ArtworkModel;
-    } else if (entityType === 'tag') {
-      entityModel = TagModel;
     }
 
     const entityExists = useTransaction 
@@ -243,12 +241,6 @@ const saveTestResults = async (req, res) => {
         { oceanId: oceanResult._id },
         updateOptions
       );
-    } else if (entityType === 'tag') {
-      await TagModel.findByIdAndUpdate(
-        entityId, 
-        { oceanId: oceanResult._id },
-        updateOptions
-      );
     }
 
     // Confirmar transacción si se usó
@@ -257,22 +249,15 @@ const saveTestResults = async (req, res) => {
       session.endSession();
     }
 
-    // Obtener el resultado (solo poblar para artwork y tag, no para user)
+    // Obtener el resultado (solo poblar artwork; usuario sin populate)
     let populatedResult;
     if (entityType === 'user') {
-      // No poblar datos del usuario, solo devolver los resultados del test
       populatedResult = await OceanModel.findById(oceanResult._id);
     } else {
-      // Poblar para artwork y tag
-      const modelMap = {
-        'artwork': 'Artwork',
-        'tag': 'Tag'
-      };
-      populatedResult = await OceanModel.findById(oceanResult._id)
-        .populate({
-          path: 'entityId',
-          model: modelMap[entityType]
-        });
+      populatedResult = await OceanModel.findById(oceanResult._id).populate({
+        path: 'entityId',
+        model: 'Artwork',
+      });
     }
 
     return res.status(200).json({
@@ -315,36 +300,29 @@ const getTestResults = async (req, res) => {
   try {
     const { entityType, entityId } = req.params;
 
-    if (!entityType || !['user', 'artwork', 'tag'].includes(entityType)) {
-      return handleHTTPError(res, { message: "entityType debe ser 'user', 'artwork' o 'tag'" }, 400);
+    if (!entityType || !['user', 'artwork'].includes(entityType)) {
+      return handleHTTPError(res, { message: "entityType debe ser 'user' o 'artwork'" }, 400);
     }
 
     if (!entityId) {
       return handleHTTPError(res, { message: "entityId es requerido" }, 400);
     }
 
-    // Buscar resultados del test (solo poblar para artwork y tag, no para user)
     let oceanResult;
     if (entityType === 'user') {
-      // No poblar datos del usuario, solo devolver los resultados del test
       oceanResult = await OceanModel.findOne({
         entityType,
         entityId,
         deleted: false
       });
     } else {
-      // Poblar para artwork y tag
-      const modelMap = {
-        'artwork': 'Artwork',
-        'tag': 'Tag'
-      };
       oceanResult = await OceanModel.findOne({
         entityType,
         entityId,
         deleted: false
       }).populate({
         path: 'entityId',
-        model: modelMap[entityType]
+        model: 'Artwork',
       });
     }
 
@@ -420,8 +398,8 @@ const deleteTestResults = async (req, res) => {
   try {
     const { entityType, entityId } = req.params;
 
-    if (!entityType || !['user', 'artwork', 'tag'].includes(entityType)) {
-      return handleHTTPError(res, { message: "entityType debe ser 'user', 'artwork' o 'tag'" }, 400);
+    if (!entityType || !['user', 'artwork'].includes(entityType)) {
+      return handleHTTPError(res, { message: "entityType debe ser 'user' o 'artwork'" }, 400);
     }
 
     if (!entityId) {
@@ -519,7 +497,6 @@ const generateArtisticDescription = async (req, res) => {
             profile: "Personalizado",
             description: oceanResult.artisticDescription,
             recommendations: [],
-            suggestedTags: []
           }
         });
       }

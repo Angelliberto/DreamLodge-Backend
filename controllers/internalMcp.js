@@ -70,7 +70,7 @@ async function fetchTwitchAppToken() {
 
 /**
  * GET /api/internal/mcp/media-catalog-credentials
- * Responde tokens de corta duración y claves para que el MCP arme el catálogo de hashtags (TMDB, Spotify, IGDB).
+ * Responde tokens de corta duración y claves para APIs de medios (TMDB, Spotify, IGDB).
  * Requiere cabecera X-MCP-Internal-Secret.
  */
 const getMediaCatalogCredentials = async (req, res) => {

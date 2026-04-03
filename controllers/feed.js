@@ -1,5 +1,5 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
-const { OceanModel, UserModel } = require("../models");
+const { OceanModel } = require("../models");
 const mcpAi = require("../utils/mcpAiClient");
 
 /** Caché en memoria por usuario (TTL corto; el cliente puede forzar refresh). */
@@ -52,13 +52,6 @@ const getPersonalizedFeedCurated = async (req, res) => {
 
     const oceanPlain = JSON.parse(JSON.stringify(oceanResult));
 
-    const userFresh = await UserModel.findById(userId).select("savedTags").lean();
-    const savedTags = (userFresh?.savedTags || [])
-      .map((t) =>
-        typeof t === "object" && t && t.name != null ? t.name : String(t)
-      )
-      .filter(Boolean);
-
     let artisticProfile = null;
     if (oceanResult.artisticDescription) {
       try {
@@ -77,7 +70,6 @@ const getPersonalizedFeedCurated = async (req, res) => {
 
     const payload = {
       oceanResult: oceanPlain,
-      savedTags,
       artisticProfile,
     };
 

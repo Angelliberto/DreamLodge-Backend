@@ -27,12 +27,6 @@ const userRegisterValidator = [
     check("preferences.favorite_types")
         .optional()
         .isArray().withMessage("favorite_types must be an array of strings"),
-    check("savedTags")
-        .optional()
-        .isArray().withMessage("savedTags must be an array"),
-    check("savedTags.*")
-        .optional()
-        .isMongoId().withMessage("Each savedTags id must be a valid MongoId"),
     check("emotional_profile.common_emotions")
         .optional()
         .isArray().withMessage("common_emotions must be an array of strings"),
@@ -76,12 +70,6 @@ const userUpdateValidator = [
     check("preferences.favorite_types")
         .optional()
         .isArray().withMessage("favorite_types must be an array of strings"),
-    check("savedTags")
-        .optional()
-        .isArray().withMessage("savedTags must be an array"),
-    check("savedTags.*")
-        .optional()
-        .isMongoId().withMessage("Each savedTags id must be a valid MongoId"),
     check("emotional_profile.common_emotions")
         .optional()
         .isArray().withMessage("common_emotions must be an array of strings"),
@@ -99,28 +87,9 @@ const googleSignInValidator = [
     (req, res, next) => validateResults(req, res, next)
 ];
 
-/** Etiquetas sugeridas por la IA: se crean/actualizan en Tag y se asignan a user.savedTags */
-const saveSavedTagsFromAiValidator = [
-    check("tags")
-        .exists().withMessage("tags is required")
-        .isArray({ min: 1 }).withMessage("tags must be a non-empty array"),
-    check("tags.*.name")
-        .exists().withMessage("Each tag needs name")
-        .isString().withMessage("tag name must be a string")
-        .trim()
-        .notEmpty().withMessage("tag name cannot be empty")
-        .isLength({ max: 80 }).withMessage("tag name too long"),
-    check("tags.*.aiHint")
-        .optional()
-        .isString().withMessage("aiHint must be a string")
-        .isLength({ max: 300 }).withMessage("aiHint too long"),
-    (req, res, next) => validateResults(req, res, next)
-];
-
 module.exports = {
     userRegisterValidator,
     userLoginValidator,
     userUpdateValidator,
     googleSignInValidator,
-    saveSavedTagsFromAiValidator,
 };
