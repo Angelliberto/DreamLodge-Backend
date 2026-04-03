@@ -7,6 +7,7 @@ const { sendEmail } = require("../utils/sendMail");
 const crypto = require("crypto");
 const { OAuth2Client } = require('google-auth-library');
 const authSessionStore = require("../utils/authSession");
+const { normalizeHashtagSlug } = require("../utils/hashtagTag");
 
 
 const userRegister = async (req, res) => {
@@ -81,7 +82,7 @@ function escapeRegex(s) {
 }
 
 /**
- * Sustituye los tags guardados del usuario por etiquetas creadas/actualizadas desde sugerencias de la IA (name + aiHint).
+ * Sustituye los tags guardados del usuario por hashtags simples (slug/género, estilo DeviantArt).
  * POST /users/saved-tags
  */
 const saveSavedTagsFromAi = async (req, res) => {
@@ -96,18 +97,18 @@ const saveSavedTagsFromAi = async (req, res) => {
     const ids = [];
 
     for (const t of slice) {
-      const name = (t.name || "").trim();
-      if (!name) continue;
-      const aiHintRaw = (t.aiHint || "").trim();
-      const aiHint = aiHintRaw || undefined;
+      const slug = normalizeHashtagSlug(t.name || "");
+      if (slug.length < 2) continue;
+      const legacyHint = (t.aiHint || "").trim();
+      const aiHint = legacyHint || undefined;
 
       let tag = await TagModel.findOne({
         deleted: { $ne: true },
-        name: { $regex: new RegExp(`^${escapeRegex(name)}$`, "i") },
+        name: { $regex: new RegExp(`^${escapeRegex(slug)}$`, "i") },
       });
 
       if (!tag) {
-        tag = await TagModel.create({ name, aiHint });
+        tag = await TagModel.create({ name: slug, ...(aiHint ? { aiHint } : {}) });
       } else if (aiHint && tag.aiHint !== aiHint) {
         tag.aiHint = aiHint;
         await tag.save();

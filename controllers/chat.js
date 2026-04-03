@@ -89,8 +89,8 @@ const getRecommendations = async (req, res) => {
       if (!t || typeof t !== "object") continue;
       const name = t.name;
       if (!name) continue;
-      const h = t.aiHint ? ` — ${t.aiHint}` : "";
-      tagHints.push(`${name}${h}`);
+      const hash = name.startsWith("#") ? name : `#${name}`;
+      tagHints.push(hash);
     }
 
     let message;
