@@ -1,7 +1,7 @@
 const models = {
     UserModel: require("./nosql/users"),
     ArtworkModel: require("./nosql/artwork"),
-    GenreModel: require("./nosql/genre"),
+    TagModel: require("./nosql/tags"),
     OceanModel: require("./nosql/ocean"),
 };
 

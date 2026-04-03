@@ -1,5 +1,6 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
 const mcpAi = require("../utils/mcpAiClient");
+const { UserModel } = require("../models");
 
 /**
  * Enviar un mensaje al agente IA
@@ -81,10 +82,28 @@ const getRecommendations = async (req, res) => {
 
     const { category, limit = 10 } = req.query;
 
-    // Procesar solicitud de recomendaciones
-    const message = category
-      ? `Recomiéndame ${limit} obras de la categoría ${category}`
-      : `Recomiéndame ${limit} obras culturales`;
+    const userDoc = await UserModel.findById(userId).populate("savedTags");
+    const saved = (userDoc && userDoc.savedTags) || [];
+    const tagHints = [];
+    for (const t of saved) {
+      if (!t || typeof t !== "object") continue;
+      const name = t.name;
+      if (!name) continue;
+      const h = t.aiHint ? ` — ${t.aiHint}` : "";
+      tagHints.push(`${name}${h}`);
+    }
+
+    let message;
+    if (tagHints.length > 0) {
+      const tagBlock = tagHints.join("; ");
+      message = category
+        ? `Recomiéndame ${limit} obras de la categoría ${category}. El usuario guardó estas etiquetas de interés en su perfil (úsalas para afinar): ${tagBlock}. Explica brevemente por qué encajan.`
+        : `Recomiéndame ${limit} obras culturales. El usuario guardó estas etiquetas de interés en su perfil (úsalas para guiar el estilo y el tono): ${tagBlock}. Explica brevemente por qué encajan.`;
+    } else {
+      message = category
+        ? `Recomiéndame ${limit} obras de la categoría ${category}`
+        : `Recomiéndame ${limit} obras culturales`;
+    }
 
     let result;
     try {

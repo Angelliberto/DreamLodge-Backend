@@ -20,6 +20,11 @@ const usersModel = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Artwork'
   }],
+  // Tags guardados por el usuario para guiar recomendaciones / IA
+  savedTags: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tag'
+  }],
   two_fa_enabled: { type: Boolean, default: false },
   reset_token: String,         // para recuperación de contraseña
   resetPasswordToken: String,   // token para reset de contraseña

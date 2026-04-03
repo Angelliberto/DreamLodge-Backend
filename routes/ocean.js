@@ -11,7 +11,7 @@ const {
 
 // Guardar o actualizar resultados del test OCEAN
 // POST /api/ocean
-// Body: { entityType: 'user'|'artwork'|'genre', entityId: ObjectId, scores: {...}, totalScore: Number }
+// Body: { entityType: 'user'|'artwork'|'tag', entityId: ObjectId, scores: {...}, totalScore: Number }
 router.post("/", authUser, saveTestResults);
 
 // Rutas específicas de usuario (deben ir antes de las rutas genéricas)

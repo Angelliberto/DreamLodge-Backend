@@ -1,14 +1,14 @@
 const mongoose = require('mongoose');
 
 const oceanSchema = new mongoose.Schema({
-  // Tipo de entidad relacionada (usuario, artwork o genre)
+  // Tipo de entidad relacionada (usuario, artwork o tag)
   entityType: {
     type: String,
-    enum: ['user', 'artwork', 'genre'],
+    enum: ['user', 'artwork', 'tag'],
     required: true
   },
   
-  // Referencia a la entidad (puede ser User, Artwork o Genre)
+  // Referencia a la entidad (puede ser User, Artwork o Tag)
   entityId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,

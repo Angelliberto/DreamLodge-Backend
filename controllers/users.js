@@ -2,7 +2,7 @@ const { encryptPassword, comparePassword } = require("../utils/handlePassword");
 const { matchedData } = require("express-validator");
 const {tokenSign} = require("../utils/handleJwt");
 const {handleHTTPError} = require("../utils/handleHTTPError");
-const  {UserModel}  = require("../models");
+const  {UserModel, TagModel}  = require("../models");
 const { sendEmail } = require("../utils/sendMail");
 const crypto = require("crypto");
 const { OAuth2Client } = require('google-auth-library');
@@ -74,6 +74,63 @@ const userUpdate = async (req,res) => {
     handleHTTPError(res, error)
   }
 }
+
+/** Escapa string para usar en RegExp literal (coincidencia exacta insensible a mayúsculas). */
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Sustituye los tags guardados del usuario por etiquetas creadas/actualizadas desde sugerencias de la IA (name + aiHint).
+ * POST /users/saved-tags
+ */
+const saveSavedTagsFromAi = async (req, res) => {
+  try {
+    const id = req.user._id;
+    const tags = matchedData(req).tags;
+    if (!Array.isArray(tags) || tags.length === 0) {
+      return res.status(400).json({ message: "tags debe ser un array no vacío" });
+    }
+    const maxTags = 24;
+    const slice = tags.slice(0, maxTags);
+    const ids = [];
+
+    for (const t of slice) {
+      const name = (t.name || "").trim();
+      if (!name) continue;
+      const aiHintRaw = (t.aiHint || "").trim();
+      const aiHint = aiHintRaw || undefined;
+
+      let tag = await TagModel.findOne({
+        deleted: { $ne: true },
+        name: { $regex: new RegExp(`^${escapeRegex(name)}$`, "i") },
+      });
+
+      if (!tag) {
+        tag = await TagModel.create({ name, aiHint });
+      } else if (aiHint && tag.aiHint !== aiHint) {
+        tag.aiHint = aiHint;
+        await tag.save();
+      }
+      ids.push(tag._id);
+    }
+
+    if (ids.length === 0) {
+      return res.status(400).json({ message: "No hay etiquetas válidas (name requerido)" });
+    }
+
+    await UserModel.findByIdAndUpdate(id, { savedTags: ids });
+    const user = await UserModel.findById(id).populate("savedTags").lean();
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    return res.status(200).json({
+      message: "Preferencias de etiquetas guardadas",
+      data: { savedTags: user.savedTags || [] },
+    });
+  } catch (error) {
+    handleHTTPError(res, error);
+  }
+};
 
 
 
@@ -379,4 +436,4 @@ const exchangeAuthSession = async (req, res) => {
   }
 };
 
-module.exports = {userRegister, userLogin, userDelete,userUpdate, googleCallback, googleSignInWithToken, resetPassword,checkPasswordResetToken,sendPasswordResetEmail, exchangeAuthSession}
+module.exports = {userRegister, userLogin, userDelete,userUpdate, saveSavedTagsFromAi, googleCallback, googleSignInWithToken, resetPassword,checkPasswordResetToken,sendPasswordResetEmail, exchangeAuthSession}

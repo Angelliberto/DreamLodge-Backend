@@ -7,6 +7,7 @@ const {
   userLogin,
   userDelete,
   userUpdate,
+  saveSavedTagsFromAi,
   googleCallback,
   googleSignInWithToken,
   sendPasswordResetEmail,
@@ -17,7 +18,8 @@ const {
   userRegisterValidator,
   userLoginValidator,
   userUpdateValidator,
-  googleSignInValidator} = require("../validators/users")
+  googleSignInValidator,
+  saveSavedTagsFromAiValidator} = require("../validators/users")
   
 
 
@@ -25,6 +27,7 @@ router.post("/register", userRegisterValidator, userRegister);
 router.post("/login", userLoginValidator,userLogin);
 router.delete("/delete", authUser,userDelete);
 router.patch("/update",authUser,userUpdateValidator,userUpdate);
+router.post("/saved-tags", authUser, saveSavedTagsFromAiValidator, saveSavedTagsFromAi);
 
 
 router.get("/google", (req, res, next) => {
