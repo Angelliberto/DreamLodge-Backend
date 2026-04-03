@@ -485,6 +485,24 @@ const generateArtisticDescription = async (req, res) => {
       return handleHTTPError(res, { message: "No se encontraron resultados del test para este usuario" }, 404);
     }
 
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const forceRegenerate = body.forceRegenerate === true;
+    const isOwner =
+      req.user &&
+      req.user._id &&
+      String(req.user._id) === String(userId);
+
+    if (forceRegenerate) {
+      if (!isOwner) {
+        return handleHTTPError(res, { message: "No autorizado para regenerar la descripción" }, 403);
+      }
+      if (oceanResult.artisticDescription) {
+        oceanResult.artisticDescription = null;
+        oceanResult.markModified("artisticDescription");
+        await oceanResult.save();
+      }
+    }
+
     // Si ya tiene una descripción artística generada, devolverla
     if (oceanResult.artisticDescription) {
       try {
