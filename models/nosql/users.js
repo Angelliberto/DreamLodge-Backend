@@ -20,6 +20,19 @@ const usersModel = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Artwork'
   }],
+  validated_email: { type: Boolean, default: false },
+  emailValidationCode: {
+    type: String,
+    default: null
+  },
+  emailValidationCodeExpiration: {
+    type: Date,
+    default: null
+  },
+  emailValidationAttempts: {
+    type: Number,
+    default: 0
+  },
   two_fa_enabled: { type: Boolean, default: false },
   reset_token: String,         // para recuperación de contraseña
   resetPasswordToken: String,   // token para reset de contraseña
