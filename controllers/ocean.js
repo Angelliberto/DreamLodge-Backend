@@ -1,7 +1,7 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
 const { OceanModel, UserModel, ArtworkModel } = require("../models");
 const mongoose = require("mongoose");
-const mcpAi = require("../utils/mcpAiClient");
+const ai = require("../services/ai");
 
 const BIG_FIVE_TRAITS = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism'];
 
@@ -511,7 +511,7 @@ const generateArtisticDescription = async (req, res) => {
       }
     }
 
-    // Generar descripción artística vía servidor MCP (Gemini)
+    // Generar descripción artística (Gemini en el backend)
     const oceanPlain =
       typeof oceanResult.toObject === "function"
         ? oceanResult.toObject({ flattenMaps: true })
@@ -531,11 +531,11 @@ const generateArtisticDescription = async (req, res) => {
       );
     }
 
-    const mcpBase = mcpAi.getBaseUrl();
-    console.log("[ocean artistic-description] MCP base URL configurada:", mcpBase ? "sí" : "no");
-    if (mcpBase) {
+    const geminiOk = ai.isGeminiConfigured();
+    console.log("[ocean artistic-description] Gemini configurado:", geminiOk ? "sí" : "no");
+    if (geminiOk) {
       console.log(
-        "[ocean artistic-description] enviando a MCP, scores keys:",
+        "[ocean artistic-description] generando, scores keys:",
         oceanJsonSafe.scores && typeof oceanJsonSafe.scores === "object"
           ? Object.keys(oceanJsonSafe.scores)
           : "(sin scores)"
@@ -544,28 +544,18 @@ const generateArtisticDescription = async (req, res) => {
 
     let artisticDescription;
     try {
-      artisticDescription = await mcpAi.postMcpAi(
-        "/ai/v1/ocean/artistic-description",
-        { oceanResult: oceanJsonSafe },
-        { timeoutMs: 90000 }
-      );
-    } catch (mcpErr) {
-      console.error("[ocean artistic-description] fallo MCP:", mcpErr?.message || mcpErr);
-      if (mcpErr.details) {
-        console.error("[ocean artistic-description] detalle red:", mcpErr.details);
-      }
-      if (mcpErr.mcpPayload) {
-        console.error("[ocean artistic-description] payload MCP:", mcpErr.mcpPayload);
-      }
+      artisticDescription = await ai.generateArtisticDescription(oceanJsonSafe);
+    } catch (genErr) {
+      console.error("[ocean artistic-description] fallo IA:", genErr?.message || genErr);
       return handleHTTPError(
         res,
         {
           message:
-            mcpErr?.response?.data?.error ||
-            mcpErr?.message ||
+            genErr?.response?.data?.error ||
+            genErr?.message ||
             "Error al generar la descripción artística",
         },
-        mcpErr.statusCode || mcpErr?.response?.status || 502
+        genErr.statusCode || genErr?.response?.status || 502
       );
     }
 

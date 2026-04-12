@@ -1,5 +1,5 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
-const mcpAi = require("../utils/mcpAiClient");
+const ai = require("../services/ai");
 
 /**
  * Enviar un mensaje al agente IA
@@ -26,23 +26,23 @@ const sendMessage = async (req, res) => {
 
     let result;
     try {
-      result = await mcpAi.processChatMessage({
+      result = await ai.processChatMessage({
         message: trimmedMessage,
         userId: userId?.toString(),
         conversationHistory,
         contextItems: contextItems || [],
         currentTitle: currentTitle || '',
       });
-    } catch (mcpErr) {
-      console.error('Error MCP IA (chat):', mcpErr?.message || mcpErr);
+    } catch (aiErr) {
+      console.error('Error IA (chat):', aiErr?.message || aiErr);
       const msg =
-        mcpErr?.response?.data?.error ||
-        mcpErr?.message ||
+        aiErr?.response?.data?.error ||
+        aiErr?.message ||
         'El servicio de IA no está disponible.';
       return handleHTTPError(
         res,
         { message: msg },
-        mcpErr.statusCode || mcpErr?.response?.status || 502
+        aiErr.statusCode || aiErr?.response?.status || 502
       );
     }
 
@@ -87,23 +87,23 @@ const getRecommendations = async (req, res) => {
 
     let result;
     try {
-      result = await mcpAi.processChatMessage({
+      result = await ai.processChatMessage({
         message,
         userId: userId.toString(),
         conversationHistory: [],
         contextItems: [],
         currentTitle: '',
       });
-    } catch (mcpErr) {
-      console.error('Error MCP IA (recommendations):', mcpErr?.message || mcpErr);
+    } catch (aiErr) {
+      console.error('Error IA (recommendations):', aiErr?.message || aiErr);
       const msg =
-        mcpErr?.response?.data?.error ||
-        mcpErr?.message ||
+        aiErr?.response?.data?.error ||
+        aiErr?.message ||
         'El servicio de IA no está disponible.';
       return handleHTTPError(
         res,
         { message: msg },
-        mcpErr.statusCode || mcpErr?.response?.status || 502
+        aiErr.statusCode || aiErr?.response?.status || 502
       );
     }
 

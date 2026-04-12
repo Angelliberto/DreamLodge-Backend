@@ -1,6 +1,6 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
 const { OceanModel } = require("../models");
-const mcpAi = require("../utils/mcpAiClient");
+const ai = require("../services/ai");
 const {
   resolveCuratedFeedCandidates,
   mergeCulturalFeedDedupe,
@@ -13,9 +13,9 @@ const FEED_TTL_MS = 45 * 60 * 1000;
 
 /**
  * GET|POST /api/feed/personalized
- * Query: force=1, anchorsOnly=1 (solo obras del perfil artístico, sin MCP de curación)
+ * Query: force=1, anchorsOnly=1 (solo obras del perfil artístico, sin curación Gemini)
  *
- * Devuelve `items` ya resueltos (TMDB, Spotify, Books, IGDB, Met) — la lógica pesada vive en el backend.
+ * Devuelve `items` ya resueltos (TMDB, Spotify, Books, IGDB, Met).
  */
 const getPersonalizedFeedCurated = async (req, res) => {
   try {
@@ -130,18 +130,14 @@ const getPersonalizedFeedCurated = async (req, res) => {
 
     let data;
     try {
-      data = await mcpAi.postMcpAi(
-        "/ai/v1/feed/personalized-curate",
-        payload,
-        { timeoutMs: 120000 }
-      );
-    } catch (mcpErr) {
-      console.error("[feed/personalized] MCP curate failed:", mcpErr?.message || mcpErr);
+      data = await ai.curatePersonalizedFeed(payload);
+    } catch (curateErr) {
+      console.error("[feed/personalized] curación IA falló:", curateErr?.message || curateErr);
       const resolvedAnchors = await resolveCuratedFeedCandidates(suggestedWorksRaw);
       const fallback = {
         items: resolvedAnchors.slice(0, 200),
         webSearchUsed: false,
-        reason: "mcp_unavailable_anchors_only",
+        reason: "ai_unavailable_anchors_only",
         cached: false,
       };
       FEED_CACHE.set(key, { ts: Date.now(), data: fallback });
@@ -178,7 +174,7 @@ const getPersonalizedFeedCurated = async (req, res) => {
     return handleHTTPError(
       res,
       error.message ||
-        "No se pudo obtener el feed personalizado desde el MCP",
+        "No se pudo obtener el feed personalizado",
       error.statusCode || 502
     );
   }
