@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-
+const { normalizeArtworkCategory } = require('../../utils/artworkCategory');
 
 const artworkSchema = new mongoose.Schema({
   // Identificadores
@@ -41,6 +41,14 @@ const artworkSchema = new mongoose.Schema({
   depth_emotional: Number, 
   depth_artistic: Number
 }, { timestamps: true });
+
+artworkSchema.pre('validate', function (next) {
+  if (this.category != null && this.category !== '') {
+    const n = normalizeArtworkCategory(this.category);
+    if (n) this.category = n;
+  }
+  next();
+});
 
 // Índices para búsquedas más rápidas
 // Nota: 'id' ya tiene índice por 'unique: true', no duplicar
