@@ -27,6 +27,9 @@ const userRegisterValidator = [
     check("preferences.favorite_types")
         .optional()
         .isArray().withMessage("favorite_types must be an array of strings"),
+    check("preferences.favorite_genres")
+        .optional()
+        .isArray().withMessage("favorite_genres must be an array of strings"),
     check("emotional_profile.common_emotions")
         .optional()
         .isArray().withMessage("common_emotions must be an array of strings"),
@@ -70,6 +73,9 @@ const userUpdateValidator = [
     check("preferences.favorite_types")
         .optional()
         .isArray().withMessage("favorite_types must be an array of strings"),
+    check("preferences.favorite_genres")
+        .optional()
+        .isArray().withMessage("favorite_genres must be an array of strings"),
     check("emotional_profile.common_emotions")
         .optional()
         .isArray().withMessage("common_emotions must be an array of strings"),
@@ -87,9 +93,4 @@ const googleSignInValidator = [
     (req, res, next) => validateResults(req, res, next)
 ];
 
-module.exports = {
-    userRegisterValidator,
-    userLoginValidator,
-    userUpdateValidator,
-    googleSignInValidator,
-};
+module.exports = { userRegisterValidator,userLoginValidator, userUpdateValidator,googleSignInValidator};

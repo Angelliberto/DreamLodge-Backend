@@ -2,24 +2,69 @@ const { encryptPassword, comparePassword } = require("../utils/handlePassword");
 const { matchedData } = require("express-validator");
 const {tokenSign} = require("../utils/handleJwt");
 const {handleHTTPError} = require("../utils/handleHTTPError");
-const { UserModel } = require("../models");
-const { sendEmail } = require("../utils/sendMail");
+const  {UserModel}  = require("../models");
+const { sendEmail, sendVerificationEmail, generateVerificationCode } = require("../utils/sendMail");
 const crypto = require("crypto");
 const { OAuth2Client } = require('google-auth-library');
 const authSessionStore = require("../utils/authSession");
+
 const userRegister = async (req, res) => {
   try {
-    const validatedData = matchedData(req); 
-    const password = await encryptPassword(validatedData.password);
-    
-    const newUser = { ...validatedData, password };
-    const userData = await UserModel.create(newUser);
-    userData.password = undefined; 
+    const validatedData = matchedData(req);
+    const lowerEmail = validatedData.email.toLowerCase();
 
-    const data = {token: tokenSign(userData), user: userData};
-    
-    return res.send(data); 
+    const existingUser = await UserModel.findOne({ email: lowerEmail });
+
+    if (existingUser && existingUser.validated_email) {
+      return res.status(409).json({ message: "Email already in use" });
+    }
+
+    const password = await encryptPassword(validatedData.password);
+    const verificationCode = generateVerificationCode();
+    const expirationDate = new Date(Date.now() + 10 * 60 * 1000);
+
+    let userData;
+
+    if (existingUser && !existingUser.validated_email) {
+      existingUser.name = validatedData.name;
+      existingUser.birthdate = validatedData.birthdate || existingUser.birthdate;
+      existingUser.password = password;
+      existingUser.emailValidationCode = verificationCode;
+      existingUser.emailValidationCodeExpiration = expirationDate;
+      existingUser.emailValidationAttempts = 0;
+
+      await existingUser.save();
+      userData = existingUser;
+    } else {
+      const newUser = {
+        ...validatedData,
+        email: lowerEmail,
+        password,
+        validated_email: false,
+        emailValidationCode: verificationCode,
+        emailValidationCodeExpiration: expirationDate,
+        emailValidationAttempts: 0
+      };
+
+      userData = await UserModel.create(newUser);
+    }
+
+    await sendVerificationEmail(userData.email, verificationCode);
+
+    userData.password = undefined;
+    userData.emailValidationCode = undefined;
+    userData.emailValidationCodeExpiration = undefined;
+    userData.emailValidationAttempts = undefined;
+
+    const data = {
+      token: tokenSign(userData),
+      user: userData,
+      message: "User registered. Please verify your email."
+    };
+
+    return res.status(201).send(data);
   } catch (error) {
+    console.error("userRegister error:", error);
     handleHTTPError(res, error);
   }
 };
@@ -30,7 +75,9 @@ const userLogin = async (req,res) => {
     
     const user = await UserModel.findOne({email: validatedData.email});
     if(!user) return res.status(404).json({message: "User not found"}); 
-
+    if (!user.validated_email) {
+      return res.status(403).json({ message: "Email not verified" });
+    }
     const isPasswordValid = await comparePassword(validatedData.password, user.password);
     if(!isPasswordValid) return res.status(401).json({message: "Invalid password"});    
 
@@ -72,6 +119,8 @@ const userUpdate = async (req,res) => {
     handleHTTPError(res, error)
   }
 }
+
+
 
 const googleCallback = async (req, res) => {
   try {
@@ -151,6 +200,100 @@ const googleCallback = async (req, res) => {
   }
 };
 
+const verifyEmailCode = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+      return res.status(400).json({ message: "Email and code are required" });
+    }
+
+    const lowerEmail = email.toLowerCase();
+
+    const user = await UserModel.findOne({ email: lowerEmail });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.validated_email) {
+      return res.status(200).json({ message: "Email already verified" });
+    }
+
+    if (!user.emailValidationCode || !user.emailValidationCodeExpiration) {
+      return res.status(400).json({ message: "No verification code found" });
+    }
+
+    if (user.emailValidationAttempts >= 10) {
+      return res.status(429).json({ message: "Too many attempts" });
+    }
+
+    if (user.emailValidationCodeExpiration < new Date()) {
+      return res.status(400).json({ message: "Verification code expired" });
+    }
+
+    if (user.emailValidationCode !== code) {
+      user.emailValidationAttempts += 1;
+      await user.save();
+      return res.status(400).json({ message: "Invalid verification code" });
+    }
+
+    user.validated_email = true;
+    user.emailValidationCode = null;
+    user.emailValidationCodeExpiration = null;
+    user.emailValidationAttempts = 0;
+
+    await user.save();
+
+    return res.status(200).json({
+      message: "Email verified successfully"
+    });
+  } catch (error) {
+    console.error("verifyEmailCode error:", error);
+    return handleHTTPError(res, error);
+  }
+};
+
+const resendVerificationCode = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const lowerEmail = email.toLowerCase();
+    const user = await UserModel.findOne({ email: lowerEmail });
+
+    if (!user) {
+      return res.status(200).json({
+        message: "If the email exists, a new code has been sent"
+      });
+    }
+
+    if (user.validated_email) {
+      return res.status(400).json({ message: "Email already verified" });
+    }
+
+    const verificationCode = generateVerificationCode();
+    const expirationDate = new Date(Date.now() + 10 * 60 * 1000);
+
+    user.emailValidationCode = verificationCode;
+    user.emailValidationCodeExpiration = expirationDate;
+    user.emailValidationAttempts = 0;
+
+    await user.save();
+
+    await sendVerificationEmail(user.email, verificationCode);
+
+    return res.status(200).json({
+      message: "Verification code sent"
+    });
+  } catch (error) {
+    console.error("resendVerificationCode error:", error);
+    return handleHTTPError(res, error);
+  }
+};
 const sendPasswordResetEmail = async (req, res) => {
   try {
     const { email } = req.body;
@@ -375,15 +518,9 @@ const exchangeAuthSession = async (req, res) => {
   }
 };
 
-module.exports = {
-  userRegister,
-  userLogin,
-  userDelete,
-  userUpdate,
-  googleCallback,
-  googleSignInWithToken,
-  resetPassword,
-  checkPasswordResetToken,
-  sendPasswordResetEmail,
-  exchangeAuthSession,
-};
+module.exports = {userRegister, 
+  userLogin, userDelete,userUpdate, 
+  googleCallback, googleSignInWithToken, 
+  resetPassword,checkPasswordResetToken,
+  sendPasswordResetEmail, exchangeAuthSession, 
+  verifyEmailCode,resendVerificationCode}

@@ -12,13 +12,12 @@ const {
   sendPasswordResetEmail,
   checkPasswordResetToken,
   resetPassword,
-  exchangeAuthSession} = require("../controllers/users")
+  exchangeAuthSession, verifyEmailCode, resendVerificationCode} = require("../controllers/users")
 const {
   userRegisterValidator,
   userLoginValidator,
   userUpdateValidator,
-  googleSignInValidator,
-} = require("../validators/users")
+  googleSignInValidator} = require("../validators/users")
   
 
 
@@ -26,7 +25,8 @@ router.post("/register", userRegisterValidator, userRegister);
 router.post("/login", userLoginValidator,userLogin);
 router.delete("/delete", authUser,userDelete);
 router.patch("/update",authUser,userUpdateValidator,userUpdate);
-
+router.post("/verify-email", verifyEmailCode);
+router.post("/resend-verification-code", resendVerificationCode);
 
 router.get("/google", (req, res, next) => {
   // Store redirect_uri in session or pass via state
