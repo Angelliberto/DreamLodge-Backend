@@ -928,6 +928,74 @@ Reglas estrictas:
     const cleaned = normalizeWorkCandidateRows(rawList, 24);
     return { candidates: cleaned, webSearchUsed: webUsed };
   }
+
+  async recommendSimilarWorks(artwork, options = {}) {
+    if (!this.configured()) {
+      return { candidates: [], reason: "no_gemini" };
+    }
+    const limit = Math.max(1, Math.min(10, Number(options.limit) || 3));
+    const category = String(artwork?.category || "").trim().toLowerCase();
+    const title = String(artwork?.title || "").trim();
+    const creator = String(artwork?.creator || "").trim();
+    const description = String(artwork?.description || "")
+      .trim()
+      .slice(0, 450);
+    const genres = Array.isArray(artwork?.metadata?.genres)
+      ? artwork.metadata.genres.slice(0, 6).join(", ")
+      : "";
+
+    if (!title || !category) {
+      return { candidates: [], reason: "invalid_input" };
+    }
+
+    const wantedCount = Math.max(limit * 3, 8);
+    const prompt = `Eres un recomendador cultural.
+Obra base:
+- category: ${category}
+- title: ${title}
+- creator: ${creator || "(desconocido)"}
+- genres: ${genres || "(sin géneros)"}
+- description: ${description || "(sin descripción)"}
+
+Devuelve SOLO JSON válido, sin markdown:
+{"candidates":[{"category":"cine","title":"Nombre exacto","creator":"opcional"}, ...]}
+
+Reglas:
+- category exactamente uno de: cine, musica, literatura, videojuegos, arte-visual
+- Devuelve entre ${wantedCount} y ${wantedCount + 2} candidatos.
+- Prioriza obras muy parecidas en estilo/tema/tono a la obra base.
+- NO incluyas la misma obra base ni variaciones mínimas del mismo título.
+- Usa títulos reales y buscables en APIs públicas.`;
+
+    let text;
+    try {
+      text = await this.generateWithGemini(prompt, {
+        purpose: "recomendaciones similares por obra",
+        timeoutMs: 35000,
+      });
+    } catch (ex) {
+      logger.error("recommend_similar: fallo Gemini", ex);
+      const detail = formatExceptionForClient(ex);
+      const err = new Error(`No se pudieron generar recomendaciones similares. ${detail}`);
+      err.statusCode = 503;
+      throw err;
+    }
+
+    const m = text && text.match(/\{[\s\S]*\}/);
+    if (!m) return { candidates: [], reason: "bad_model_json" };
+
+    let parsed;
+    try {
+      parsed = JSON.parse(m[0]);
+    } catch {
+      return { candidates: [], reason: "json_error" };
+    }
+
+    const rawList = parsed?.candidates;
+    if (!Array.isArray(rawList)) return { candidates: [], reason: "no_candidates" };
+    const cleaned = normalizeWorkCandidateRows(rawList, wantedCount + 2);
+    return { candidates: cleaned };
+  }
 }
 
 let _agent = null;

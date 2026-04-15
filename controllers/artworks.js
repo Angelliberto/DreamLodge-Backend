@@ -1,6 +1,46 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
 const { ArtworkModel, UserModel } = require("../models");
 const mongoose = require("mongoose");
+const ai = require("../services/ai");
+const { resolveCuratedFeedCandidates } = require("../services/feedCandidateResolver");
+
+const SIMILAR_CACHE = new Map();
+const SIMILAR_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+function normalizeTitleForCompare(v) {
+  return String(v || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildSimilarCacheKey(payload) {
+  return [
+    String(payload.category || "").trim().toLowerCase(),
+    normalizeTitleForCompare(payload.title),
+    normalizeTitleForCompare(payload.creator || ""),
+  ].join("|");
+}
+
+function getSimilarCache(key) {
+  const row = SIMILAR_CACHE.get(key);
+  if (!row) return null;
+  if (Date.now() > row.exp) {
+    SIMILAR_CACHE.delete(key);
+    return null;
+  }
+  return row.data;
+}
+
+function setSimilarCache(key, data) {
+  SIMILAR_CACHE.set(key, {
+    data,
+    exp: Date.now() + SIMILAR_CACHE_TTL_MS,
+  });
+}
 
 /**
  * Obtener una obra por su ID
@@ -474,6 +514,53 @@ const getPending = async (req, res) => {
   }
 };
 
+/**
+ * Obtener 3 obras similares recomendadas por IA para una obra base.
+ * POST /api/artworks/similar
+ * Body: { artwork: CulturalItem-like, limit?: number }
+ */
+const getSimilarArtworks = async (req, res) => {
+  try {
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const artwork = body.artwork && typeof body.artwork === "object" ? body.artwork : {};
+    const limit = Math.max(1, Math.min(6, Number(body.limit) || 3));
+    const title = String(artwork.title || "").trim();
+    const category = String(artwork.category || "").trim().toLowerCase();
+
+    if (!title || !category) {
+      return handleHTTPError(res, { message: "artwork.title y artwork.category son requeridos" }, 400);
+    }
+
+    const key = buildSimilarCacheKey(artwork);
+    const cacheHit = getSimilarCache(key);
+    if (cacheHit) {
+      return res.status(200).json({
+        data: { items: cacheHit.slice(0, limit), cached: true },
+      });
+    }
+
+    const aiResult = await ai.recommendSimilarWorks(artwork, { limit });
+    const candidates = Array.isArray(aiResult?.candidates) ? aiResult.candidates : [];
+    const resolved = await resolveCuratedFeedCandidates(candidates);
+    const wantedTitle = normalizeTitleForCompare(title);
+    const filtered = resolved.filter(
+      (item) => normalizeTitleForCompare(item?.title) !== wantedTitle
+    );
+    const finalItems = filtered.slice(0, limit);
+    setSimilarCache(key, finalItems);
+
+    return res.status(200).json({
+      data: { items: finalItems, cached: false },
+    });
+  } catch (error) {
+    console.error("Error obteniendo obras similares:", error);
+    return handleHTTPError(res, {
+      message: "Error al obtener obras similares",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    }, 500);
+  }
+};
+
 module.exports = {
   getArtworkById,
   getAllArtworks,
@@ -482,5 +569,6 @@ module.exports = {
   getFavorites,
   addToPending,
   removeFromPending,
-  getPending
+  getPending,
+  getSimilarArtworks,
 };

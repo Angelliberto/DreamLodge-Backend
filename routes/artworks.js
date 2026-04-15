@@ -4,6 +4,7 @@ const { authUser } = require("../middleware/session");
 const { 
   getArtworkById, 
   getAllArtworks,
+  getSimilarArtworks,
   addToFavorites,
   removeFromFavorites,
   getFavorites,
@@ -35,6 +36,10 @@ router.post("/pending", authUser, addToPending);
 
 // DELETE /api/artworks/pending/:artworkId - Remover una obra de pendientes
 router.delete("/pending/:artworkId", authUser, removeFromPending);
+
+// Similares recomendadas por IA para una obra base
+// POST /api/artworks/similar
+router.post("/similar", getSimilarArtworks);
 
 // Obtener una obra por ID (debe ir al final para no interferir con las rutas anteriores)
 // GET /api/artworks/:id

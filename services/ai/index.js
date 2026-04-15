@@ -48,6 +48,10 @@ async function curatePersonalizedFeed({ oceanResult, artisticProfile }) {
   return getAiAgent().curatePersonalizedFeed(oceanResult, artisticProfile);
 }
 
+async function recommendSimilarWorks(artwork, options = {}) {
+  return getAiAgent().recommendSimilarWorks(artwork, options);
+}
+
 function isGeminiConfigured() {
   return getAiAgent().configured();
 }
@@ -56,5 +60,6 @@ module.exports = {
   processChatMessage,
   generateArtisticDescription,
   curatePersonalizedFeed,
+  recommendSimilarWorks,
   isGeminiConfigured,
 };
