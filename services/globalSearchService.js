@@ -1,6 +1,6 @@
 /**
- * Búsqueda global (TMDB cine+TV, IGDB, Spotify, Google Books condicional, CMA / Met).
- * Misma semántica que el antiguo UnifiedService del cliente; claves y tokens solo en servidor.
+ * Búsqueda global unificada (TMDB cine+TV, IGDB, Spotify, Google Books, Met/CMA).
+ * Adicionalmente soporta filtros comunes para todas las fuentes en una sola API.
  */
 const {
   getTmdbGenreMap,
@@ -31,88 +31,100 @@ async function searchBooksMerged(titleQuery) {
   return raw.map(adaptBook);
 }
 
-function querySuggestsArtVisual(raw) {
-  const n = raw
+const ALLOWED_CATEGORIES = new Set(["cine", "musica", "literatura", "arte-visual", "videojuegos"]);
+
+function normalizeText(v) {
+  return String(v || "")
+    .trim()
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-  if (/\barte\b/.test(n)) return true;
-  const hints = [
-    "pintur",
-    "cuadro",
-    "museo",
-    "escultur",
-    "monet",
-    "picasso",
-    "gogh",
-    "impresion",
-    "renacent",
-    "barroc",
-    "metropolitan",
-    "met museum",
-    "fotograf",
-    "fine art",
-    "oil paint",
-    "acuarel",
-    "dibujo",
-    "artist",
-    "obras de",
-    "galeria",
-    "galería",
-    "louvre",
-    "prado",
-    "cleveland museum",
-  ];
-  return hints.some((h) => n.includes(h));
 }
 
-function querySuggestsBooks(raw) {
-  const n = raw
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-  if (/\blibro(s)?\b/.test(n)) return true;
-  if (/\bnovela(s)?\b/.test(n)) return true;
-  if (/\bcuento(s)?\b/.test(n)) return true;
-  if (/\bensayo\b/.test(n)) return true;
-  if (/\bpoesia\b/.test(n)) return true;
-  if (/\bpoema(s)?\b/.test(n)) return true;
-  if (/\bleer\b/.test(n)) return true;
-  if (/\blectura\b/.test(n)) return true;
-  if (/\bliteratura\b/.test(n)) return true;
-  if (/\bautor(a)?\b/.test(n)) return true;
-  if (/\bescritor(a)?\b/.test(n)) return true;
-  if (/\beditorial\b/.test(n)) return true;
-  if (/\bisbn\b/.test(n)) return true;
-  if (/\bsaga\b/.test(n)) return true;
-  if (/\btrilogia\b/.test(n)) return true;
-  if (/\bbiografia\b/.test(n)) return true;
-  if (/\bkindle\b/.test(n)) return true;
-  if (/\bmanga\b/.test(n)) return true;
-  const hints = [
-    "fiction",
-    "nonfiction",
-    "fantasy book",
-    "sci-fi book",
-    "science fiction book",
-    "graphic novel",
-    "comic book",
-    "hardcover",
-    "paperback",
-    "bestseller",
-    "chapter",
-    "audiobook",
-  ];
-  return hints.some((h) => n.includes(h));
+function toArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
-function stripBookSearchPrefix(raw) {
-  return raw
-    .replace(
-      /^\s*(libro|libros|novela|novelas|cuento|cuentos|ensayo|poema|poesia|autor|autora)\s+/i,
-      ""
-    )
-    .trim();
+function normalizeFilters(raw) {
+  const categories = [...new Set(toArray(raw?.categories).map(normalizeText))].filter((c) =>
+    ALLOWED_CATEGORIES.has(c)
+  );
+  const cinemaType = normalizeText(raw?.cinemaType);
+  const emotions = [...new Set(toArray(raw?.emotions).map(normalizeText))];
+  const genres = [...new Set(toArray(raw?.genres).map(normalizeText))];
+  const author = normalizeText(raw?.author);
+  const yearFrom = Number.parseInt(String(raw?.yearFrom || ""), 10);
+  const yearTo = Number.parseInt(String(raw?.yearTo || ""), 10);
+  return {
+    categories,
+    cinemaType: cinemaType === "movie" || cinemaType === "series" ? cinemaType : "all",
+    emotions,
+    genres,
+    author: author === "all" ? "" : author,
+    yearFrom: Number.isFinite(yearFrom) ? yearFrom : null,
+    yearTo: Number.isFinite(yearTo) ? yearTo : null,
+  };
+}
+
+function getCinemaMediaType(item) {
+  const m = item?.metadata?.mediaType;
+  if (m === "movie" || m === "series") return m;
+  if (String(item?.id || "").startsWith("movie-")) return "movie";
+  if (String(item?.id || "").startsWith("tv-")) return "series";
+  return "unknown";
+}
+
+function applyGlobalFilters(items, filters) {
+  if (!Array.isArray(items) || !items.length) return [];
+  const hasCategory = filters.categories.length > 0;
+  const hasEmotions = filters.emotions.length > 0;
+  const hasGenres = filters.genres.length > 0;
+  const hasAuthor = Boolean(filters.author);
+  const hasYearFrom = Number.isFinite(filters.yearFrom);
+  const hasYearTo = Number.isFinite(filters.yearTo);
+
+  return items.filter((item) => {
+    const category = normalizeText(item?.category);
+    if (hasCategory && !filters.categories.includes(category)) return false;
+
+    if (
+      filters.cinemaType !== "all" &&
+      category === "cine" &&
+      getCinemaMediaType(item) !== filters.cinemaType
+    ) {
+      return false;
+    }
+
+    if (hasAuthor) {
+      const creator = normalizeText(item?.creator);
+      if (!creator.includes(filters.author)) return false;
+    }
+
+    if (hasYearFrom || hasYearTo) {
+      const y = Number.parseInt(String(item?.year || ""), 10);
+      if (Number.isFinite(y)) {
+        if (hasYearFrom && y < filters.yearFrom) return false;
+        if (hasYearTo && y > filters.yearTo) return false;
+      }
+    }
+
+    if (hasGenres) {
+      const itemGenres = (item?.metadata?.genres || []).map(normalizeText);
+      if (!filters.genres.some((g) => itemGenres.includes(g))) return false;
+    }
+
+    if (hasEmotions) {
+      const itemTags = (item?.metadata?.tags || []).map(normalizeText);
+      if (!filters.emotions.some((e) => itemTags.includes(e))) return false;
+    }
+
+    return true;
+  });
 }
 
 function shuffleSeeded(results, query) {
@@ -151,11 +163,14 @@ const MET_GLOBAL_MAX_IDS = 5;
 
 /**
  * @param {string} query
+ * @param {object} rawFilters
  * @returns {Promise<object[]>}
  */
-async function runGlobalSearch(query) {
+async function runGlobalSearch(query, rawFilters = {}) {
   const q = typeof query === "string" ? query : "";
-  const cacheKey = `gs:v1:${q || "empty"}`;
+  const qt = q.trim();
+  const filters = normalizeFilters(rawFilters);
+  const cacheKey = `gs:v2:${qt || "empty"}:${JSON.stringify(filters)}`;
   const hit = cacheGet(cacheKey);
   if (hit) return hit;
 
@@ -163,8 +178,8 @@ async function runGlobalSearch(query) {
   const promises = [];
 
   promises.push(
-    (q
-      ? Promise.all([searchTmdbMovies(q), searchTmdbTv(q)])
+    (qt
+      ? Promise.all([searchTmdbMovies(qt), searchTmdbTv(qt)])
       : Promise.all([discoverPopularMovies(), Promise.resolve([])])
     )
       .then(async ([movies, shows]) => {
@@ -181,38 +196,29 @@ async function runGlobalSearch(query) {
       .catch(() => [])
   );
 
-  if (q.length > 1) {
+  if (qt.length > 1) {
     promises.push(
-      searchIgdbGames(q, 15)
+      searchIgdbGames(qt, 15)
         .then((games) => games.map(adaptIGDB))
         .catch(() => [])
     );
     promises.push(
-      searchSpotifyAlbums(q, { enrichCount: 3 })
+      searchSpotifyAlbums(qt, { enrichCount: 3 })
         .then((albums) => albums.map(adaptSpotifyAlbum))
+        .catch(() => [])
+    );
+    promises.push(searchBooksMerged(qt).catch(() => []));
+    promises.push(
+      searchMetArtworkRows(qt, MET_GLOBAL_MAX_IDS)
+        .then((rows) => rows.map(adaptMet))
         .catch(() => [])
     );
   }
 
-  const qBooks = q.trim();
-  if (qBooks.length > 1 && querySuggestsBooks(qBooks)) {
-    const titleQuery = stripBookSearchPrefix(qBooks);
-    if (titleQuery.length >= 2) {
-      promises.push(searchBooksMerged(titleQuery).catch(() => []));
-    }
-  }
-
-  const qt = q.trim();
   if (qt.length === 0) {
     promises.push(
       fetchCmaRandomArtworkRows(8)
         .then((rows) => rows.map(adaptCmaArt))
-        .catch(() => [])
-    );
-  } else if (qt.length > 1 && querySuggestsArtVisual(qt)) {
-    promises.push(
-      searchMetArtworkRows(qt, MET_GLOBAL_MAX_IDS)
-        .then((rows) => rows.map(adaptMet))
         .catch(() => [])
     );
   }
@@ -223,10 +229,11 @@ async function runGlobalSearch(query) {
     if (Array.isArray(group)) flat.push(...group);
   });
 
-  const shuffled = shuffleSeeded(flat, q);
-  const ttl = q ? 2 * 60 * 1000 : 5 * 60 * 1000;
-  cacheSet(cacheKey, shuffled, ttl);
-  return shuffled;
+  const shuffled = shuffleSeeded(flat, qt);
+  const filtered = applyGlobalFilters(shuffled, filters);
+  const ttl = qt ? 2 * 60 * 1000 : 5 * 60 * 1000;
+  cacheSet(cacheKey, filtered, ttl);
+  return filtered;
 }
 
 module.exports = { runGlobalSearch };
