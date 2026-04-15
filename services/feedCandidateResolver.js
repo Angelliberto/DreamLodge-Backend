@@ -1,6 +1,7 @@
 /**
- * Resuelve candidatos { category, title, creator? } del MCP contra TMDB, Spotify,
- * Google Books, IGDB y Met — misma semántica que el antiguo resolvePersonalizedFeed del cliente.
+ * Resuelve candidatos { category, title, creator? } (IA / feed) contra TMDB, Spotify,
+ * Google Books, IGDB y Met. Solo acepta resultados cuya ficha en API coincide con el título
+ * (umbral configurable) y, si hay creador, valida autor/artista cuando aplica.
  */
 const {
   getTmdbGenreMap,
@@ -15,23 +16,17 @@ const {
   adaptBook,
   adaptMet,
 } = require("./culturalItemAdapters");
-const { searchSpotifyFirstAlbum } = require("./spotifyClient");
+const { searchSpotifyAlbums } = require("./spotifyClient");
 const { fetchGoogleBooksVolumesMerged } = require("./googleBooksClient");
-const { searchIgdbGameFirst } = require("./igdbClient");
-const { searchMetArtworkFirst } = require("./metMuseumClient");
+const { searchIgdbGames } = require("./igdbClient");
+const { searchMetArtworkRows } = require("./metMuseumClient");
+const {
+  pickBestTitleMatch,
+  defaultMinScore,
+  personNameSimilarity,
+} = require("./candidateMatchUtils");
 
 const ALLOWED = new Set(["cine", "musica", "literatura", "videojuegos", "arte-visual"]);
-
-async function searchBooksIntitle(title, author) {
-  const tasks = [`intitle:${title}`];
-  if (author && author.length >= 2) tasks.push(`inauthor:${author}`);
-  const merged = await fetchGoogleBooksVolumesMerged(tasks, {
-    maxPerQuery: 12,
-    maxTotal: 8,
-    shortCircuitAfterQueryIfAtLeast: 4,
-  });
-  return merged[0] || null;
-}
 
 function normalizeCandidate(row) {
   if (!row || typeof row !== "object") return null;
@@ -70,10 +65,29 @@ function normalizeCandidate(row) {
   return { category: cat, title: title.slice(0, 200), creator: creator ? creator.slice(0, 120) : undefined };
 }
 
+function minScoreForCategory(cat) {
+  const base = defaultMinScore();
+  if (cat === "literatura") return Math.max(0.58, base - 0.06);
+  if (cat === "arte-visual") return Math.max(0.58, base - 0.05);
+  return base;
+}
+
+/**
+ * Si hay creador y la similitud de título no es muy alta, exige que coincida con artista/autor/director razonablemente.
+ */
+function passesCreatorGate(category, creator, titleScore, checkCreatorFn) {
+  const hint = (creator || "").trim();
+  if (hint.length < 2) return true;
+  if (titleScore >= 0.88) return true;
+  return checkCreatorFn(hint);
+}
+
 async function resolveOne(c, genreMap) {
   const title = (c.title || "").trim();
   if (title.length < 2) return null;
-  const q = [title, (c.creator || "").trim()].filter(Boolean).join(" ");
+  const creator = (c.creator || "").trim();
+  const q = [title, creator].filter(Boolean).join(" ");
+  const minScore = minScoreForCategory(c.category);
 
   switch (c.category) {
     case "cine": {
@@ -81,26 +95,116 @@ async function resolveOne(c, genreMap) {
         searchTmdbMovies(q),
         searchTmdbTv(title),
       ]);
-      if (movies[0]) return adaptTMDBMovie(movies[0], genreMap);
-      if (tvshows[0]) return adaptTMDBTv(tvshows[0], genreMap);
+      const moviePick = pickBestTitleMatch(
+        movies,
+        (m) => [m.title, m.original_title].filter(Boolean),
+        title,
+        { minScore, maxScan: 12 }
+      );
+      const tvPick = pickBestTitleMatch(
+        tvshows,
+        (t) => [t.name, t.original_name].filter(Boolean),
+        title,
+        { minScore, maxScan: 12 }
+      );
+      if (moviePick && tvPick) {
+        if (moviePick.score >= tvPick.score) {
+          return adaptTMDBMovie(moviePick.item, genreMap);
+        }
+        return adaptTMDBTv(tvPick.item, genreMap);
+      }
+      if (moviePick) return adaptTMDBMovie(moviePick.item, genreMap);
+      if (tvPick) return adaptTMDBTv(tvPick.item, genreMap);
       return null;
     }
     case "musica": {
-      const album = await searchSpotifyFirstAlbum(q.length > 2 ? q : title);
-      return album ? adaptSpotifyAlbum(album) : null;
+      const query = q.length > 2 ? q : title;
+      const albums = await searchSpotifyAlbums(query, { limit: 10, enrichCount: 2 });
+      const albumPick = pickBestTitleMatch(
+        albums,
+        (a) => [a.name].filter(Boolean),
+        title,
+        { minScore, maxScan: 10 }
+      );
+      if (!albumPick) return null;
+      const okCreator = passesCreatorGate(
+        "musica",
+        creator,
+        albumPick.score,
+        (hint) => {
+          const names = (albumPick.item.artists || []).map((x) => x.name);
+          if (!names.length) return true;
+          return names.some((n) => personNameSimilarity(hint, n) >= 0.42);
+        }
+      );
+      if (!okCreator) return null;
+      return adaptSpotifyAlbum(albumPick.item);
     }
     case "literatura": {
-      const vol = await searchBooksIntitle(title, (c.creator || "").trim());
-      return vol ? adaptBook(vol) : null;
+      const tasks = [`intitle:${title}`];
+      if (creator.length >= 2) tasks.push(`inauthor:${creator}`);
+      const merged = await fetchGoogleBooksVolumesMerged(tasks, {
+        maxPerQuery: 12,
+        maxTotal: 12,
+        shortCircuitAfterQueryIfAtLeast: 6,
+      });
+      const bookPick = pickBestTitleMatch(
+        merged,
+        (item) => {
+          const v = item.volumeInfo || {};
+          const parts = [v.title, v.subtitle].filter(Boolean);
+          const joined = parts.join(" ").trim();
+          return [v.title, joined].filter(Boolean);
+        },
+        title,
+        { minScore, maxScan: 12 }
+      );
+      if (!bookPick) return null;
+      const okCreator = passesCreatorGate(
+        "literatura",
+        creator,
+        bookPick.score,
+        (hint) => {
+          const authors = bookPick.item.volumeInfo?.authors || [];
+          if (!authors.length) return true;
+          return authors.some((n) => personNameSimilarity(hint, n) >= 0.42);
+        }
+      );
+      if (!okCreator) return null;
+      return adaptBook(bookPick.item);
     }
     case "videojuegos": {
       const gq = title.length >= 2 ? title : `${title} game`;
-      const game = await searchIgdbGameFirst(gq);
-      return game ? adaptIGDB(game) : null;
+      const games = await searchIgdbGames(gq, 12);
+      const gamePick = pickBestTitleMatch(
+        games,
+        (g) => [g.name].filter(Boolean),
+        title,
+        { minScore, maxScan: 12 }
+      );
+      return gamePick ? adaptIGDB(gamePick.item) : null;
     }
     case "arte-visual": {
-      const art = await searchMetArtworkFirst(q);
-      return art ? adaptMet(art) : null;
+      const rows = await searchMetArtworkRows(q, 12);
+      const artPick = pickBestTitleMatch(
+        rows,
+        (r) => [r.title].filter(Boolean),
+        title,
+        { minScore, maxScan: 12 }
+      );
+      if (!artPick) return null;
+      const okCreator = passesCreatorGate(
+        "arte-visual",
+        creator,
+        artPick.score,
+        (hint) => {
+          const a = String(artPick.item.artist || "").trim();
+          if (!a || /^unknown$/i.test(a)) return true;
+          return personNameSimilarity(hint, a) >= 0.38;
+        }
+      );
+      if (!okCreator) return null;
+      return adaptMet(artPick.item);
     }
     default:
       return null;

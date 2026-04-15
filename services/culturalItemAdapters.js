@@ -103,6 +103,7 @@ function adaptTMDBMovie(movie, genreMap) {
     if (e) tags.push(e);
   }
   if (movie.adult) tags.push("Para Adultos");
+  tags.push("Película");
   const allForFeed = [...genres, ...tags, ...other];
   return {
     id: `movie-${movie.id}`,
@@ -121,6 +122,7 @@ function adaptTMDBMovie(movie, genreMap) {
       platforms: [],
       other: formatTags(other),
       label: "TMDB",
+      mediaType: "movie",
     },
   };
 }
@@ -135,6 +137,7 @@ function adaptTMDBTv(show, genreMap) {
     else if (r >= 7) tags.push("Bien Valorada");
   }
   if (show.popularity && show.popularity > 40) tags.push("Popular");
+  tags.push("Serie");
   if (year) {
     const d = getDecadeTag(year);
     if (d) tags.push(d);
@@ -159,6 +162,7 @@ function adaptTMDBTv(show, genreMap) {
       platforms: [],
       other: [],
       label: "TMDB TV",
+      mediaType: "series",
     },
   };
 }
