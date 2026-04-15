@@ -948,7 +948,7 @@ Reglas estrictas:
       return { candidates: [], reason: "invalid_input" };
     }
 
-    const wantedCount = Math.max(limit * 3, 8);
+    const wantedCount = Math.max(limit + 2, 4);
     const prompt = `Eres un recomendador cultural.
 Obra base:
 - category: ${category}
@@ -962,7 +962,7 @@ Devuelve SOLO JSON válido, sin markdown:
 
 Reglas:
 - category exactamente uno de: cine, musica, literatura, videojuegos, arte-visual
-- Devuelve entre ${wantedCount} y ${wantedCount + 2} candidatos.
+- Devuelve entre ${wantedCount} y ${wantedCount + 1} candidatos.
 - Prioriza obras muy parecidas en estilo/tema/tono a la obra base.
 - NO incluyas la misma obra base ni variaciones mínimas del mismo título.
 - Usa títulos reales y buscables en APIs públicas.`;
