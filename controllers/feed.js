@@ -9,7 +9,11 @@ const {
 
 /** Caché en memoria por usuario (TTL corto; el cliente puede forzar refresh). */
 const FEED_CACHE = new Map();
-const FEED_TTL_MS = 45 * 60 * 1000;
+const FEED_TTL_MS = 24 * 60 * 60 * 1000;
+
+function dayKeyUTC(ts = Date.now()) {
+  return Math.floor(ts / (24 * 60 * 60 * 1000));
+}
 
 /**
  * GET|POST /api/feed/personalized
@@ -28,16 +32,20 @@ const getPersonalizedFeedCurated = async (req, res) => {
       req.query.anchorsOnly === "1" || req.query.anchorsOnly === "true";
 
     const key = String(userId);
+    const oceanResult = await OceanModel.findOne({
+      entityType: "user",
+      entityId: userId,
+      deleted: false,
+    })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    const oceanUpdatedAt = oceanResult?.updatedAt
+      ? new Date(oceanResult.updatedAt).getTime()
+      : null;
+    const today = dayKeyUTC();
 
     if (anchorsOnly) {
-      const oceanResult = await OceanModel.findOne({
-        entityType: "user",
-        entityId: userId,
-        deleted: false,
-      })
-        .sort({ updatedAt: -1 })
-        .lean();
-
       if (!oceanResult?.artisticDescription) {
         return res.status(200).json({
           message: "ok",
@@ -68,7 +76,10 @@ const getPersonalizedFeedCurated = async (req, res) => {
     if (!force) {
       const hit = FEED_CACHE.get(key);
       if (hit && Date.now() - hit.ts < FEED_TTL_MS) {
-        if (Array.isArray(hit.data?.items)) {
+        const sameOceanVersion =
+          Number(hit.oceanUpdatedAt || 0) === Number(oceanUpdatedAt || 0);
+        const sameDay = Number(hit.dayKey || -1) === Number(today);
+        if (Array.isArray(hit.data?.items) && sameOceanVersion && sameDay) {
           return res.status(200).json({
             message: "ok",
             data: { ...hit.data, cached: true },
@@ -77,14 +88,6 @@ const getPersonalizedFeedCurated = async (req, res) => {
         FEED_CACHE.delete(key);
       }
     }
-
-    const oceanResult = await OceanModel.findOne({
-      entityType: "user",
-      entityId: userId,
-      deleted: false,
-    })
-      .sort({ updatedAt: -1 })
-      .lean();
 
     if (!oceanResult) {
       return res.status(200).json({
@@ -140,7 +143,12 @@ const getPersonalizedFeedCurated = async (req, res) => {
         reason: "ai_unavailable_anchors_only",
         cached: false,
       };
-      FEED_CACHE.set(key, { ts: Date.now(), data: fallback });
+      FEED_CACHE.set(key, {
+        ts: Date.now(),
+        data: fallback,
+        oceanUpdatedAt,
+        dayKey: today,
+      });
       return res.status(200).json({
         message: "ok",
         data: fallback,
@@ -164,7 +172,12 @@ const getPersonalizedFeedCurated = async (req, res) => {
       cached: false,
     };
 
-    FEED_CACHE.set(key, { ts: Date.now(), data: responseData });
+    FEED_CACHE.set(key, {
+      ts: Date.now(),
+      data: responseData,
+      oceanUpdatedAt,
+      dayKey: today,
+    });
     return res.status(200).json({
       message: "ok",
       data: responseData,

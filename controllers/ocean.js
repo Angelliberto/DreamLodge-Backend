@@ -4,6 +4,26 @@ const mongoose = require("mongoose");
 const ai = require("../services/ai");
 
 const BIG_FIVE_TRAITS = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism'];
+const ARTISTIC_REFRESH_MS = 24 * 60 * 60 * 1000;
+
+function parseArtisticDescriptionPayload(raw) {
+  if (!raw || typeof raw !== "string") return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function getArtisticMeta(payload) {
+  if (!payload || typeof payload !== "object") return {};
+  const meta = payload._meta && typeof payload._meta === "object" ? payload._meta : {};
+  const generatedAtMs = Number.parseInt(String(meta.generatedAt || ""), 10);
+  return {
+    generatedAtMs: Number.isFinite(generatedAtMs) ? generatedAtMs : null,
+  };
+}
 
 /** Hay subfacetas guardadas (no solo total) → corresponde a test profundo. */
 const scoresHaveSubfacetDetail = (scores) => {
@@ -490,16 +510,21 @@ const generateArtisticDescription = async (req, res) => {
       }
     }
 
-    // Si ya tiene una descripción artística generada, devolverla
+    // Si ya tiene descripción, reutilizarla hasta 24h (a menos que se fuerce).
     if (oceanResult.artisticDescription) {
-      try {
-        const description = JSON.parse(oceanResult.artisticDescription);
-        return res.status(200).json({
-          message: "Descripción artística obtenida correctamente",
-          data: description
-        });
-      } catch (parseError) {
-        // Si no es JSON válido, tratarlo como texto plano
+      const parsedDescription = parseArtisticDescriptionPayload(oceanResult.artisticDescription);
+      if (parsedDescription) {
+        const { generatedAtMs } = getArtisticMeta(parsedDescription);
+        const isFresh =
+          generatedAtMs != null && Date.now() - generatedAtMs < ARTISTIC_REFRESH_MS;
+        if (!forceRegenerate && isFresh) {
+          return res.status(200).json({
+            message: "Descripción artística obtenida desde caché",
+            data: parsedDescription
+          });
+        }
+      } else if (!forceRegenerate) {
+        // Legacy texto plano: respetar caché en lugar de recalcular en cada visita.
         return res.status(200).json({
           message: "Descripción artística obtenida correctamente",
           data: {
@@ -560,7 +585,14 @@ const generateArtisticDescription = async (req, res) => {
     }
 
     // Guardar la descripción en el modelo Ocean
-    oceanResult.artisticDescription = JSON.stringify(artisticDescription);
+    const artisticPayload = {
+      ...artisticDescription,
+      _meta: {
+        generatedAt: Date.now(),
+        refreshPolicy: "daily_or_on_change",
+      },
+    };
+    oceanResult.artisticDescription = JSON.stringify(artisticPayload);
     await oceanResult.save();
 
     try {
@@ -572,7 +604,7 @@ const generateArtisticDescription = async (req, res) => {
 
     return res.status(200).json({
       message: "Descripción artística generada correctamente",
-      data: artisticDescription
+      data: artisticPayload
     });
 
   } catch (error) {

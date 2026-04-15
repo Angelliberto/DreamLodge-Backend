@@ -24,6 +24,7 @@ const {
   pickBestTitleMatch,
   defaultMinScore,
   personNameSimilarity,
+  normalizeForMatch,
 } = require("./candidateMatchUtils");
 
 const ALLOWED = new Set(["cine", "musica", "literatura", "videojuegos", "arte-visual"]);
@@ -72,6 +73,27 @@ function minScoreForCategory(cat) {
   return base;
 }
 
+function hasExactTitleVariant(wantedTitle, variants) {
+  const wanted = normalizeForMatch(wantedTitle);
+  if (!wanted) return false;
+  return (variants || []).some((v) => normalizeForMatch(v) === wanted);
+}
+
+function bestVariantTokenDiff(wantedTitle, variants) {
+  const wanted = normalizeForMatch(wantedTitle);
+  if (!wanted) return Number.POSITIVE_INFINITY;
+  const wantedTokens = wanted.split(" ").filter(Boolean).length;
+  let best = Number.POSITIVE_INFINITY;
+  for (const variant of variants || []) {
+    const n = normalizeForMatch(variant);
+    if (!n) continue;
+    const tokens = n.split(" ").filter(Boolean).length;
+    const diff = Math.abs(tokens - wantedTokens);
+    if (diff < best) best = diff;
+  }
+  return best;
+}
+
 /**
  * Si hay creador y la similitud de título no es muy alta, exige que coincida con artista/autor/director razonablemente.
  */
@@ -87,10 +109,17 @@ async function resolveOne(c, genreMap) {
   if (title.length < 2) return null;
   const creator = (c.creator || "").trim();
   const q = [title, creator].filter(Boolean).join(" ");
-  const minScore = minScoreForCategory(c.category);
+  let minScore = minScoreForCategory(c.category);
 
   switch (c.category) {
     case "cine": {
+      const normalizedTitle = normalizeForMatch(title);
+      const tokenCount = normalizedTitle ? normalizedTitle.split(" ").filter(Boolean).length : 0;
+      // Títulos cortos (ej. "Amelie", "Sicario") son ambiguos: exigir mayor similitud.
+      if (tokenCount > 0 && tokenCount <= 2) {
+        minScore = Math.max(minScore, 0.82);
+      }
+
       const [movies, tvshows] = await Promise.all([
         searchTmdbMovies(q),
         searchTmdbTv(title),
@@ -108,6 +137,27 @@ async function resolveOne(c, genreMap) {
         { minScore, maxScan: 12 }
       );
       if (moviePick && tvPick) {
+        const movieVariants = [moviePick.item.title, moviePick.item.original_title].filter(Boolean);
+        const tvVariants = [tvPick.item.name, tvPick.item.original_name].filter(Boolean);
+        const movieExact = hasExactTitleVariant(title, movieVariants);
+        const tvExact = hasExactTitleVariant(title, tvVariants);
+        if (movieExact !== tvExact) {
+          return movieExact
+            ? adaptTMDBMovie(moviePick.item, genreMap)
+            : adaptTMDBTv(tvPick.item, genreMap);
+        }
+
+        // Si ambas puntuaciones son similares, preferir la que más se parezca en longitud de título.
+        if (Math.abs(moviePick.score - tvPick.score) <= 0.06) {
+          const movieTokenDiff = bestVariantTokenDiff(title, movieVariants);
+          const tvTokenDiff = bestVariantTokenDiff(title, tvVariants);
+          if (movieTokenDiff !== tvTokenDiff) {
+            return movieTokenDiff < tvTokenDiff
+              ? adaptTMDBMovie(moviePick.item, genreMap)
+              : adaptTMDBTv(tvPick.item, genreMap);
+          }
+        }
+
         if (moviePick.score >= tvPick.score) {
           return adaptTMDBMovie(moviePick.item, genreMap);
         }
