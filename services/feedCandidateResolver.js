@@ -105,6 +105,39 @@ function bestCreatorSimilarity(hint, names) {
   );
 }
 
+/** Sinopsis mínima en resultados de búsqueda TMDB (si falta, exigimos director/creador). */
+function tmdbSearchHasOverview(entity) {
+  return String(entity?.overview || "").trim().length >= 12;
+}
+
+/**
+ * Adapta película/serie TMDB o devuelve null si no hay ni descripción ni director/creador
+ * (ficha demasiado vacía para confiar en el match).
+ * @param {'movie'|'tv'} kind
+ * @param {object} entity resultado de search/movie o search/tv
+ * @param {string[]|undefined} preloadedPeople si ya se cargó crew/creadores (evita doble petición)
+ */
+async function adaptTmdbCineOrNull(entity, kind, genreMap, preloadedPeople) {
+  const people =
+    preloadedPeople !== undefined
+      ? preloadedPeople
+      : kind === "movie"
+        ? await getTmdbMovieDirectors(entity?.id)
+        : await getTmdbTvCreators(entity?.id);
+  const names = Array.isArray(people) ? people.filter(Boolean) : [];
+  const hasPeople = names.length > 0;
+  const hasOverview = tmdbSearchHasOverview(entity);
+  if (!hasOverview && !hasPeople) return null;
+  const item =
+    kind === "movie"
+      ? adaptTMDBMovie(entity, genreMap)
+      : adaptTMDBTv(entity, genreMap);
+  if (hasPeople) {
+    item.creator = names.slice(0, 4).join(", ");
+  }
+  return item;
+}
+
 /**
  * Si hay creador y la similitud de título no es muy alta, exige que coincida con artista/autor/director razonablemente.
  */
@@ -148,24 +181,28 @@ async function resolveOne(c, genreMap) {
         { minScore, maxScan: 12 }
       );
       if (moviePick && tvPick) {
+        let movieDirectors;
+        let tvCreators;
         if (creator.length >= 2) {
-          const [movieDirectors, tvCreators] = await Promise.all([
+          const loaded = await Promise.all([
             getTmdbMovieDirectors(moviePick.item?.id),
             getTmdbTvCreators(tvPick.item?.id),
           ]);
+          movieDirectors = loaded[0];
+          tvCreators = loaded[1];
           const movieCreatorScore = bestCreatorSimilarity(creator, movieDirectors);
           const tvCreatorScore = bestCreatorSimilarity(creator, tvCreators);
           const movieCreatorStrong = movieCreatorScore >= 0.42;
           const tvCreatorStrong = tvCreatorScore >= 0.42;
           if (movieCreatorStrong !== tvCreatorStrong) {
             return movieCreatorStrong
-              ? adaptTMDBMovie(moviePick.item, genreMap)
-              : adaptTMDBTv(tvPick.item, genreMap);
+              ? await adaptTmdbCineOrNull(moviePick.item, "movie", genreMap, movieDirectors)
+              : await adaptTmdbCineOrNull(tvPick.item, "tv", genreMap, tvCreators);
           }
           if (Math.abs(movieCreatorScore - tvCreatorScore) >= 0.1) {
             return movieCreatorScore > tvCreatorScore
-              ? adaptTMDBMovie(moviePick.item, genreMap)
-              : adaptTMDBTv(tvPick.item, genreMap);
+              ? await adaptTmdbCineOrNull(moviePick.item, "movie", genreMap, movieDirectors)
+              : await adaptTmdbCineOrNull(tvPick.item, "tv", genreMap, tvCreators);
           }
         }
 
@@ -175,8 +212,8 @@ async function resolveOne(c, genreMap) {
         const tvExact = hasExactTitleVariant(title, tvVariants);
         if (movieExact !== tvExact) {
           return movieExact
-            ? adaptTMDBMovie(moviePick.item, genreMap)
-            : adaptTMDBTv(tvPick.item, genreMap);
+            ? await adaptTmdbCineOrNull(moviePick.item, "movie", genreMap, movieDirectors)
+            : await adaptTmdbCineOrNull(tvPick.item, "tv", genreMap, tvCreators);
         }
 
         // Si ambas puntuaciones son similares, preferir la que más se parezca en longitud de título.
@@ -185,31 +222,35 @@ async function resolveOne(c, genreMap) {
           const tvTokenDiff = bestVariantTokenDiff(title, tvVariants);
           if (movieTokenDiff !== tvTokenDiff) {
             return movieTokenDiff < tvTokenDiff
-              ? adaptTMDBMovie(moviePick.item, genreMap)
-              : adaptTMDBTv(tvPick.item, genreMap);
+              ? await adaptTmdbCineOrNull(moviePick.item, "movie", genreMap, movieDirectors)
+              : await adaptTmdbCineOrNull(tvPick.item, "tv", genreMap, tvCreators);
           }
         }
 
         if (moviePick.score >= tvPick.score) {
-          return adaptTMDBMovie(moviePick.item, genreMap);
+          return await adaptTmdbCineOrNull(moviePick.item, "movie", genreMap, movieDirectors);
         }
-        return adaptTMDBTv(tvPick.item, genreMap);
+        return await adaptTmdbCineOrNull(tvPick.item, "tv", genreMap, tvCreators);
       }
       if (moviePick) {
+        let movieDirectors;
         if (creator.length >= 2 && moviePick.score < 0.95) {
-          const movieDirectors = await getTmdbMovieDirectors(moviePick.item?.id);
+          movieDirectors = await getTmdbMovieDirectors(moviePick.item?.id);
           const movieCreatorScore = bestCreatorSimilarity(creator, movieDirectors);
           if (movieDirectors.length && movieCreatorScore < 0.42) return null;
+          return await adaptTmdbCineOrNull(moviePick.item, "movie", genreMap, movieDirectors);
         }
-        return adaptTMDBMovie(moviePick.item, genreMap);
+        return await adaptTmdbCineOrNull(moviePick.item, "movie", genreMap, movieDirectors);
       }
       if (tvPick) {
+        let tvCreators;
         if (creator.length >= 2 && tvPick.score < 0.95) {
-          const tvCreators = await getTmdbTvCreators(tvPick.item?.id);
+          tvCreators = await getTmdbTvCreators(tvPick.item?.id);
           const tvCreatorScore = bestCreatorSimilarity(creator, tvCreators);
           if (tvCreators.length && tvCreatorScore < 0.42) return null;
+          return await adaptTmdbCineOrNull(tvPick.item, "tv", genreMap, tvCreators);
         }
-        return adaptTMDBTv(tvPick.item, genreMap);
+        return await adaptTmdbCineOrNull(tvPick.item, "tv", genreMap, tvCreators);
       }
       return null;
     }
