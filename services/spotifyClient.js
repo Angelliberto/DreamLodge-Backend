@@ -47,6 +47,20 @@ async function getSpotifyAccessToken() {
   }
 }
 
+async function fetchArtistGenres(token, artistId) {
+  const id = String(artistId || "").trim();
+  if (!id) return [];
+  try {
+    const { data } = await axios.get(`https://api.spotify.com/v1/artists/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 12000,
+    });
+    return Array.isArray(data?.genres) ? data.genres.filter(Boolean) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 /**
  * @param {string} query
  * @param {{ limit?: number, enrichCount?: number }} [opts]
@@ -71,8 +85,23 @@ async function searchSpotifyAlbums(query, opts = {}) {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 12000,
           });
-          return { ...album, genres: det.data?.genres || [] };
+          const albumGenres = Array.isArray(det.data?.genres)
+            ? det.data.genres.filter(Boolean)
+            : [];
+          if (albumGenres.length) {
+            return { ...album, genres: albumGenres };
+          }
+          const artistId =
+            det.data?.artists?.[0]?.id ||
+            album.artists?.[0]?.id;
+          const artistGenres = await fetchArtistGenres(token, artistId);
+          return { ...album, genres: artistGenres };
         } catch (_) {
+          const artistId = album.artists?.[0]?.id;
+          const artistGenres = await fetchArtistGenres(token, artistId);
+          if (artistGenres.length) {
+            return { ...album, genres: artistGenres };
+          }
           return album;
         }
       })

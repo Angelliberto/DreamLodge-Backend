@@ -172,13 +172,10 @@ function adaptSpotifyAlbum(album) {
   const genres = [...(album.genres || [])];
   const tags = [];
   const platforms = [];
-  if (album.album_type) {
-    const map = { album: "Álbum", single: "Sencillo", compilation: "Compilación" };
-    tags.push(map[album.album_type] || album.album_type);
-  }
+  // En feed priorizamos mostrar géneros reales del álbum/artista, no el tipo "Álbum".
   if (album.popularity && album.popularity > 70) tags.push("Popular");
   if (album.label) platforms.push(album.label);
-  const allForFeed = [...genres, ...tags, ...platforms];
+  const allForFeed = [...genres, ...tags];
   return {
     id: `music-${album.id}`,
     originalId: album.id,
