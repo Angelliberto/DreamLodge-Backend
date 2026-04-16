@@ -940,6 +940,9 @@ Reglas estrictas:
     const description = String(artwork?.description || "")
       .trim()
       .slice(0, 450);
+    const mediaType = String(artwork?.metadata?.mediaType || "")
+      .trim()
+      .toLowerCase();
     const genres = Array.isArray(artwork?.metadata?.genres)
       ? artwork.metadata.genres.slice(0, 6).join(", ")
       : "";
@@ -954,6 +957,7 @@ Obra base:
 - category: ${category}
 - title: ${title}
 - creator: ${creator || "(desconocido)"}
+- mediaType (solo cine): ${mediaType || "(desconocido)"}
 - genres: ${genres || "(sin géneros)"}
 - description: ${description || "(sin descripción)"}
 
@@ -964,7 +968,10 @@ Reglas:
 - category exactamente uno de: cine, musica, literatura, videojuegos, arte-visual
 - Devuelve entre ${wantedCount} y ${wantedCount + 1} candidatos.
 - Prioriza obras muy parecidas en estilo/tema/tono a la obra base.
+- Usa también el contexto de creator y description para evitar obras con mismo título pero de otra obra distinta.
 - NO incluyas la misma obra base ni variaciones mínimas del mismo título.
+- Si category es cine y mediaType es "movie" o "series", devuelve SOLO ese mismo tipo (no mezclar película con serie).
+- Cuando sea posible, incluye creator en cine, musica y literatura para mejorar la validación.
 - Usa títulos reales y buscables en APIs públicas.`;
 
     let text;

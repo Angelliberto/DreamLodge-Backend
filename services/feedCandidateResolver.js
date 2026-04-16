@@ -7,6 +7,8 @@ const {
   getTmdbGenreMap,
   searchTmdbMovies,
   searchTmdbTv,
+  getTmdbMovieDirectors,
+  getTmdbTvCreators,
 } = require("./tmdbShared");
 const {
   adaptIGDB,
@@ -94,6 +96,15 @@ function bestVariantTokenDiff(wantedTitle, variants) {
   return best;
 }
 
+function bestCreatorSimilarity(hint, names) {
+  const list = Array.isArray(names) ? names.filter(Boolean) : [];
+  if (!list.length) return 0;
+  return list.reduce(
+    (best, name) => Math.max(best, personNameSimilarity(hint, name)),
+    0
+  );
+}
+
 /**
  * Si hay creador y la similitud de título no es muy alta, exige que coincida con artista/autor/director razonablemente.
  */
@@ -122,7 +133,7 @@ async function resolveOne(c, genreMap) {
 
       const [movies, tvshows] = await Promise.all([
         searchTmdbMovies(q),
-        searchTmdbTv(title),
+        searchTmdbTv(q),
       ]);
       const moviePick = pickBestTitleMatch(
         movies,
@@ -137,6 +148,27 @@ async function resolveOne(c, genreMap) {
         { minScore, maxScan: 12 }
       );
       if (moviePick && tvPick) {
+        if (creator.length >= 2) {
+          const [movieDirectors, tvCreators] = await Promise.all([
+            getTmdbMovieDirectors(moviePick.item?.id),
+            getTmdbTvCreators(tvPick.item?.id),
+          ]);
+          const movieCreatorScore = bestCreatorSimilarity(creator, movieDirectors);
+          const tvCreatorScore = bestCreatorSimilarity(creator, tvCreators);
+          const movieCreatorStrong = movieCreatorScore >= 0.42;
+          const tvCreatorStrong = tvCreatorScore >= 0.42;
+          if (movieCreatorStrong !== tvCreatorStrong) {
+            return movieCreatorStrong
+              ? adaptTMDBMovie(moviePick.item, genreMap)
+              : adaptTMDBTv(tvPick.item, genreMap);
+          }
+          if (Math.abs(movieCreatorScore - tvCreatorScore) >= 0.1) {
+            return movieCreatorScore > tvCreatorScore
+              ? adaptTMDBMovie(moviePick.item, genreMap)
+              : adaptTMDBTv(tvPick.item, genreMap);
+          }
+        }
+
         const movieVariants = [moviePick.item.title, moviePick.item.original_title].filter(Boolean);
         const tvVariants = [tvPick.item.name, tvPick.item.original_name].filter(Boolean);
         const movieExact = hasExactTitleVariant(title, movieVariants);
@@ -163,8 +195,22 @@ async function resolveOne(c, genreMap) {
         }
         return adaptTMDBTv(tvPick.item, genreMap);
       }
-      if (moviePick) return adaptTMDBMovie(moviePick.item, genreMap);
-      if (tvPick) return adaptTMDBTv(tvPick.item, genreMap);
+      if (moviePick) {
+        if (creator.length >= 2 && moviePick.score < 0.95) {
+          const movieDirectors = await getTmdbMovieDirectors(moviePick.item?.id);
+          const movieCreatorScore = bestCreatorSimilarity(creator, movieDirectors);
+          if (movieDirectors.length && movieCreatorScore < 0.42) return null;
+        }
+        return adaptTMDBMovie(moviePick.item, genreMap);
+      }
+      if (tvPick) {
+        if (creator.length >= 2 && tvPick.score < 0.95) {
+          const tvCreators = await getTmdbTvCreators(tvPick.item?.id);
+          const tvCreatorScore = bestCreatorSimilarity(creator, tvCreators);
+          if (tvCreators.length && tvCreatorScore < 0.42) return null;
+        }
+        return adaptTMDBTv(tvPick.item, genreMap);
+      }
       return null;
     }
     case "musica": {

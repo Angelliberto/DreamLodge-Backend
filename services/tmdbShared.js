@@ -16,6 +16,23 @@ function tmdbHeaders() {
 
 let _genreCache = { map: null, ts: 0 };
 const GENRE_TTL_MS = 6 * 60 * 60 * 1000;
+const PEOPLE_TTL_MS = 24 * 60 * 60 * 1000;
+const _movieDirectorsCache = new Map();
+const _tvCreatorsCache = new Map();
+
+function getPeopleCache(cache, key) {
+  const row = cache.get(key);
+  if (!row) return null;
+  if (Date.now() > row.exp) {
+    cache.delete(key);
+    return null;
+  }
+  return row.data;
+}
+
+function setPeopleCache(cache, key, data) {
+  cache.set(key, { data, exp: Date.now() + PEOPLE_TTL_MS });
+}
 
 async function getTmdbGenreMap() {
   const now = Date.now();
@@ -83,6 +100,51 @@ async function discoverPopularMovies() {
   }
 }
 
+async function getTmdbMovieDirectors(movieId) {
+  const id = Number.parseInt(String(movieId || ""), 10);
+  if (!Number.isFinite(id) || id <= 0) return [];
+  const key = `movie:${id}`;
+  const hit = getPeopleCache(_movieDirectorsCache, key);
+  if (hit) return hit;
+  try {
+    const { data } = await axios.get(`${TMDB_BASE}/movie/${id}/credits`, {
+      params: { language: "es-ES" },
+      headers: tmdbHeaders(),
+      timeout: 15000,
+    });
+    const names = (data?.crew || [])
+      .filter((x) => x && typeof x === "object" && x.job === "Director" && x.name)
+      .map((x) => String(x.name).trim())
+      .filter(Boolean);
+    setPeopleCache(_movieDirectorsCache, key, names);
+    return names;
+  } catch (_) {
+    return [];
+  }
+}
+
+async function getTmdbTvCreators(tvId) {
+  const id = Number.parseInt(String(tvId || ""), 10);
+  if (!Number.isFinite(id) || id <= 0) return [];
+  const key = `tv:${id}`;
+  const hit = getPeopleCache(_tvCreatorsCache, key);
+  if (hit) return hit;
+  try {
+    const { data } = await axios.get(`${TMDB_BASE}/tv/${id}`, {
+      params: { language: "es-ES" },
+      headers: tmdbHeaders(),
+      timeout: 15000,
+    });
+    const names = (data?.created_by || [])
+      .map((x) => String(x?.name || "").trim())
+      .filter(Boolean);
+    setPeopleCache(_tvCreatorsCache, key, names);
+    return names;
+  } catch (_) {
+    return [];
+  }
+}
+
 module.exports = {
   TMDB_BASE,
   TMDB_IMG_W500,
@@ -91,4 +153,6 @@ module.exports = {
   searchTmdbMovies,
   searchTmdbTv,
   discoverPopularMovies,
+  getTmdbMovieDirectors,
+  getTmdbTvCreators,
 };

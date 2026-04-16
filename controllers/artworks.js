@@ -25,6 +25,13 @@ function buildSimilarCacheKey(payload) {
   ].join("|");
 }
 
+function normalizeCinemaMediaType(value) {
+  const v = String(value || "").trim().toLowerCase();
+  if (v === "movie" || v === "pelicula" || v === "película") return "movie";
+  if (v === "series" || v === "serie" || v === "tv") return "series";
+  return "";
+}
+
 function getSimilarCache(key) {
   const row = SIMILAR_CACHE.get(key);
   if (!row) return null;
@@ -543,9 +550,15 @@ const getSimilarArtworks = async (req, res) => {
     const candidates = Array.isArray(aiResult?.candidates) ? aiResult.candidates : [];
     const resolved = await resolveCuratedFeedCandidates(candidates);
     const wantedTitle = normalizeTitleForCompare(title);
-    const filtered = resolved.filter(
-      (item) => normalizeTitleForCompare(item?.title) !== wantedTitle
-    );
+    const wantedMediaType = normalizeCinemaMediaType(artwork?.metadata?.mediaType);
+    const filtered = resolved.filter((item) => {
+      if (normalizeTitleForCompare(item?.title) === wantedTitle) return false;
+      if (category === "cine" && wantedMediaType) {
+        const itemMediaType = normalizeCinemaMediaType(item?.metadata?.mediaType);
+        if (itemMediaType && itemMediaType !== wantedMediaType) return false;
+      }
+      return true;
+    });
     const finalItems = filtered.slice(0, limit);
     setSimilarCache(key, finalItems);
 
