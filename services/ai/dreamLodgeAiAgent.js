@@ -42,6 +42,64 @@ const WORK_CAT_ALIAS = {
   pintura: "arte-visual",
 };
 
+const OCEAN_SUBFACET_ORDER = {
+  openness: [
+    "intellect",
+    "ingenuity",
+    "reflection",
+    "competence",
+    "quickness",
+    "introspection",
+    "creativity",
+    "imagination",
+    "depth",
+  ],
+  conscientiousness: [
+    "conscientiousness",
+    "efficiency",
+    "dutifulness",
+    "purposefulness",
+    "organization",
+    "cautiousness",
+    "rationality",
+    "perfectionism",
+    "orderliness",
+  ],
+  extraversion: [
+    "gregariousness",
+    "friendliness",
+    "assertiveness",
+    "poise",
+    "leadership",
+    "provocativeness",
+    "self_disclosure",
+    "talkativeness",
+    "sociability",
+  ],
+  agreeableness: [
+    "understanding",
+    "warmth",
+    "morality",
+    "pleasantness",
+    "empathy",
+    "cooperation",
+    "sympathy",
+    "tenderness",
+    "nurturance",
+  ],
+  neuroticism: [
+    "stability",
+    "happiness",
+    "calmness",
+    "moderation",
+    "toughness",
+    "impulse_control",
+    "imperturbability",
+    "cool_headedness",
+    "tranquility",
+  ],
+};
+
 function normalizeWorkCandidateRows(rawList, maxItems = 24) {
   if (!Array.isArray(rawList)) return [];
   const cleaned = [];
@@ -92,6 +150,34 @@ function traitTotal(scores, key) {
   }
   if (typeof v === "number") return v;
   return 0;
+}
+
+function buildDeepSubfacetsBlock(scores) {
+  if (!scores || typeof scores !== "object") return "";
+  const parts = [];
+  const dims = [
+    "openness",
+    "conscientiousness",
+    "extraversion",
+    "agreeableness",
+    "neuroticism",
+  ];
+
+  for (const dim of dims) {
+    const dimScores =
+      scores[dim] && typeof scores[dim] === "object" ? scores[dim] : {};
+    const canonical = OCEAN_SUBFACET_ORDER[dim] || [];
+    const extraKeys = Object.keys(dimScores).filter(
+      (k) => k !== "total" && !canonical.includes(k)
+    );
+    const orderedSubfacets = [...canonical, ...extraKeys];
+    const line = orderedSubfacets
+      .map((sf) => `${sf}: ${dimScores[sf] ?? "N/A"}`)
+      .join(", ");
+    parts.push(`- ${dim}: ${line || "(sin subfacetas disponibles)"}`);
+  }
+
+  return `Subfacetas detalladas (deben considerarse todas):\n${parts.join("\n")}\n`;
 }
 
 function envModels() {
@@ -689,29 +775,7 @@ class DreamLodgeAIAgent {
       throw err;
     }
 
-    let sub = "";
-    if (testType === "deep" && scores && typeof scores === "object") {
-      const parts = [];
-      for (const [dim, dimScores] of Object.entries(scores)) {
-        if (
-          !dimScores ||
-          typeof dimScores !== "object" ||
-          ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"].indexOf(
-            dim
-          ) === -1
-        ) {
-          continue;
-        }
-        const subfacets = Object.keys(dimScores).filter((k) => k !== "total");
-        if (subfacets.length) {
-          const line = subfacets
-            .map((sf) => `${sf}: ${dimScores[sf] ?? "N/A"}`)
-            .join(", ");
-          parts.push(`- ${dim}: ${line}`);
-        }
-      }
-      if (parts.length) sub = `Subfacetas detalladas:\n${parts.join("\n")}\n`;
-    }
+    const sub = testType === "deep" ? buildDeepSubfacetsBlock(scores) : "";
 
     const [webBlock, webSearchUsedArtistic] = await buildArtisticWebContext(
       o,
@@ -728,6 +792,26 @@ class DreamLodgeAIAgent {
       webSearchUsedArtistic
     );
 
+    const descriptionGuidelines =
+      testType === "deep"
+        ? `Descripción (campo "description") para test largo/deep:
+- Mínimo 4 párrafos, con análisis complejo y bien desarrollado.
+- Analiza explícitamente las 5 dimensiones OCEAN y TODAS las facetas/subfacetas listadas en "Subfacetas detalladas".
+- No omitas ninguna subfaceta del bloque; debes integrarlas en el análisis, aunque sea brevemente.
+- Explica patrones, tensiones internas y combinaciones entre rasgos (no solo una lista de puntajes).
+- Incluye implicaciones culturales concretas: qué tipo de experiencias podrían resonar y en qué condiciones.
+- Evita afirmaciones absolutas sobre gustos; usa lenguaje probabilístico y condicional.`
+        : `Descripción (campo "description") para test corto/quick:
+- Mínimo 3 párrafos completos.
+- Analiza las 5 dimensiones OCEAN disponibles, con interpretación cuidadosa y útil.
+- Evita simplificaciones o frases genéricas de una sola línea.
+- Evita afirmaciones absolutas sobre gustos; usa lenguaje probabilístico y condicional.`;
+
+    const toneAndLanguageRules = `Reglas de lenguaje para SIEMPRE:
+- No afirmes "te gusta X", "eres X" o "te encanta X" como hechos cerrados.
+- Prefiere formulaciones como "de acuerdo con tu perfil podrían atraerte...", "es posible que conectes con...", "tiendes a valorar...".
+- Mantén tono cálido, humano y respetuoso, sin sonar determinista ni estereotipado.`;
+
     const prompt = `Eres curador cultural. El usuario hizo el test OCEAN (Big Five). Tu tarea es proponer OBRAS CONCRETAS (reales, buscables en TMDB, Spotify, Google Books, IGDB o museos) que encajen con su perfil, usando los fragmentos de búsqueda web cuando aporten títulos o listas fiables.
 
 Perfil numérico (0-5):
@@ -739,10 +823,14 @@ ${webBlock || "(Sin resultados web: elige obras muy conocidas y coherentes con e
 
 En tu razonamiento interno (no lo escribas): elige 10-16 obras reales mezclando categorías.
 
+${descriptionGuidelines}
+
+${toneAndLanguageRules}
+
 Responde SOLO JSON válido, sin markdown:
 {
   "profile": "nombre corto del perfil artístico",
-  "description": "2-3 párrafos en español, tono cálido",
+  "description": "texto en español que cumpla estrictamente las reglas anteriores",
   "recommendations": ["3-6 frases cortas; puede incluir nombres de obras"],
   "suggestedWorks": [
     {"category":"cine","title":"Título exacto buscable","creator":"director o autor opcional"}
