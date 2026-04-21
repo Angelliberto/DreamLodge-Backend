@@ -964,7 +964,8 @@ Responde SOLO JSON válido, sin markdown:
 
 Reglas suggestedWorks:
 - category exactamente: cine, musica, literatura, videojuegos, arte-visual
-- Títulos reales; mezcla categorías; deben reflejar genreRecommendations y el análisis del perfil.`;
+- Títulos reales; mezcla categorías; deben reflejar genreRecommendations y el análisis del perfil.
+- videojuegos: en "creator" pon SIEMPRE el estudio desarrollador o publisher reconocible en IGDB (como aparece en la ficha). Obligatorio si el título es corto o ambiguo (una sola palabra: "Journey", "Inside", "Limbo", etc.) para no confundirlo con DLC u otro juego que solo comparte palabra en el título.`;
 
     let text;
     try {

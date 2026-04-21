@@ -27,6 +27,7 @@ const {
   defaultMinScore,
   personNameSimilarity,
   normalizeForMatch,
+  bestVariantScore,
 } = require("./candidateMatchUtils");
 
 const ALLOWED = new Set(["cine", "musica", "literatura", "videojuegos", "arte-visual"]);
@@ -103,6 +104,73 @@ function bestCreatorSimilarity(hint, names) {
     (best, name) => Math.max(best, personNameSimilarity(hint, name)),
     0
   );
+}
+
+/** Nombres de compañías en IGDB (involved_companies). */
+function igdbCompanyNames(game) {
+  const names = [];
+  for (const ic of game?.involved_companies || []) {
+    if (ic?.company?.name) names.push(ic.company.name);
+  }
+  return names;
+}
+
+/**
+ * Títulos de una palabra (p. ej. "Journey") suelen chocar con DLC/expansiones que solo contienen la palabra.
+ * Prioriza coincidencia exacta (normalizada) y, si hay creador, alinea con el estudio en involved_companies.
+ */
+function pickBestIgdbGameMatch(games, wantedTitle, creatorHint, minTitleScore) {
+  const wanted = (wantedTitle || "").trim();
+  const nw = normalizeForMatch(wanted);
+  const wantedTokens = nw ? nw.split(" ").filter(Boolean).length : 0;
+  const creator = (creatorHint || "").trim();
+  const list = Array.isArray(games) ? games : [];
+
+  let best = null;
+  let bestCombined = -1;
+
+  for (const g of list) {
+    const name = g?.name;
+    if (!name) continue;
+    const titleSc = bestVariantScore(wanted, [name]);
+    if (titleSc < minTitleScore) continue;
+
+    const ng = normalizeForMatch(name);
+    const gameTokens = ng ? ng.split(" ").filter(Boolean).length : 0;
+    const companies = igdbCompanyNames(g);
+    const devSc =
+      creator.length >= 2 ? bestCreatorSimilarity(creator, companies) : 0;
+
+    const exact = nw.length >= 2 && ng === nw;
+    let combined = titleSc;
+    if (exact) combined += 0.22;
+    if (creator.length >= 2) combined += 0.32 * devSc;
+
+    if (wantedTokens <= 2 && nw.length >= 3) {
+      if (!exact && gameTokens >= 4) {
+        combined -= 0.18;
+        if (ng.includes(nw) && ng !== nw) combined -= 0.12;
+      }
+      if (!exact && gameTokens >= 6) combined -= 0.1;
+    }
+
+    if (creator.length >= 2 && !exact && titleSc < 0.9 && devSc < 0.32) {
+      combined -= 0.15;
+    }
+
+    if (combined > bestCombined) {
+      bestCombined = combined;
+      best = { item: g, titleSc, devSc, exact };
+    }
+  }
+
+  if (!best) return null;
+
+  if (creator.length >= 2 && best.titleSc < 0.93 && best.devSc < 0.28 && !best.exact) {
+    return null;
+  }
+
+  return best;
 }
 
 /** Sinopsis mínima en resultados de búsqueda TMDB (si falta, exigimos director/creador). */
@@ -311,14 +379,32 @@ async function resolveOne(c, genreMap) {
       return adaptBook(bookPick.item);
     }
     case "videojuegos": {
+      const normalizedTitle = normalizeForMatch(title);
+      const titleTokens = normalizedTitle
+        ? normalizedTitle.split(" ").filter(Boolean).length
+        : 0;
+      let minGameScore = minScore;
+      if (titleTokens > 0 && titleTokens <= 2) {
+        minGameScore = Math.max(minGameScore, 0.8);
+      }
+
       const gq = title.length >= 2 ? title : `${title} game`;
-      const games = await searchIgdbGames(gq, 12);
-      const gamePick = pickBestTitleMatch(
-        games,
-        (g) => [g.name].filter(Boolean),
-        title,
-        { minScore, maxScan: 12 }
-      );
+      const seen = new Set();
+      const merged = [];
+      const pushGames = (arr) => {
+        for (const g of arr || []) {
+          if (!g || g.id == null) continue;
+          if (seen.has(g.id)) continue;
+          seen.add(g.id);
+          merged.push(g);
+        }
+      };
+      pushGames(await searchIgdbGames(gq, 18));
+      if (creator.length >= 3) {
+        pushGames(await searchIgdbGames(`${title} ${creator}`, 18));
+      }
+
+      const gamePick = pickBestIgdbGameMatch(merged, title, creator, minGameScore);
       return gamePick ? adaptIGDB(gamePick.item) : null;
     }
     case "arte-visual": {
