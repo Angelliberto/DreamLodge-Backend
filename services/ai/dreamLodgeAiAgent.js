@@ -800,6 +800,10 @@ class DreamLodgeAIAgent {
 - No omitas ninguna subfaceta del bloque; debes integrarlas en el análisis, aunque sea brevemente.
 - Explica patrones, tensiones internas y combinaciones entre rasgos (no solo una lista de puntajes).
 - Incluye implicaciones culturales concretas: qué tipo de experiencias podrían resonar y en qué condiciones.
+- NO hagas un reporte descriptivo de puntajes o una explicación faceta-por-faceta.
+- NO repitas números ni listes subfacetas en formato inventario; esa información ya la ve el usuario en resultados.
+- Enfócate en una síntesis psicológica profunda: motivaciones, forma de procesar experiencias, sensibilidad estética, y estilos narrativos/sonoros/visuales que podrían conectar con su mundo interno.
+- Traduce el perfil a afinidades culturales transversales (temas, tonos, ritmos, complejidad, riesgo creativo, intimidad social, etc.), no solo a etiquetas sueltas.
 - Evita afirmaciones absolutas sobre gustos; usa lenguaje probabilístico y condicional.`
         : `Descripción (campo "description") para test corto/quick:
 - Mínimo 3 párrafos completos.
@@ -826,6 +830,11 @@ En tu razonamiento interno (no lo escribas): elige 10-16 obras reales mezclando 
 ${descriptionGuidelines}
 
 ${toneAndLanguageRules}
+
+Objetivo de escritura de la descripción:
+- Entregar un análisis de personalidad profundo y útil para descubrir cultura.
+- Prioriza interpretación y significado práctico sobre repetir datos crudos.
+- Conecta la personalidad con posibles intereses en tipos de obras, géneros, atmósferas y formatos.
 
 Responde SOLO JSON válido, sin markdown:
 {
