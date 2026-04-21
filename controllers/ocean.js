@@ -569,7 +569,23 @@ const generateArtisticDescription = async (req, res) => {
 
     let artisticDescription;
     try {
-      artisticDescription = await ai.generateArtisticDescription(oceanJsonSafe);
+      artisticDescription = await ai.generateArtisticDescription(oceanJsonSafe, {
+        userId,
+        regenerationSeed: forceRegenerate ? Date.now() : undefined,
+      });
+      const swCount = Array.isArray(artisticDescription?.suggestedWorks)
+        ? artisticDescription.suggestedWorks.length
+        : 0;
+      const gr = artisticDescription?.genreRecommendations;
+      const grKeys =
+        gr && typeof gr === "object" ? Object.keys(gr).join(",") : "none";
+      console.log(
+        "[ocean artistic-description] generado userId=%s forceRegenerate=%s suggestedWorks=%s genreRecommendations_keys=%s | obras detalladas: busca en logs el prefijo [dreamlodge][ia_obras] artistic_description",
+        userId,
+        Boolean(forceRegenerate),
+        swCount,
+        grKeys
+      );
     } catch (genErr) {
       console.error("[ocean artistic-description] fallo IA:", genErr?.message || genErr);
       return handleHTTPError(

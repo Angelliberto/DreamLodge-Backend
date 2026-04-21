@@ -11,6 +11,39 @@ const {
 
 const logger = console;
 
+/**
+ * Log legible de obras que propone la IA (una línea numerada por obra).
+ * Buscar en consola / logs: [dreamlodge][ia_obras]
+ *
+ * @param {string} tag - p.ej. artistic_description | feed_personalized | recommend_similar
+ * @param {{ id?: string, works?: Array<{ category?: string, title?: string, creator?: string }> }} opts
+ */
+function logIaRecommendedWorks(tag, opts = {}) {
+  const safeId =
+    opts.id != null && String(opts.id).trim() ? String(opts.id).trim() : "(sin id)";
+  const list = Array.isArray(opts.works) ? opts.works : [];
+  if (!list.length) {
+    logger.info("[dreamlodge][ia_obras] %s id=%s count=0", tag, safeId);
+    return;
+  }
+  const lines = list.map((w, i) => {
+    if (!w || typeof w !== "object") {
+      return `  ${i + 1}. (entrada inválida)`;
+    }
+    const cat = w.category || "?";
+    const title = w.title || "(sin título)";
+    const c = w.creator ? ` — ${w.creator}` : "";
+    return `  ${i + 1}. [${cat}] ${title}${c}`;
+  });
+  logger.info(
+    "[dreamlodge][ia_obras] %s id=%s count=%s\n%s",
+    tag,
+    safeId,
+    list.length,
+    lines.join("\n")
+  );
+}
+
 const WORK_CAT_ALLOWED = new Set([
   "cine",
   "musica",
@@ -178,6 +211,59 @@ function buildDeepSubfacetsBlock(scores) {
   }
 
   return `Subfacetas detalladas (deben considerarse todas):\n${parts.join("\n")}\n`;
+}
+
+const GENRE_REC_KEYS = [
+  "cine",
+  "musica",
+  "literatura",
+  "videojuegos",
+  "arte-visual",
+];
+
+function buildOceanFingerprint(scores) {
+  if (!scores || typeof scores !== "object") return "na";
+  const dims = [
+    "openness",
+    "conscientiousness",
+    "extraversion",
+    "agreeableness",
+    "neuroticism",
+  ];
+  const parts = [];
+  for (const d of dims) {
+    const row = scores[d];
+    if (!row || typeof row !== "object") continue;
+    const keys = Object.keys(row)
+      .filter((k) => k !== "__proto__")
+      .sort();
+    const seg = keys.map((k) => `${k}:${row[k]}`).join(",");
+    parts.push(`${d}{${seg}}`);
+  }
+  const s = parts.join("|");
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i += 1) {
+    h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  }
+  return (h >>> 0).toString(16).slice(0, 12);
+}
+
+function normalizeGenreRecommendations(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  const out = {};
+  for (const k of GENRE_REC_KEYS) {
+    let arr = raw[k];
+    if (!Array.isArray(arr) && k === "arte-visual" && Array.isArray(raw.arte_visual)) {
+      arr = raw.arte_visual;
+    }
+    if (!Array.isArray(arr)) continue;
+    const cleaned = arr
+      .map((x) => String(x || "").trim())
+      .filter((x) => x.length > 0)
+      .slice(0, 12);
+    if (cleaned.length) out[k] = cleaned;
+  }
+  return out;
 }
 
 function envModels() {
@@ -751,7 +837,14 @@ class DreamLodgeAIAgent {
     }
   }
 
-  async generateArtisticDescription(oceanResult) {
+  async generateArtisticDescription(oceanResult, options = {}) {
+    const userId =
+      options.userId != null && String(options.userId).trim()
+        ? String(options.userId).trim()
+        : "";
+    const regenerationSeed =
+      options.regenerationSeed != null ? String(options.regenerationSeed).trim() : "";
+
     const scores = oceanResult.scores;
     if (!scores || typeof scores !== "object") {
       logger.warn("generateArtisticDescription: scores inválidos");
@@ -759,6 +852,8 @@ class DreamLodgeAIAgent {
       err.statusCode = 400;
       throw err;
     }
+
+    const oceanFingerprint = buildOceanFingerprint(scores);
 
     const o = traitTotal(scores, "openness");
     const c = traitTotal(scores, "conscientiousness");
@@ -816,7 +911,16 @@ class DreamLodgeAIAgent {
 - Prefiere formulaciones como "de acuerdo con tu perfil podrían atraerte...", "es posible que conectes con...", "tiendes a valorar...".
 - Mantén tono cálido, humano y respetuoso, sin sonar determinista ni estereotipado.`;
 
-    const prompt = `Eres curador cultural. El usuario hizo el test OCEAN (Big Five). Tu tarea es proponer OBRAS CONCRETAS (reales, buscables en TMDB, Spotify, Google Books, IGDB o museos) que encajen con su perfil, usando los fragmentos de búsqueda web cuando aporten títulos o listas fiables.
+    const variationBlock = `Coherencia y variación:
+- Huella del perfil OCEAN (según puntuaciones actuales): ${oceanFingerprint}
+${regenerationSeed ? `- Semilla de regeneración: ${regenerationSeed}. Elige una combinación distinta de obras ancla (suggestedWorks) respecto a otras ejecuciones con la misma huella; prioriza títulos distintos siempre que sigan siendo coherentes con el perfil y con genreRecommendations.` : "- Primera generación o sin semilla: elige obras ancla variadas y muy reconocibles."}`;
+
+    const prompt = `Eres curador cultural. El usuario hizo el test OCEAN (Big Five). Tu tarea es:
+1) Sintetizar su personalidad en "description" y "profile".
+2) Inferir GÉNEROS / estilos / movimientos por ámbito cultural en "genreRecommendations" (sin nombres de obras en ese objeto).
+3) Proponer OBRAS CONCRETAS ancla en "suggestedWorks" (reales, buscables en TMDB, Spotify, Google Books, IGDB o museos), alineadas con el perfil, con "description" y con los géneros declarados en genreRecommendations.
+
+${variationBlock}
 
 Perfil numérico (0-5):
 - Apertura ${Number(o).toFixed(2)}, Responsabilidad ${Number(c).toFixed(2)}, Extraversión ${Number(e).toFixed(2)}, Amabilidad ${Number(a).toFixed(2)}, Neuroticismo ${Number(n).toFixed(2)}
@@ -825,7 +929,7 @@ ${sub}
 Fragmentos web (títulos y listas; prioriza obras que aparezcan aquí si encajan con OCEAN):
 ${webBlock || "(Sin resultados web: elige obras muy conocidas y coherentes con el perfil.)"}
 
-En tu razonamiento interno (no lo escribas): elige 10-16 obras reales mezclando categorías.
+En tu razonamiento interno (no lo escribas): elige 10-16 obras reales mezclando categorías; que cada categoría tenga al menos una obra coherente con los géneros que pusiste para ese ámbito.
 
 ${descriptionGuidelines}
 
@@ -836,11 +940,23 @@ Objetivo de escritura de la descripción:
 - Prioriza interpretación y significado práctico sobre repetir datos crudos.
 - Conecta la personalidad con posibles intereses en tipos de obras, géneros, atmósferas y formatos.
 
+Campo "genreRecommendations" (obligatorio):
+- Debe incluir EXACTAMENTE estas claves: "cine", "musica", "literatura", "videojuegos", "arte-visual".
+- Cada clave: array de 2 a 6 strings (idealmente al menos 2) con GÉNEROS, subgéneros, estilos, movimientos o tipos de experiencia (ej. cine: "thriller psicológico", "drama de autor"; musica: "ambient", "soul"; arte-visual: "impresionismo", "arte conceptual").
+- NO pongas títulos de obras ni nombres de artistas dentro de genreRecommendations; solo géneros/estilos.
+- Debe derivarse del perfil OCEAN actual y ser coherente con "description".
+
 Responde SOLO JSON válido, sin markdown:
 {
   "profile": "nombre corto del perfil artístico",
   "description": "texto en español que cumpla estrictamente las reglas anteriores",
-  "recommendations": ["3-6 frases cortas; puede incluir nombres de obras"],
+  "genreRecommendations": {
+    "cine": ["género o estilo 1", "género o estilo 2"],
+    "musica": ["..."],
+    "literatura": ["..."],
+    "videojuegos": ["..."],
+    "arte-visual": ["..."]
+  },
   "suggestedWorks": [
     {"category":"cine","title":"Título exacto buscable","creator":"director o autor opcional"}
   ]
@@ -848,7 +964,7 @@ Responde SOLO JSON válido, sin markdown:
 
 Reglas suggestedWorks:
 - category exactamente: cine, musica, literatura, videojuegos, arte-visual
-- Títulos reales; mezcla categorías.`;
+- Títulos reales; mezcla categorías; deben reflejar genreRecommendations y el análisis del perfil.`;
 
     let text;
     try {
@@ -908,12 +1024,37 @@ Reglas suggestedWorks:
     }
     if (parsed.recommendations == null) parsed.recommendations = [];
 
+    const genresNorm = normalizeGenreRecommendations(parsed.genreRecommendations);
+    const missingGenreKeys = GENRE_REC_KEYS.filter((k) => !genresNorm[k] || genresNorm[k].length < 1);
+    if (missingGenreKeys.length) {
+      const err = new Error(
+        `La respuesta del modelo incompleta: genreRecommendations debe incluir al menos 1 género por ámbito. Faltan: ${missingGenreKeys.join(
+          ", "
+        )}`
+      );
+      err.statusCode = 502;
+      throw err;
+    }
+    parsed.genreRecommendations = genresNorm;
+
     const rawWorks = parsed.suggestedWorks;
     if (Array.isArray(rawWorks)) {
       parsed.suggestedWorks = normalizeWorkCandidateRows(rawWorks, 20);
     } else {
       parsed.suggestedWorks = [];
     }
+
+    logIaRecommendedWorks("artistic_description", {
+      id: userId || undefined,
+      works: parsed.suggestedWorks,
+    });
+    logger.info(
+      "[dreamlodge][ia_obras] artistic_description_meta userId=%s fingerprint=%s testType=%s seed=%s",
+      userId || "(anon)",
+      oceanFingerprint,
+      testType || "?",
+      regenerationSeed || "-"
+    );
 
     return parsed;
   }
@@ -947,16 +1088,28 @@ Reglas suggestedWorks:
     if (artisticProfile && typeof artisticProfile === "object") {
       const prof = String(artisticProfile.profile || "").trim();
       const desc = String(artisticProfile.description || "").trim().slice(0, 500);
-      const recs = artisticProfile.recommendations;
-      let recLine = "";
-      if (Array.isArray(recs) && recs.length) {
-        recLine = `Sugerencias previas: ${recs
-          .slice(0, 6)
+      const gr = artisticProfile.genreRecommendations;
+      let genreLine = "";
+      if (gr && typeof gr === "object") {
+        genreLine = GENRE_REC_KEYS.map((k) => {
+          const arr = gr[k];
+          if (!Array.isArray(arr) || !arr.length) return null;
+          return `${k}: ${arr.filter(Boolean).map(String).join(", ")}`;
+        })
           .filter(Boolean)
-          .map(String)
-          .join("; ")}`;
+          .join(" | ");
       }
-      artExtra = `\nPerfil artístico existente: ${prof}\n${desc}\n${recLine}\n`;
+      if (!genreLine) {
+        const recs = artisticProfile.recommendations;
+        if (Array.isArray(recs) && recs.length) {
+          genreLine = `Sugerencias previas (legacy): ${recs
+            .slice(0, 8)
+            .filter(Boolean)
+            .map(String)
+            .join("; ")}`;
+        }
+      }
+      artExtra = `\nPerfil artístico existente: ${prof}\n${desc}\n${genreLine ? `${genreLine}\n` : ""}`;
     }
 
     const prompt = `Eres curador cultural para una app de descubrimiento (cine, series, música, libros, videojuegos, arte).
@@ -1023,6 +1176,15 @@ Reglas estrictas:
     }
 
     const cleaned = normalizeWorkCandidateRows(rawList, 24);
+    const feedEntityId =
+      oceanResult.entityId != null
+        ? oceanResult.entityId
+        : oceanResult.entity_id;
+    logIaRecommendedWorks("feed_personalized", {
+      id: feedEntityId != null ? String(feedEntityId) : undefined,
+      works: cleaned,
+    });
+
     return { candidates: cleaned, webSearchUsed: webUsed };
   }
 
@@ -1100,6 +1262,10 @@ Reglas:
     const rawList = parsed?.candidates;
     if (!Array.isArray(rawList)) return { candidates: [], reason: "no_candidates" };
     const cleaned = normalizeWorkCandidateRows(rawList, wantedCount + 2);
+    logIaRecommendedWorks("recommend_similar", {
+      id: `${category}:${title.slice(0, 120)}`,
+      works: cleaned,
+    });
     return { candidates: cleaned };
   }
 }
@@ -1115,4 +1281,5 @@ module.exports = {
   DreamLodgeAIAgent,
   getAiAgent,
   normalizeWorkCandidateRows,
+  logIaRecommendedWorks,
 };

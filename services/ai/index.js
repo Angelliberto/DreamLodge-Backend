@@ -40,8 +40,8 @@ async function processChatMessage({
   };
 }
 
-async function generateArtisticDescription(oceanResult) {
-  return getAiAgent().generateArtisticDescription(oceanResult);
+async function generateArtisticDescription(oceanResult, options) {
+  return getAiAgent().generateArtisticDescription(oceanResult, options);
 }
 
 async function curatePersonalizedFeed({ oceanResult, artisticProfile }) {
