@@ -10,7 +10,16 @@ const {
   getFavorites,
   addToPending,
   removeFromPending,
-  getPending
+  getPending,
+  addToDisliked,
+  removeFromDisliked,
+  getDisliked,
+  addToSeen,
+  removeFromSeen,
+  getSeen,
+  addToNotInterested,
+  removeFromNotInterested,
+  getNotInterested,
 } = require("../controllers/artworks");
 
 // Obtener todas las obras (con filtros opcionales)
@@ -36,6 +45,19 @@ router.post("/pending", authUser, addToPending);
 
 // DELETE /api/artworks/pending/:artworkId - Remover una obra de pendientes
 router.delete("/pending/:artworkId", authUser, removeFromPending);
+
+// Rutas de feedback explícito (disliked / seen / not-interested)
+router.get("/disliked", authUser, getDisliked);
+router.post("/disliked", authUser, addToDisliked);
+router.delete("/disliked/:artworkId", authUser, removeFromDisliked);
+
+router.get("/seen", authUser, getSeen);
+router.post("/seen", authUser, addToSeen);
+router.delete("/seen/:artworkId", authUser, removeFromSeen);
+
+router.get("/not-interested", authUser, getNotInterested);
+router.post("/not-interested", authUser, addToNotInterested);
+router.delete("/not-interested/:artworkId", authUser, removeFromNotInterested);
 
 // Similares recomendadas por IA para una obra base
 // POST /api/artworks/similar

@@ -49,6 +49,24 @@ function reorderByNovelty(candidates, recentTitles) {
   });
 }
 
+function mergePreferredCandidates(preferred, fallback, maxItems = 24) {
+  const out = [];
+  const seen = new Set();
+  const pushRow = (row) => {
+    if (!row || typeof row !== "object") return;
+    const key = `${String(row.category || "").trim().toLowerCase()}|${normalizeTitleForCompare(
+      row.title || ""
+    )}`;
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(row);
+  };
+
+  for (const row of preferred || []) pushRow(row);
+  for (const row of fallback || []) pushRow(row);
+  return out.slice(0, maxItems);
+}
+
 async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps = {}) {
   const logger = deps.logger || console;
   const logIaRecommendedWorks = deps.logIaRecommendedWorks || (() => {});
@@ -87,7 +105,6 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
     }
     artExtra = `\nPerfil artístico existente: ${prof}\n${desc}\n${genreLine ? `${genreLine}\n` : ""}`;
   }
-
   const prompt = `Eres curador cultural para una app de descubrimiento.
 Perfil OCEAN: Apertura ${o.toFixed(2)}, Responsabilidad ${c.toFixed(2)}, Extraversión ${e.toFixed(2)}, Amabilidad ${a.toFixed(2)}, Neuroticismo ${n.toFixed(2)}
 Huella del perfil: ${oceanFingerprint}
@@ -97,7 +114,9 @@ Reglas de diferenciación:
 Fragmentos web:
 ${webBlock || "(Sin resultados web: NO te limites a clásicos obvios; prioriza ajuste fino por subgénero, tono y rasgos OCEAN del usuario.)"}
 Devuelve entre 14 y 20 candidatos mezclando categorías.
+Genera idealmente 30 candidatos para permitir un re-ranking posterior sin perder calidad.
 Haz recomendaciones más arriesgadas (menos obvias/mainstream) SIEMPRE que mantengan fidelidad al perfil OCEAN y a genreRecommendations.
+Riesgo controlado: la exploración debe ocurrir dentro de los subgéneros del perfil, no fuera de ellos.
 Evita converger en títulos repetidos entre usuarios salvo encaje excepcional.
 Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":"...","genreHint":"..."}]}
 `;
@@ -107,7 +126,7 @@ Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":".
     text = await agent.generateWithGemini(prompt, {
       purpose: "curación feed personalizado",
       timeoutMs: 55000,
-      generationConfig: { temperature: 1.1, topP: 0.95, topK: 40 },
+      generationConfig: { temperature: 0.95, topP: 0.92, topK: 32 },
     });
   } catch (ex) {
     logger.error("curate_feed: fallo Gemini", ex);
@@ -130,17 +149,20 @@ Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":".
   const rawList = parsed.candidates;
   if (!Array.isArray(rawList)) return { candidates: [], webSearchUsed: webUsed, reason: "no_candidates" };
 
-  let cleaned = normalizeWorkCandidateRows(rawList, 24);
+  let cleaned = normalizeWorkCandidateRows(rawList, 30);
   const genreRecs = artisticProfile?.genreRecommendations;
   if (genreRecs && typeof genreRecs === "object") {
-    const aligned = normalizeSuggestedWorksByGenre(rawList, genreRecs, 24);
+    const aligned = normalizeSuggestedWorksByGenre(rawList, genreRecs, 30);
+    const combined = mergePreferredCandidates(aligned, cleaned, 30);
+    const alignedRatio = cleaned.length > 0 ? aligned.length / cleaned.length : 0;
     logger.info(
-      "[dreamlodge][feed] genre_alignment raw=%s aligned=%s usingAligned=%s",
+      "[dreamlodge][feed] genre_alignment raw=%s aligned=%s alignedRatio=%s merged=%s",
       Array.isArray(rawList) ? rawList.length : 0,
       aligned.length,
-      aligned.length >= 10
+      alignedRatio.toFixed(2),
+      combined.length
     );
-    if (aligned.length >= 10) cleaned = aligned;
+    cleaned = combined;
   }
 
   const feedEntityId = oceanResult.entityId != null ? oceanResult.entityId : oceanResult.entity_id;

@@ -1,5 +1,5 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
-const { OceanModel } = require("../models");
+const { OceanModel, UserModel } = require("../models");
 const ai = require("../services/ai");
 const {
   resolveCuratedFeedCandidates,
@@ -10,6 +10,87 @@ const {
 /** Caché en memoria por usuario (TTL corto; el cliente puede forzar refresh). */
 const FEED_CACHE = new Map();
 const FEED_TTL_MS = 2 * 60 * 60 * 1000;
+const GLOBAL_RECENT_TITLE_COUNTS = new Map();
+const GLOBAL_RECENT_TTL_MS = 6 * 60 * 60 * 1000;
+
+function norm(v) {
+  return String(v || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildUserInteractionSignals(userDoc) {
+  const sets = {
+    favorite: new Set(),
+    pending: new Set(),
+    avoidTitle: new Set(),
+    avoidCreator: new Set(),
+    likedGenres: new Set(),
+    avoidGenres: new Set(),
+  };
+  const addTitleGenreCreator = (arr, targetTitleSet, targetCreatorSet, targetGenreSet) => {
+    for (const it of arr || []) {
+      const t = norm(it?.title);
+      if (t) targetTitleSet.add(t);
+      const c = norm(it?.creator);
+      if (targetCreatorSet && c) targetCreatorSet.add(c);
+      for (const g of it?.metadata?.genres || []) {
+        const ng = norm(g);
+        if (ng) targetGenreSet.add(ng);
+      }
+    }
+  };
+  addTitleGenreCreator(userDoc?.favoriteArtworks, sets.favorite, null, sets.likedGenres);
+  addTitleGenreCreator(userDoc?.pendingArtworks, sets.pending, null, sets.likedGenres);
+  addTitleGenreCreator(userDoc?.notInterestedArtworks, sets.avoidTitle, sets.avoidCreator, sets.avoidGenres);
+  addTitleGenreCreator(userDoc?.dislikedArtworks, sets.avoidTitle, sets.avoidCreator, sets.avoidGenres);
+  addTitleGenreCreator(userDoc?.seenArtworks, sets.avoidTitle, null, sets.avoidGenres);
+  return sets;
+}
+
+function scoreByUserSignals(item, signals) {
+  const title = norm(item?.title);
+  const creator = norm(item?.creator);
+  const genres = (item?.metadata?.genres || []).map(norm).filter(Boolean);
+  let score = 0;
+  if (title && signals.favorite.has(title)) score += 1.8;
+  if (title && signals.pending.has(title)) score += 1.2;
+  if (title && signals.avoidTitle.has(title)) score -= 4.5;
+  if (creator && signals.avoidCreator.has(creator)) score -= 1.3;
+  for (const g of genres) {
+    if (signals.likedGenres.has(g)) score += 0.55;
+    if (signals.avoidGenres.has(g)) score -= 0.55;
+  }
+  return score;
+}
+
+function getGlobalRepeatPenalty(item) {
+  const title = norm(item?.title);
+  if (!title) return 0;
+  const row = GLOBAL_RECENT_TITLE_COUNTS.get(title);
+  if (!row || Date.now() - row.ts > GLOBAL_RECENT_TTL_MS) {
+    GLOBAL_RECENT_TITLE_COUNTS.delete(title);
+    return 0;
+  }
+  const count = Number(row.count || 0);
+  if (count <= 0) return 0;
+  // Penalización suave al principio, más fuerte cuando un título se vuelve demasiado común.
+  return Math.min(3.0, 0.35 * count);
+}
+
+function registerGlobalTitles(items) {
+  for (const item of items || []) {
+    const title = norm(item?.title);
+    if (!title) continue;
+    const row = GLOBAL_RECENT_TITLE_COUNTS.get(title);
+    const nextCount = row && Date.now() - row.ts <= GLOBAL_RECENT_TTL_MS ? Number(row.count || 0) + 1 : 1;
+    GLOBAL_RECENT_TITLE_COUNTS.set(title, { count: nextCount, ts: Date.now() });
+  }
+}
 
 /**
  * GET|POST /api/feed/personalized
@@ -172,21 +253,40 @@ const getPersonalizedFeedCurated = async (req, res) => {
     }
 
     const curated = data.candidates || [];
-    const [resolvedAnchors, resolvedCurated] = await Promise.all([
+    const [resolvedAnchors, resolvedCurated, userWithSignals] = await Promise.all([
       resolveCuratedFeedCandidates(suggestedWorksRaw),
       resolveCuratedFeedCandidates(curated),
+      UserModel.findById(userId)
+        .populate("favoriteArtworks")
+        .populate("pendingArtworks")
+        .populate("notInterestedArtworks")
+        .populate("dislikedArtworks")
+        .populate("seenArtworks"),
     ]);
+    const signals = buildUserInteractionSignals(userWithSignals);
+    const rerankedCurated = [...resolvedCurated]
+      .map((item) => {
+        const userScore = scoreByUserSignals(item, signals);
+        const globalPenalty = getGlobalRepeatPenalty(item);
+        return { item, s: userScore - globalPenalty, userScore, globalPenalty };
+      })
+      .filter((row) => row.s > -3.5)
+      .sort((a, b) => b.s - a.s)
+      .map((row) => row.item)
+      .slice(0, 15);
     const items = mergeCulturalFeedDedupe(
-      resolvedCurated,
+      rerankedCurated,
       resolvedAnchors
     ).slice(0, 200);
     console.log(
-      "[feed/personalized] merge userId=%s anchors=%s curated=%s final=%s",
+      "[feed/personalized] merge userId=%s anchors=%s curated=%s reranked=%s final=%s",
       key,
       resolvedAnchors.length,
       resolvedCurated.length,
+      rerankedCurated.length,
       items.length
     );
+    registerGlobalTitles(items);
 
     const responseData = {
       items,

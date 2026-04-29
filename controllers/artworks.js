@@ -521,6 +521,116 @@ const getPending = async (req, res) => {
   }
 };
 
+async function addToUserArtworkList(req, res, field, successMessage) {
+  try {
+    const { artwork } = req.body;
+    const userId = req.user._id;
+    if (!artwork) {
+      return handleHTTPError(res, { message: "Los datos de la obra son requeridos" }, 400);
+    }
+    const artworkId = await saveOrGetArtwork(artwork);
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      userId,
+      { $addToSet: { [field]: artworkId } },
+      { new: true }
+    ).populate(field);
+    if (!updatedUser) {
+      return handleHTTPError(res, { message: "Usuario no encontrado" }, 404);
+    }
+    return res.status(200).json({
+      message: successMessage,
+      data: { artworkId, [field]: updatedUser[field] || [] },
+    });
+  } catch (error) {
+    return handleHTTPError(
+      res,
+      {
+        message: "Error actualizando feedback de obra",
+        details: process.env.NODE_ENV === "development" ? error.message : undefined,
+      },
+      500
+    );
+  }
+}
+
+async function removeFromUserArtworkList(req, res, field, paramName, successMessage) {
+  try {
+    const artworkId = req.params[paramName];
+    const userId = req.user._id;
+    if (!artworkId || !mongoose.Types.ObjectId.isValid(artworkId)) {
+      return handleHTTPError(res, { message: "artworkId inválido" }, 400);
+    }
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      userId,
+      { $pull: { [field]: artworkId } },
+      { new: true }
+    ).populate(field);
+    if (!updatedUser) {
+      return handleHTTPError(res, { message: "Usuario no encontrado" }, 404);
+    }
+    return res.status(200).json({
+      message: successMessage,
+      data: { [field]: updatedUser[field] || [] },
+    });
+  } catch (error) {
+    return handleHTTPError(
+      res,
+      {
+        message: "Error removiendo feedback de obra",
+        details: process.env.NODE_ENV === "development" ? error.message : undefined,
+      },
+      500
+    );
+  }
+}
+
+async function getUserArtworkList(req, res, field) {
+  try {
+    const userId = req.user._id;
+    const user = await UserModel.findById(userId).populate({
+      path: field,
+      model: "Artwork",
+    });
+    if (!user) {
+      return handleHTTPError(res, { message: "Usuario no encontrado" }, 404);
+    }
+    return res.status(200).json({ data: user[field] || [] });
+  } catch (error) {
+    return handleHTTPError(
+      res,
+      {
+        message: "Error obteniendo feedback de obras",
+        details: process.env.NODE_ENV === "development" ? error.message : undefined,
+      },
+      500
+    );
+  }
+}
+
+const addToDisliked = async (req, res) =>
+  addToUserArtworkList(req, res, "dislikedArtworks", "Obra agregada a no me gustó");
+const removeFromDisliked = async (req, res) =>
+  removeFromUserArtworkList(req, res, "dislikedArtworks", "artworkId", "Obra removida de no me gustó");
+const getDisliked = async (req, res) => getUserArtworkList(req, res, "dislikedArtworks");
+
+const addToSeen = async (req, res) =>
+  addToUserArtworkList(req, res, "seenArtworks", "Obra marcada como ya vista");
+const removeFromSeen = async (req, res) =>
+  removeFromUserArtworkList(req, res, "seenArtworks", "artworkId", "Obra removida de ya vista");
+const getSeen = async (req, res) => getUserArtworkList(req, res, "seenArtworks");
+
+const addToNotInterested = async (req, res) =>
+  addToUserArtworkList(req, res, "notInterestedArtworks", "Obra agregada a no me interesa");
+const removeFromNotInterested = async (req, res) =>
+  removeFromUserArtworkList(
+    req,
+    res,
+    "notInterestedArtworks",
+    "artworkId",
+    "Obra removida de no me interesa"
+  );
+const getNotInterested = async (req, res) => getUserArtworkList(req, res, "notInterestedArtworks");
+
 /**
  * Obtener 3 obras similares recomendadas por IA para una obra base.
  * POST /api/artworks/similar
@@ -583,5 +693,14 @@ module.exports = {
   addToPending,
   removeFromPending,
   getPending,
+  addToDisliked,
+  removeFromDisliked,
+  getDisliked,
+  addToSeen,
+  removeFromSeen,
+  getSeen,
+  addToNotInterested,
+  removeFromNotInterested,
+  getNotInterested,
   getSimilarArtworks,
 };

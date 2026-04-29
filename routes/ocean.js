@@ -6,7 +6,7 @@ const {
   getTestResults,
   getUserTestResults,
   deleteTestResults,
-  generateArtisticDescription
+  generateArtisticDescription,
 } = require("../controllers/ocean");
 
 // Guardar o actualizar resultados del test OCEAN

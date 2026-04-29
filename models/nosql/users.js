@@ -20,6 +20,21 @@ const usersModel = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Artwork'
   }],
+  // Obras marcadas como "no me gustó"
+  dislikedArtworks: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Artwork'
+  }],
+  // Obras que el usuario ya vio/consumió
+  seenArtworks: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Artwork'
+  }],
+  // Obras que el usuario no quiere volver a ver en recomendaciones
+  notInterestedArtworks: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Artwork'
+  }],
   validated_email: { type: Boolean, default: false },
   emailValidationCode: {
     type: String,
