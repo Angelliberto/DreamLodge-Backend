@@ -221,6 +221,65 @@ const GENRE_REC_KEYS = [
   "arte-visual",
 ];
 
+const DEFAULT_CANON_TITLES = [
+  "stalker",
+  "blade runner",
+  "blade runner 2049",
+  "persona",
+  "arrival",
+  "la llegada",
+  "music for airports",
+  "ambient 1: music for airports",
+  "music for 18 musicians",
+  "disco elysium",
+  "the witness",
+  "journey",
+  "meditaciones",
+  "el extranjero",
+  "1984",
+];
+
+function scoreBand(v) {
+  const n = Number(v) || 0;
+  if (n >= 3.8) return "high";
+  if (n <= 2.2) return "low";
+  return "mid";
+}
+
+function buildProfileDrivenCurationRules({ o, c, e, a, n, fingerprint }) {
+  const ob = scoreBand(o);
+  const cb = scoreBand(c);
+  const eb = scoreBand(e);
+  const ab = scoreBand(a);
+  const nb = scoreBand(n);
+  const fingerprintNum = parseInt(String(fingerprint || "0"), 16) || 0;
+  const rotate = fingerprintNum % Math.max(DEFAULT_CANON_TITLES.length, 1);
+  const avoidTitles = Array.from({ length: 6 }).map((_, i) => {
+    return DEFAULT_CANON_TITLES[(rotate + i) % DEFAULT_CANON_TITLES.length];
+  });
+  const rules = [
+    `Apertura ${ob}, Responsabilidad ${cb}, Extraversión ${eb}, Amabilidad ${ab}, Neuroticismo ${nb}.`,
+    eb === "high"
+      ? "Prioriza propuestas con energía social y dinamismo."
+      : eb === "low"
+      ? "Prioriza propuestas introspectivas, contemplativas y de ritmo pausado."
+      : "Combina propuestas introspectivas y sociales de forma equilibrada.",
+    nb === "high"
+      ? "Incluye intensidad emocional y catarsis guiada; evita frialdad excesiva."
+      : nb === "low"
+      ? "Incluye calma, precisión formal y coherencia estética."
+      : "Alterna estabilidad tonal con contraste emocional moderado.",
+    ob === "high"
+      ? "Incluye riesgo creativo y estructuras menos convencionales."
+      : ob === "low"
+      ? "Incluye claridad narrativa y formatos más accesibles."
+      : "Mezcla innovación moderada con formatos familiares.",
+    "Evita listas clónicas de obras hiperrepetidas entre perfiles.",
+    `Evita usar estas obras salvo encaje excepcional: ${avoidTitles.join(" | ")}.`,
+  ];
+  return { rulesText: rules.join("\n- "), avoidTitles };
+}
+
 function buildOceanFingerprint(scores) {
   if (!scores || typeof scores !== "object") return "na";
   const dims = [
@@ -272,6 +331,16 @@ function normalizeGenreText(raw) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeTitleForCompare(raw) {
+  return String(raw || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -335,6 +404,17 @@ function normalizeSuggestedWorksByGenre(rawList, genreRecommendations, maxItems 
   }
 
   return filtered;
+}
+
+function countDefaultCanonOverlap(works, avoidTitles) {
+  if (!Array.isArray(works) || !works.length) return 0;
+  const avoid = new Set((avoidTitles || []).map(normalizeTitleForCompare));
+  let count = 0;
+  for (const w of works) {
+    const t = normalizeTitleForCompare(w?.title || "");
+    if (t && avoid.has(t)) count += 1;
+  }
+  return count;
 }
 
 function envModels() {
@@ -932,6 +1012,14 @@ class DreamLodgeAIAgent {
     const a = traitTotal(scores, "agreeableness");
     const n = traitTotal(scores, "neuroticism");
     const testType = oceanResult.testType;
+    const profileDrivenRules = buildProfileDrivenCurationRules({
+      o,
+      c,
+      e,
+      a,
+      n,
+      fingerprint: oceanFingerprint,
+    });
 
     if (!this.configured()) {
       const err = new Error(
@@ -986,6 +1074,9 @@ Perfil numérico (0-5):
 - Apertura ${Number(o).toFixed(2)}, Responsabilidad ${Number(c).toFixed(2)}, Extraversión ${Number(e).toFixed(2)}, Amabilidad ${Number(a).toFixed(2)}, Neuroticismo ${Number(n).toFixed(2)}
 
 ${sub}
+Reglas de diferenciación entre perfiles (OBLIGATORIO):
+- ${profileDrivenRules.rulesText}
+
 Fragmentos web (títulos y listas; prioriza obras que aparezcan aquí si encajan con OCEAN):
 ${webBlock || "(Sin resultados web: elige obras muy conocidas y coherentes con el perfil.)"}
 
@@ -1118,6 +1209,31 @@ Reglas suggestedWorks:
     if (missingWorkCategories.length) {
       const err = new Error(
         `Las obras sugeridas no respetan genreRecommendations. Faltan obras alineadas en: ${missingWorkCategories.join(", ")}`
+      );
+      err.statusCode = 502;
+      throw err;
+    }
+
+    const defaultCanonOverlap = countDefaultCanonOverlap(
+      parsed.suggestedWorks,
+      profileDrivenRules.avoidTitles
+    );
+    if (defaultCanonOverlap >= 4) {
+      if (!options._retryDiversified) {
+        logger.warn(
+          "[dreamlodge][ia_obras] artistic_description retry_diversify userId=%s overlap=%s",
+          userId || "(anon)",
+          defaultCanonOverlap
+        );
+        return this.generateArtisticDescription(oceanResult, {
+          ...options,
+          regenerationSeed:
+            regenerationSeed || `auto-diversify-${Date.now().toString(36)}`,
+          _retryDiversified: true,
+        });
+      }
+      const err = new Error(
+        "Las obras sugeridas son demasiado parecidas a una lista canónica repetitiva; se requiere mayor diferenciación por perfil."
       );
       err.statusCode = 502;
       throw err;
