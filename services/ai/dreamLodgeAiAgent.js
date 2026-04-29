@@ -468,11 +468,13 @@ function countDefaultCanonOverlap(works, avoidTitles) {
 
 function countGlobalCanonOverlap(works) {
   if (!Array.isArray(works) || !works.length) return 0;
-  const canon = new Set(DEFAULT_CANON_TITLES.map(normalizeTitleForCompare));
+  const canon = DEFAULT_CANON_TITLES.map(normalizeTitleForCompare);
   let count = 0;
   for (const w of works) {
     const t = normalizeTitleForCompare(w?.title || "");
-    if (t && canon.has(t)) count += 1;
+    if (!t) continue;
+    const overlapsCanon = canon.some((c) => c && (t === c || t.includes(c) || c.includes(t)));
+    if (overlapsCanon) count += 1;
   }
   return count;
 }
@@ -487,7 +489,6 @@ function envModels() {
     "gemini-2.0-flash",
     "gemini-1.5-flash",
     "gemini-1.5-pro",
-    "gemini-1.0-pro",
   ].filter(Boolean);
   return [...new Set(candidates)];
 }
@@ -1394,6 +1395,15 @@ Reglas suggestedWorks:
     const e = traitTotal(scores, "extraversion");
     const a = traitTotal(scores, "agreeableness");
     const n = traitTotal(scores, "neuroticism");
+    const oceanFingerprint = buildOceanFingerprint(scores);
+    const profileDrivenRules = buildProfileDrivenCurationRules({
+      o,
+      c,
+      e,
+      a,
+      n,
+      fingerprint: oceanFingerprint,
+    });
 
     const personalityLine = `openness ${o.toFixed(1)} conscientiousness ${c.toFixed(1)} extraversion ${e.toFixed(1)} agreeableness ${a.toFixed(1)} neuroticism ${n.toFixed(1)}`;
     const [webBlock, webUsed] = await buildCuratorContextFromSerper(
@@ -1522,7 +1532,7 @@ Reglas estrictas:
       overlapGlobal,
       cleaned.length
     );
-    if (overlapAvoid >= 4 || overlapGlobal >= 4) {
+    if (overlapAvoid >= 4 || overlapGlobal >= 3) {
       logger.warn(
         "[dreamlodge][feed] rejected_by_overlap fingerprint=%s avoidOverlap=%s globalOverlap=%s",
         oceanFingerprint,
