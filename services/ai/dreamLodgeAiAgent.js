@@ -417,6 +417,17 @@ function countDefaultCanonOverlap(works, avoidTitles) {
   return count;
 }
 
+function countGlobalCanonOverlap(works) {
+  if (!Array.isArray(works) || !works.length) return 0;
+  const canon = new Set(DEFAULT_CANON_TITLES.map(normalizeTitleForCompare));
+  let count = 0;
+  for (const w of works) {
+    const t = normalizeTitleForCompare(w?.title || "");
+    if (t && canon.has(t)) count += 1;
+  }
+  return count;
+}
+
 function envModels() {
   const raw = process.env.GEMINI_MODEL;
   const candidates = [
@@ -1011,6 +1022,15 @@ class DreamLodgeAIAgent {
     const e = traitTotal(scores, "extraversion");
     const a = traitTotal(scores, "agreeableness");
     const n = traitTotal(scores, "neuroticism");
+    const oceanFingerprint = buildOceanFingerprint(scores);
+    const profileDrivenRules = buildProfileDrivenCurationRules({
+      o,
+      c,
+      e,
+      a,
+      n,
+      fingerprint: oceanFingerprint,
+    });
     const testType = oceanResult.testType;
     const profileDrivenRules = buildProfileDrivenCurationRules({
       o,
@@ -1239,6 +1259,28 @@ Reglas suggestedWorks:
       throw err;
     }
 
+    const globalCanonOverlap = countGlobalCanonOverlap(parsed.suggestedWorks);
+    if (globalCanonOverlap >= 3) {
+      if (!options._retryDiversifiedGlobal) {
+        logger.warn(
+          "[dreamlodge][ia_obras] artistic_description retry_global_canon userId=%s overlap=%s",
+          userId || "(anon)",
+          globalCanonOverlap
+        );
+        return this.generateArtisticDescription(oceanResult, {
+          ...options,
+          regenerationSeed:
+            regenerationSeed || `auto-global-${Date.now().toString(36)}`,
+          _retryDiversifiedGlobal: true,
+        });
+      }
+      const err = new Error(
+        "Las obras sugeridas siguen demasiado cerca de títulos canónicos repetidos; no diferencian bien el perfil."
+      );
+      err.statusCode = 502;
+      throw err;
+    }
+
     logIaRecommendedWorks("artistic_description", {
       id: userId || undefined,
       works: parsed.suggestedWorks,
@@ -1311,12 +1353,15 @@ Reglas suggestedWorks:
 
 Perfil OCEAN del usuario (escala 0-5):
 - Apertura ${o.toFixed(2)}, Responsabilidad ${c.toFixed(2)}, Extraversión ${e.toFixed(2)}, Amabilidad ${a.toFixed(2)}, Neuroticismo ${n.toFixed(2)}
+Huella del perfil: ${oceanFingerprint}
 ${artExtra}
+Reglas de diferenciación entre perfiles (OBLIGATORIO):
+- ${profileDrivenRules.rulesText}
 Fragmentos recientes de búsqueda web (pueden incluir títulos reales; úsalos si encajan con el perfil):
 ${webBlock || "(Sin resultados web: elige obras clásicas o muy conocidas, títulos exactos en español o en el título original más reconocible.)"}
 
 TAREA: Devuelve SOLO un JSON válido, sin markdown ni texto alrededor, con esta forma:
-{"candidates":[{"category":"cine","title":"Nombre exacto de la obra","creator":"autor o director opcional"}, ...]}
+{"candidates":[{"category":"cine","title":"Nombre exacto de la obra","creator":"autor o director opcional","genreHint":"género elegido desde genreRecommendations de esa categoría"}, ...]}
 
 Reglas estrictas:
 - "category" debe ser exactamente uno de: cine, musica, literatura, videojuegos, arte-visual
@@ -1324,6 +1369,7 @@ Reglas estrictas:
 - Solo obras reales que existan (película, serie, álbum, libro, videojuego, artista u obra de arte).
 - "title" debe ser el título principal buscable en TMDB, Spotify, Google Books, IGDB o museos.
 - Para arte-visual usa nombre de artista + obra si aplica, o solo artista reconocible.
+- "genreHint" obligatorio: debe ser uno de los géneros/estilos de la categoría en genreRecommendations (del perfil artístico actual).
 - No incluyas explicaciones ni campos extra fuera de "candidates".
 `;
 
@@ -1370,7 +1416,27 @@ Reglas estrictas:
       };
     }
 
-    const cleaned = normalizeWorkCandidateRows(rawList, 24);
+    let cleaned = normalizeWorkCandidateRows(rawList, 24);
+    const genreRecs = artisticProfile?.genreRecommendations;
+    if (genreRecs && typeof genreRecs === "object") {
+      const aligned = normalizeSuggestedWorksByGenre(rawList, genreRecs, 24);
+      if (aligned.length >= 10) {
+        cleaned = aligned;
+      }
+    }
+
+    const overlapAvoid = countDefaultCanonOverlap(
+      cleaned,
+      profileDrivenRules.avoidTitles
+    );
+    const overlapGlobal = countGlobalCanonOverlap(cleaned);
+    if (overlapAvoid >= 4 || overlapGlobal >= 4) {
+      return {
+        candidates: [],
+        webSearchUsed: webUsed,
+        reason: "too_canonical_repeated",
+      };
+    }
     const feedEntityId =
       oceanResult.entityId != null
         ? oceanResult.entityId

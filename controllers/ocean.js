@@ -5,6 +5,7 @@ const ai = require("../services/ai");
 
 const BIG_FIVE_TRAITS = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism'];
 const ARTISTIC_REFRESH_MS = 24 * 60 * 60 * 1000;
+const ARTISTIC_PROMPT_VERSION = "v3-diversified";
 
 function parseArtisticDescriptionPayload(raw) {
   if (!raw || typeof raw !== "string") return null;
@@ -22,6 +23,7 @@ function getArtisticMeta(payload) {
   const generatedAtMs = Number.parseInt(String(meta.generatedAt || ""), 10);
   return {
     generatedAtMs: Number.isFinite(generatedAtMs) ? generatedAtMs : null,
+    promptVersion: String(meta.promptVersion || "").trim() || null,
   };
 }
 
@@ -514,10 +516,11 @@ const generateArtisticDescription = async (req, res) => {
     if (oceanResult.artisticDescription) {
       const parsedDescription = parseArtisticDescriptionPayload(oceanResult.artisticDescription);
       if (parsedDescription) {
-        const { generatedAtMs } = getArtisticMeta(parsedDescription);
+        const { generatedAtMs, promptVersion } = getArtisticMeta(parsedDescription);
         const isFresh =
           generatedAtMs != null && Date.now() - generatedAtMs < ARTISTIC_REFRESH_MS;
-        if (!forceRegenerate && isFresh) {
+        const isCurrentPromptVersion = promptVersion === ARTISTIC_PROMPT_VERSION;
+        if (!forceRegenerate && isFresh && isCurrentPromptVersion) {
           return res.status(200).json({
             message: "Descripción artística obtenida desde caché",
             data: parsedDescription
@@ -606,6 +609,7 @@ const generateArtisticDescription = async (req, res) => {
       _meta: {
         generatedAt: Date.now(),
         refreshPolicy: "daily_or_on_change",
+        promptVersion: ARTISTIC_PROMPT_VERSION,
       },
     };
     oceanResult.artisticDescription = JSON.stringify(artisticPayload);
