@@ -15,6 +15,7 @@ const {
 const RECENT_FEED_TITLES = new Map();
 const RECENT_TTL_MS = 24 * 60 * 60 * 1000;
 const RECENT_KEEP = 40;
+const TARGET_CANDIDATES = 60;
 
 function getRecentTitlesForUser(userId) {
   const key = String(userId || "").trim();
@@ -113,8 +114,8 @@ Reglas de diferenciación:
 - ${profileDrivenRules.rulesText}
 Fragmentos web:
 ${webBlock || "(Sin resultados web: NO te limites a clásicos obvios; prioriza ajuste fino por subgénero, tono y rasgos OCEAN del usuario.)"}
-Devuelve entre 14 y 20 candidatos mezclando categorías.
-Genera idealmente 30 candidatos para permitir un re-ranking posterior sin perder calidad.
+Genera exactamente ${TARGET_CANDIDATES} candidatos mezclando categorías, equilibrando cine/música/literatura/videojuegos/arte-visual.
+Mínimo 10 candidatos por categoría cuando sea posible.
 Haz recomendaciones más arriesgadas (menos obvias/mainstream) SIEMPRE que mantengan fidelidad al perfil OCEAN y a genreRecommendations.
 Riesgo controlado: la exploración debe ocurrir dentro de los subgéneros del perfil, no fuera de ellos.
 Evita converger en títulos repetidos entre usuarios salvo encaje excepcional.
@@ -149,11 +150,11 @@ Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":".
   const rawList = parsed.candidates;
   if (!Array.isArray(rawList)) return { candidates: [], webSearchUsed: webUsed, reason: "no_candidates" };
 
-  let cleaned = normalizeWorkCandidateRows(rawList, 30);
+  let cleaned = normalizeWorkCandidateRows(rawList, TARGET_CANDIDATES);
   const genreRecs = artisticProfile?.genreRecommendations;
   if (genreRecs && typeof genreRecs === "object") {
-    const aligned = normalizeSuggestedWorksByGenre(rawList, genreRecs, 30);
-    const combined = mergePreferredCandidates(aligned, cleaned, 30);
+    const aligned = normalizeSuggestedWorksByGenre(rawList, genreRecs, TARGET_CANDIDATES);
+    const combined = mergePreferredCandidates(aligned, cleaned, TARGET_CANDIDATES);
     const alignedRatio = cleaned.length > 0 ? aligned.length / cleaned.length : 0;
     logger.info(
       "[dreamlodge][feed] genre_alignment raw=%s aligned=%s alignedRatio=%s merged=%s",

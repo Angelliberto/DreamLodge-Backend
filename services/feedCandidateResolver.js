@@ -458,7 +458,7 @@ async function resolveCuratedFeedCandidates(candidates) {
   if (!candidates?.length) return [];
   const normalized = [];
   const seen = new Set();
-  for (const row of candidates.slice(0, 40)) {
+  for (const row of candidates.slice(0, 80)) {
     const n = normalizeCandidate(row);
     if (!n) continue;
     const k = `${n.category}:${n.title.toLowerCase()}`;
@@ -471,7 +471,7 @@ async function resolveCuratedFeedCandidates(candidates) {
   const genreMap = await getTmdbGenreMap();
   const resolved = [];
   const idSeen = new Set();
-  const chunk = 4;
+  const chunk = 8;
   for (let i = 0; i < normalized.length; i += chunk) {
     const slice = normalized.slice(i, i + chunk);
     const batch = await Promise.all(slice.map((c) => resolveOne(c, genreMap)));
