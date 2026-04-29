@@ -88,7 +88,7 @@ async function generateArtisticDescription(agent, oceanResult, options = {}, dep
 
   const variationBlock = regenerationSeed
     ? `- Semilla de regeneración: ${regenerationSeed}. Elige una combinación distinta de obras ancla (suggestedWorks) respecto a otras ejecuciones con la misma huella; prioriza títulos distintos siempre que sigan siendo coherentes con el perfil y con genreRecommendations.`
-    : "- Primera generación o sin semilla: elige obras ancla variadas y muy reconocibles.";
+    : "- Primera generación o sin semilla: elige obras ancla variadas, menos obvias y coherentes con el perfil.";
 
   const prompt = `Actúa como analista psicométrico-cultural de alta precisión.
 Tu tarea es:
@@ -106,7 +106,7 @@ Reglas de diferenciación entre perfiles (OBLIGATORIO):
 - ${profileDrivenRules.rulesText}
 
 Fragmentos web (títulos y listas; prioriza obras que aparezcan aquí si encajan con OCEAN):
-${webBlock || "(Sin resultados web: elige obras muy conocidas y coherentes con el perfil.)"}
+${webBlock || "(Sin resultados web: prioriza obras menos obvias pero fieles al perfil; evita caer en los mismos títulos universales.)"}
 
 En tu razonamiento interno (no lo escribas): elige 10-16 obras reales mezclando categorías; que cada categoría tenga al menos una obra coherente con los géneros que pusiste para ese ámbito.
 

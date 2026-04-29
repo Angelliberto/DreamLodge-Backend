@@ -177,8 +177,8 @@ const getPersonalizedFeedCurated = async (req, res) => {
       resolveCuratedFeedCandidates(curated),
     ]);
     const items = mergeCulturalFeedDedupe(
-      resolvedAnchors,
-      resolvedCurated
+      resolvedCurated,
+      resolvedAnchors
     ).slice(0, 200);
     console.log(
       "[feed/personalized] merge userId=%s anchors=%s curated=%s final=%s",

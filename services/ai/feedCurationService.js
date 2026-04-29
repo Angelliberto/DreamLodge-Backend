@@ -6,10 +6,48 @@ const {
   buildOceanFingerprint,
   normalizeSuggestedWorksByGenre,
   normalizeWorkCandidateRows,
+  normalizeTitleForCompare,
   countDefaultCanonOverlap,
   countGlobalCanonOverlap,
   GENRE_REC_KEYS,
 } = require("./agentUtils");
+
+const RECENT_FEED_TITLES = new Map();
+const RECENT_TTL_MS = 24 * 60 * 60 * 1000;
+const RECENT_KEEP = 40;
+
+function getRecentTitlesForUser(userId) {
+  const key = String(userId || "").trim();
+  if (!key) return new Set();
+  const row = RECENT_FEED_TITLES.get(key);
+  if (!row || Date.now() - row.ts > RECENT_TTL_MS) {
+    RECENT_FEED_TITLES.delete(key);
+    return new Set();
+  }
+  return new Set(Array.isArray(row.titles) ? row.titles : []);
+}
+
+function saveRecentTitlesForUser(userId, works) {
+  const key = String(userId || "").trim();
+  if (!key) return;
+  const prev = getRecentTitlesForUser(key);
+  const next = [];
+  for (const w of works || []) {
+    const t = normalizeTitleForCompare(w?.title || "");
+    if (t) next.push(t);
+  }
+  const merged = [...new Set([...next, ...Array.from(prev)])].slice(0, RECENT_KEEP);
+  RECENT_FEED_TITLES.set(key, { ts: Date.now(), titles: merged });
+}
+
+function reorderByNovelty(candidates, recentTitles) {
+  if (!Array.isArray(candidates) || !candidates.length || !recentTitles?.size) return candidates || [];
+  return [...candidates].sort((a, b) => {
+    const aSeen = recentTitles.has(normalizeTitleForCompare(a?.title || "")) ? 1 : 0;
+    const bSeen = recentTitles.has(normalizeTitleForCompare(b?.title || "")) ? 1 : 0;
+    return aSeen - bSeen;
+  });
+}
 
 async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps = {}) {
   const logger = deps.logger || console;
@@ -58,6 +96,9 @@ Reglas de diferenciación:
 - ${profileDrivenRules.rulesText}
 Fragmentos web:
 ${webBlock || "(Sin resultados web: NO te limites a clásicos obvios; prioriza ajuste fino por subgénero, tono y rasgos OCEAN del usuario.)"}
+Devuelve entre 14 y 20 candidatos mezclando categorías.
+Haz recomendaciones más arriesgadas (menos obvias/mainstream) SIEMPRE que mantengan fidelidad al perfil OCEAN y a genreRecommendations.
+Evita converger en títulos repetidos entre usuarios salvo encaje excepcional.
 Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":"...","genreHint":"..."}]}
 `;
 
@@ -102,6 +143,20 @@ Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":".
     if (aligned.length >= 10) cleaned = aligned;
   }
 
+  const feedEntityId = oceanResult.entityId != null ? oceanResult.entityId : oceanResult.entity_id;
+  const recentTitles = getRecentTitlesForUser(feedEntityId);
+  const reordered = reorderByNovelty(cleaned, recentTitles);
+  if (recentTitles.size) {
+    logger.info(
+      "[dreamlodge][feed] novelty_reorder fingerprint=%s before=%s after=%s recent=%s",
+      oceanFingerprint,
+      cleaned.length,
+      reordered.length,
+      recentTitles.size
+    );
+  }
+  cleaned = reordered;
+
   const overlapAvoid = countDefaultCanonOverlap(cleaned, profileDrivenRules.avoidTitles);
   const overlapGlobal = countGlobalCanonOverlap(cleaned);
   logger.info(
@@ -112,11 +167,11 @@ Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":".
     cleaned.length
   );
 
-  const feedEntityId = oceanResult.entityId != null ? oceanResult.entityId : oceanResult.entity_id;
   logIaRecommendedWorks("feed_personalized", {
     id: feedEntityId != null ? String(feedEntityId) : undefined,
     works: cleaned,
   });
+  saveRecentTitlesForUser(feedEntityId, cleaned);
   return { candidates: cleaned, webSearchUsed: webUsed };
 }
 
