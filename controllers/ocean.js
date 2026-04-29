@@ -520,6 +520,13 @@ const generateArtisticDescription = async (req, res) => {
         const isFresh =
           generatedAtMs != null && Date.now() - generatedAtMs < ARTISTIC_REFRESH_MS;
         const isCurrentPromptVersion = promptVersion === ARTISTIC_PROMPT_VERSION;
+        console.log(
+          "[ocean artistic-description] cache_check userId=%s isFresh=%s promptVersion=%s currentVersion=%s",
+          userId,
+          Boolean(isFresh),
+          promptVersion || "(none)",
+          ARTISTIC_PROMPT_VERSION
+        );
         if (!forceRegenerate && isFresh && isCurrentPromptVersion) {
           return res.status(200).json({
             message: "Descripción artística obtenida desde caché",
@@ -612,6 +619,12 @@ const generateArtisticDescription = async (req, res) => {
         promptVersion: ARTISTIC_PROMPT_VERSION,
       },
     };
+    console.log(
+      "[ocean artistic-description] save userId=%s promptVersion=%s suggestedWorks=%s",
+      userId,
+      ARTISTIC_PROMPT_VERSION,
+      Array.isArray(artisticPayload?.suggestedWorks) ? artisticPayload.suggestedWorks.length : 0
+    );
     oceanResult.artisticDescription = JSON.stringify(artisticPayload);
     await oceanResult.save();
 

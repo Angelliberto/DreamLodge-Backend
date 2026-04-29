@@ -1262,6 +1262,14 @@ Reglas suggestedWorks:
     const genreMetrics = genreSpecificityMetrics(genresNorm);
     const genericRatio =
       genreMetrics.total > 0 ? genreMetrics.genericCount / genreMetrics.total : 1;
+    logger.info(
+      "[dreamlodge][ia_profile] genre_specificity userId=%s total=%s generic=%s specific=%s genericRatio=%s",
+      userId || "(anon)",
+      genreMetrics.total,
+      genreMetrics.genericCount,
+      genreMetrics.specificCount,
+      genericRatio.toFixed(2)
+    );
     if (genericRatio > 0.3) {
       if (!options._retryGenreSpecificity) {
         logger.warn(
@@ -1312,6 +1320,15 @@ Reglas suggestedWorks:
       parsed.suggestedWorks,
       profileDrivenRules.avoidTitles
     );
+    const globalCanonOverlap = countGlobalCanonOverlap(parsed.suggestedWorks);
+    logger.info(
+      "[dreamlodge][ia_profile] overlap_checks userId=%s fingerprint=%s avoidOverlap=%s globalOverlap=%s works=%s",
+      userId || "(anon)",
+      oceanFingerprint,
+      defaultCanonOverlap,
+      globalCanonOverlap,
+      parsed.suggestedWorks.length
+    );
     if (defaultCanonOverlap >= 4) {
       if (!options._retryDiversified) {
         logger.warn(
@@ -1332,8 +1349,6 @@ Reglas suggestedWorks:
       err.statusCode = 502;
       throw err;
     }
-
-    const globalCanonOverlap = countGlobalCanonOverlap(parsed.suggestedWorks);
     if (globalCanonOverlap >= 3) {
       if (!options._retryDiversifiedGlobal) {
         logger.warn(
@@ -1494,6 +1509,12 @@ Reglas estrictas:
     const genreRecs = artisticProfile?.genreRecommendations;
     if (genreRecs && typeof genreRecs === "object") {
       const aligned = normalizeSuggestedWorksByGenre(rawList, genreRecs, 24);
+      logger.info(
+        "[dreamlodge][feed] genre_alignment raw=%s aligned=%s usingAligned=%s",
+        Array.isArray(rawList) ? rawList.length : 0,
+        aligned.length,
+        aligned.length >= 10
+      );
       if (aligned.length >= 10) {
         cleaned = aligned;
       }
@@ -1504,7 +1525,20 @@ Reglas estrictas:
       profileDrivenRules.avoidTitles
     );
     const overlapGlobal = countGlobalCanonOverlap(cleaned);
+    logger.info(
+      "[dreamlodge][feed] overlap_checks fingerprint=%s avoidOverlap=%s globalOverlap=%s candidates=%s",
+      oceanFingerprint,
+      overlapAvoid,
+      overlapGlobal,
+      cleaned.length
+    );
     if (overlapAvoid >= 4 || overlapGlobal >= 4) {
+      logger.warn(
+        "[dreamlodge][feed] rejected_by_overlap fingerprint=%s avoidOverlap=%s globalOverlap=%s",
+        oceanFingerprint,
+        overlapAvoid,
+        overlapGlobal
+      );
       return {
         candidates: [],
         webSearchUsed: webUsed,

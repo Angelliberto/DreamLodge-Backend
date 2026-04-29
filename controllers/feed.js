@@ -79,7 +79,20 @@ const getPersonalizedFeedCurated = async (req, res) => {
         const sameOceanVersion =
           Number(hit.oceanUpdatedAt || 0) === Number(oceanUpdatedAt || 0);
         const sameDay = Number(hit.dayKey || -1) === Number(today);
+        console.log(
+          "[feed/personalized] cache_check userId=%s sameOcean=%s sameDay=%s cacheAgeMs=%s",
+          key,
+          Boolean(sameOceanVersion),
+          Boolean(sameDay),
+          Date.now() - hit.ts
+        );
         if (Array.isArray(hit.data?.items) && sameOceanVersion && sameDay) {
+          console.log(
+            "[feed/personalized] cache_hit userId=%s items=%s reason=%s",
+            key,
+            hit.data.items.length,
+            hit.data.reason || "cached"
+          );
           return res.status(200).json({
             message: "ok",
             data: { ...hit.data, cached: true },
@@ -138,6 +151,13 @@ const getPersonalizedFeedCurated = async (req, res) => {
     let data;
     try {
       data = await ai.curatePersonalizedFeed(payload);
+      console.log(
+        "[feed/personalized] ai_curate userId=%s candidates=%s reason=%s webSearchUsed=%s",
+        key,
+        Array.isArray(data?.candidates) ? data.candidates.length : 0,
+        data?.reason || "ok",
+        Boolean(data?.webSearchUsed)
+      );
     } catch (curateErr) {
       console.error("[feed/personalized] curación IA falló:", curateErr?.message || curateErr);
       const resolvedAnchors = await resolveCuratedFeedCandidates(suggestedWorksRaw);
@@ -168,6 +188,13 @@ const getPersonalizedFeedCurated = async (req, res) => {
       resolvedAnchors,
       resolvedCurated
     ).slice(0, 200);
+    console.log(
+      "[feed/personalized] merge userId=%s anchors=%s curated=%s final=%s",
+      key,
+      resolvedAnchors.length,
+      resolvedCurated.length,
+      items.length
+    );
 
     const responseData = {
       items,
