@@ -266,6 +266,77 @@ function normalizeGenreRecommendations(raw) {
   return out;
 }
 
+function normalizeGenreText(raw) {
+  return String(raw || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isGenreHintCompatible(genreHint, allowedGenres) {
+  if (!genreHint || !Array.isArray(allowedGenres) || !allowedGenres.length) return false;
+  const hint = normalizeGenreText(genreHint);
+  if (!hint) return false;
+  const allowed = allowedGenres.map((g) => normalizeGenreText(g)).filter(Boolean);
+  return allowed.some(
+    (g) => hint === g || hint.includes(g) || g.includes(hint)
+  );
+}
+
+function normalizeProfileDescription(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+
+  // Keep only meaningful non-empty paragraphs.
+  const paragraphs = text
+    .split(/\n\s*\n/g)
+    .map((p) => p.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  // If model returns long multi-paragraph analysis, keep the final synthesis paragraph.
+  const summary = (paragraphs.length ? paragraphs[paragraphs.length - 1] : text)
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return summary.length > 900 ? `${summary.slice(0, 899)}…` : summary;
+}
+
+function normalizeSuggestedWorksByGenre(rawList, genreRecommendations, maxItems = 20) {
+  if (!Array.isArray(rawList) || !genreRecommendations || typeof genreRecommendations !== "object") {
+    return [];
+  }
+
+  const cleaned = normalizeWorkCandidateRows(rawList, maxItems * 2);
+  const byKey = new Map();
+  for (const item of rawList) {
+    if (!item || typeof item !== "object") continue;
+    const key = `${String(item.category || "").trim().toLowerCase().replace(/\s+/g, "").replace(/_/g, "-")}|${String(item.title || "").trim().toLowerCase()}`;
+    byKey.set(key, item);
+  }
+
+  const filtered = [];
+  for (const row of cleaned) {
+    const key = `${row.category}|${String(row.title || "").trim().toLowerCase()}`;
+    const original = byKey.get(key);
+    const hint =
+      original?.genreHint ||
+      original?.genre ||
+      original?.style ||
+      original?.subgenre ||
+      "";
+    const allowed = genreRecommendations[row.category] || [];
+    if (isGenreHintCompatible(hint, allowed)) {
+      filtered.push(row);
+      if (filtered.length >= maxItems) break;
+    }
+  }
+
+  return filtered;
+}
+
 function envModels() {
   const raw = process.env.GEMINI_MODEL;
   const candidates = [
@@ -887,24 +958,13 @@ class DreamLodgeAIAgent {
       webSearchUsedArtistic
     );
 
-    const descriptionGuidelines =
-      testType === "deep"
-        ? `Descripción (campo "description") para test largo/deep:
-- Mínimo 4 párrafos, con análisis complejo y bien desarrollado.
-- Analiza explícitamente las 5 dimensiones OCEAN y TODAS las facetas/subfacetas listadas en "Subfacetas detalladas".
-- No omitas ninguna subfaceta del bloque; debes integrarlas en el análisis, aunque sea brevemente.
-- Explica patrones, tensiones internas y combinaciones entre rasgos (no solo una lista de puntajes).
-- Incluye implicaciones culturales concretas: qué tipo de experiencias podrían resonar y en qué condiciones.
-- NO hagas un reporte descriptivo de puntajes o una explicación faceta-por-faceta.
-- NO repitas números ni listes subfacetas en formato inventario; esa información ya la ve el usuario en resultados.
-- Enfócate en una síntesis psicológica profunda: motivaciones, forma de procesar experiencias, sensibilidad estética, y estilos narrativos/sonoros/visuales que podrían conectar con su mundo interno.
-- Traduce el perfil a afinidades culturales transversales (temas, tonos, ritmos, complejidad, riesgo creativo, intimidad social, etc.), no solo a etiquetas sueltas.
-- Evita afirmaciones absolutas sobre gustos; usa lenguaje probabilístico y condicional.`
-        : `Descripción (campo "description") para test corto/quick:
-- Mínimo 3 párrafos completos.
-- Analiza las 5 dimensiones OCEAN disponibles, con interpretación cuidadosa y útil.
-- Evita simplificaciones o frases genéricas de una sola línea.
-- Evita afirmaciones absolutas sobre gustos; usa lenguaje probabilístico y condicional.`;
+    const descriptionGuidelines = `Descripción (campo "description") para TODOS los tests:
+- Debe ser UN SOLO RESUMEN (1 párrafo), claro y directo.
+- Longitud objetivo: 90 a 170 palabras.
+- NO hagas análisis por rasgos ni por subfacetas; NO menciones subfacetas, ejes técnicos o puntajes.
+- NO hagas formato de reporte ni listas.
+- Enfócate en síntesis práctica: qué tipo de experiencias culturales podrían resonar y por qué.
+- Mantén lenguaje probabilístico (no determinista) y tono humano.`;
 
     const toneAndLanguageRules = `Reglas de lenguaje para SIEMPRE:
 - No afirmes "te gusta X", "eres X" o "te encanta X" como hechos cerrados.
@@ -936,8 +996,8 @@ ${descriptionGuidelines}
 ${toneAndLanguageRules}
 
 Objetivo de escritura de la descripción:
-- Entregar un análisis de personalidad profundo y útil para descubrir cultura.
-- Prioriza interpretación y significado práctico sobre repetir datos crudos.
+- Entregar una síntesis breve y útil para descubrir cultura.
+- Prioriza claridad y aplicabilidad sobre profundidad técnica.
 - Conecta la personalidad con posibles intereses en tipos de obras, géneros, atmósferas y formatos.
 
 Campo "genreRecommendations" (obligatorio):
@@ -958,13 +1018,14 @@ Responde SOLO JSON válido, sin markdown:
     "arte-visual": ["..."]
   },
   "suggestedWorks": [
-    {"category":"cine","title":"Título exacto buscable","creator":"director o autor opcional"}
+    {"category":"cine","title":"Título exacto buscable","creator":"director o autor opcional","genreHint":"uno de los géneros exactos declarados en genreRecommendations.cine"}
   ]
 }
 
 Reglas suggestedWorks:
 - category exactamente: cine, musica, literatura, videojuegos, arte-visual
 - Títulos reales; mezcla categorías; deben reflejar genreRecommendations y el análisis del perfil.
+- genreHint es OBLIGATORIO y debe ser un género/estilo de la misma categoría, tomado de genreRecommendations[category] (texto igual o equivalente cercano).
 - videojuegos: en "creator" pon SIEMPRE el estudio desarrollador o publisher reconocible en IGDB (como aparece en la ficha). Obligatorio si el título es corto o ambiguo (una sola palabra: "Journey", "Inside", "Limbo", etc.) para no confundirlo con DLC u otro juego que solo comparte palabra en el título.`;
 
     let text;
@@ -1009,7 +1070,7 @@ Reglas suggestedWorks:
     }
 
     const profile = String(parsed.profile || "").trim();
-    const description = String(parsed.description || "").trim();
+    const description = normalizeProfileDescription(parsed.description);
     if (!profile || !description) {
       const err = new Error(
         "La respuesta del modelo está incompleta (falta profile o description)."
@@ -1040,9 +1101,26 @@ Reglas suggestedWorks:
 
     const rawWorks = parsed.suggestedWorks;
     if (Array.isArray(rawWorks)) {
-      parsed.suggestedWorks = normalizeWorkCandidateRows(rawWorks, 20);
+      parsed.suggestedWorks = normalizeSuggestedWorksByGenre(
+        rawWorks,
+        parsed.genreRecommendations,
+        20
+      );
     } else {
       parsed.suggestedWorks = [];
+    }
+
+    const categoriesWithGenres = GENRE_REC_KEYS.filter(
+      (k) => Array.isArray(parsed.genreRecommendations?.[k]) && parsed.genreRecommendations[k].length > 0
+    );
+    const categoriesWithWorks = new Set(parsed.suggestedWorks.map((w) => w.category));
+    const missingWorkCategories = categoriesWithGenres.filter((k) => !categoriesWithWorks.has(k));
+    if (missingWorkCategories.length) {
+      const err = new Error(
+        `Las obras sugeridas no respetan genreRecommendations. Faltan obras alineadas en: ${missingWorkCategories.join(", ")}`
+      );
+      err.statusCode = 502;
+      throw err;
     }
 
     logIaRecommendedWorks("artistic_description", {
