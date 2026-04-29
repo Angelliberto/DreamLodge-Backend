@@ -1064,22 +1064,12 @@ class DreamLodgeAIAgent {
       throw err;
     }
 
-    const oceanFingerprint = buildOceanFingerprint(scores);
-
     const o = traitTotal(scores, "openness");
     const c = traitTotal(scores, "conscientiousness");
     const e = traitTotal(scores, "extraversion");
     const a = traitTotal(scores, "agreeableness");
     const n = traitTotal(scores, "neuroticism");
     const oceanFingerprint = buildOceanFingerprint(scores);
-    const profileDrivenRules = buildProfileDrivenCurationRules({
-      o,
-      c,
-      e,
-      a,
-      n,
-      fingerprint: oceanFingerprint,
-    });
     const testType = oceanResult.testType;
     const profileDrivenRules = buildProfileDrivenCurationRules({
       o,
