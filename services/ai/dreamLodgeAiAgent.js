@@ -252,11 +252,6 @@ function buildProfileDrivenCurationRules({ o, c, e, a, n, fingerprint }) {
   const eb = scoreBand(e);
   const ab = scoreBand(a);
   const nb = scoreBand(n);
-  const fingerprintNum = parseInt(String(fingerprint || "0"), 16) || 0;
-  const rotate = fingerprintNum % Math.max(DEFAULT_CANON_TITLES.length, 1);
-  const avoidTitles = Array.from({ length: 6 }).map((_, i) => {
-    return DEFAULT_CANON_TITLES[(rotate + i) % DEFAULT_CANON_TITLES.length];
-  });
   const rules = [
     `Apertura ${ob}, Responsabilidad ${cb}, Extraversión ${eb}, Amabilidad ${ab}, Neuroticismo ${nb}.`,
     eb === "high"
@@ -274,10 +269,10 @@ function buildProfileDrivenCurationRules({ o, c, e, a, n, fingerprint }) {
       : ob === "low"
       ? "Incluye claridad narrativa y formatos más accesibles."
       : "Mezcla innovación moderada con formatos familiares.",
-    "Evita listas clónicas de obras hiperrepetidas entre perfiles.",
-    `Evita usar estas obras salvo encaje excepcional: ${avoidTitles.join(" | ")}.`,
+    `Usa la huella ${String(fingerprint || "na")} para que la selección sea única del perfil y no clónica frente a otros usuarios.`,
+    "Prioriza subgéneros concretos y menos obvios cuando encajen con el perfil, sin bloquear obras por lista fija.",
   ];
-  return { rulesText: rules.join("\n- "), avoidTitles };
+  return { rulesText: rules.join("\n- "), avoidTitles: [] };
 }
 
 function buildOceanFingerprint(scores) {
@@ -1320,46 +1315,7 @@ Reglas suggestedWorks:
       globalCanonOverlap,
       parsed.suggestedWorks.length
     );
-    if (defaultCanonOverlap >= 4) {
-      if (!options._retryDiversified) {
-        logger.warn(
-          "[dreamlodge][ia_obras] artistic_description retry_diversify userId=%s overlap=%s",
-          userId || "(anon)",
-          defaultCanonOverlap
-        );
-        return this.generateArtisticDescription(oceanResult, {
-          ...options,
-          regenerationSeed:
-            regenerationSeed || `auto-diversify-${Date.now().toString(36)}`,
-          _retryDiversified: true,
-        });
-      }
-      const err = new Error(
-        "Las obras sugeridas son demasiado parecidas a una lista canónica repetitiva; se requiere mayor diferenciación por perfil."
-      );
-      err.statusCode = 502;
-      throw err;
-    }
-    if (globalCanonOverlap >= 3) {
-      if (!options._retryDiversifiedGlobal) {
-        logger.warn(
-          "[dreamlodge][ia_obras] artistic_description retry_global_canon userId=%s overlap=%s",
-          userId || "(anon)",
-          globalCanonOverlap
-        );
-        return this.generateArtisticDescription(oceanResult, {
-          ...options,
-          regenerationSeed:
-            regenerationSeed || `auto-global-${Date.now().toString(36)}`,
-          _retryDiversifiedGlobal: true,
-        });
-      }
-      const err = new Error(
-        "Las obras sugeridas siguen demasiado cerca de títulos canónicos repetidos; no diferencian bien el perfil."
-      );
-      err.statusCode = 502;
-      throw err;
-    }
+    // Métrica observacional: ya no bloqueamos obras por listas canónicas fijas.
 
     logIaRecommendedWorks("artistic_description", {
       id: userId || undefined,
@@ -1532,19 +1488,7 @@ Reglas estrictas:
       overlapGlobal,
       cleaned.length
     );
-    if (overlapAvoid >= 4 || overlapGlobal >= 3) {
-      logger.warn(
-        "[dreamlodge][feed] rejected_by_overlap fingerprint=%s avoidOverlap=%s globalOverlap=%s",
-        oceanFingerprint,
-        overlapAvoid,
-        overlapGlobal
-      );
-      return {
-        candidates: [],
-        webSearchUsed: webUsed,
-        reason: "too_canonical_repeated",
-      };
-    }
+    // Métrica observacional: mantenemos candidatos y personalización por perfil sin veto duro.
     const feedEntityId =
       oceanResult.entityId != null
         ? oceanResult.entityId
