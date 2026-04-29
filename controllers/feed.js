@@ -12,6 +12,8 @@ const FEED_CACHE = new Map();
 const FEED_TTL_MS = 2 * 60 * 60 * 1000;
 const GLOBAL_RECENT_TITLE_COUNTS = new Map();
 const GLOBAL_RECENT_TTL_MS = 6 * 60 * 60 * 1000;
+const USER_RECENT_FEED_TITLES = new Map();
+const USER_RECENT_TTL_MS = 4 * 60 * 60 * 1000;
 const REQUIRED_FEED_CATEGORIES = [
   "cine",
   "musica",
@@ -19,6 +21,7 @@ const REQUIRED_FEED_CATEGORIES = [
   "videojuegos",
   "arte-visual",
 ];
+const MIN_ITEMS_PER_CATEGORY = 5;
 
 function norm(v) {
   return String(v || "")
@@ -99,31 +102,65 @@ function registerGlobalTitles(items) {
   }
 }
 
-function ensureCategoryCoverage(primaryItems, fallbackPool, categories) {
-  const list = Array.isArray(primaryItems) ? primaryItems : [];
-  const pool = Array.isArray(fallbackPool) ? fallbackPool : [];
+function getRecentUserTitles(userKey) {
+  const row = USER_RECENT_FEED_TITLES.get(String(userKey || ""));
+  if (!row) return new Set();
+  if (Date.now() - Number(row.ts || 0) > USER_RECENT_TTL_MS) {
+    USER_RECENT_FEED_TITLES.delete(String(userKey || ""));
+    return new Set();
+  }
+  return new Set(Array.isArray(row.titles) ? row.titles : []);
+}
+
+function registerRecentUserTitles(userKey, items) {
+  const key = String(userKey || "");
+  if (!key) return;
+  const prev = getRecentUserTitles(key);
+  const titles = [];
+  for (const item of items || []) {
+    const t = norm(item?.title);
+    if (!t) continue;
+    prev.add(t);
+  }
+  for (const t of prev) {
+    titles.push(t);
+    if (titles.length >= 120) break;
+  }
+  USER_RECENT_FEED_TITLES.set(key, { ts: Date.now(), titles });
+}
+
+function buildBalancedCategoryFeed(primaryItems, fallbackPool, categories, minPerCategory, maxItems) {
+  const primary = Array.isArray(primaryItems) ? primaryItems : [];
+  const fallback = Array.isArray(fallbackPool) ? fallbackPool : [];
   const required = Array.isArray(categories) ? categories : [];
-  const byId = new Set();
-  const covered = new Set();
+  const minEach = Number(minPerCategory || 0);
+  const maxTotal = Number(maxItems || 200);
+  const pool = mergeCulturalFeedDedupe(primary, fallback);
+  const selected = [];
+  const selectedIds = new Set();
 
-  for (const item of list) {
-    if (!item?.id) continue;
-    byId.add(item.id);
-    if (item.category) covered.add(item.category);
-  }
+  const addItem = (item) => {
+    if (!item?.id || selectedIds.has(item.id)) return false;
+    selected.push(item);
+    selectedIds.add(item.id);
+    return true;
+  };
 
-  const missingCoverItems = [];
   for (const cat of required) {
-    if (covered.has(cat)) continue;
-    const pick = pool.find((item) => item?.id && item.category === cat && !byId.has(item.id));
-    if (!pick) continue;
-    byId.add(pick.id);
-    covered.add(cat);
-    missingCoverItems.push(pick);
+    const catRows = pool.filter((item) => item?.category === cat);
+    let picked = 0;
+    for (const row of catRows) {
+      if (picked >= minEach) break;
+      if (addItem(row)) picked += 1;
+    }
   }
 
-  if (!missingCoverItems.length) return list;
-  return [...missingCoverItems, ...list];
+  for (const item of pool) {
+    if (selected.length >= maxTotal) break;
+    addItem(item);
+  }
+
+  return selected.slice(0, maxTotal);
 }
 
 /**
@@ -298,37 +335,49 @@ const getPersonalizedFeedCurated = async (req, res) => {
         .populate("seenArtworks"),
     ]);
     const signals = buildUserInteractionSignals(userWithSignals);
+    const recentUserTitles = getRecentUserTitles(key);
     const rerankedCurated = [...resolvedCurated]
       .map((item) => {
         const userScore = scoreByUserSignals(item, signals);
         const globalPenalty = getGlobalRepeatPenalty(item);
-        return { item, s: userScore - globalPenalty, userScore, globalPenalty };
+        const recentPenalty =
+          force && recentUserTitles.has(norm(item?.title)) ? 2.6 : 0;
+        return {
+          item,
+          s: userScore - globalPenalty - recentPenalty,
+          userScore,
+          globalPenalty,
+          recentPenalty,
+        };
       })
       .filter((row) => row.s > -3.5)
       .sort((a, b) => b.s - a.s)
       .map((row) => row.item)
-      .slice(0, 60);
+      .slice(0, 120);
 
-    const mergedBase = mergeCulturalFeedDedupe(
+    const categoryPool = mergeCulturalFeedDedupe(
       rerankedCurated,
-      resolvedAnchors
+      mergeCulturalFeedDedupe(resolvedAnchors, resolvedCurated)
     );
-    const categoryPool = mergeCulturalFeedDedupe(resolvedCurated, resolvedAnchors);
-    const coveredFeed = ensureCategoryCoverage(
-      mergedBase,
+    const items = buildBalancedCategoryFeed(
+      rerankedCurated,
       categoryPool,
       REQUIRED_FEED_CATEGORIES
+      ,
+      MIN_ITEMS_PER_CATEGORY,
+      200
     );
-    const items = coveredFeed.slice(0, 200);
     console.log(
-      "[feed/personalized] merge userId=%s anchors=%s curated=%s reranked=%s final=%s",
+      "[feed/personalized] merge userId=%s anchors=%s curated=%s reranked=%s minPerCategory=%s final=%s",
       key,
       resolvedAnchors.length,
       resolvedCurated.length,
       rerankedCurated.length,
+      MIN_ITEMS_PER_CATEGORY,
       items.length
     );
     registerGlobalTitles(items);
+    registerRecentUserTitles(key, items);
 
     const responseData = {
       items,
