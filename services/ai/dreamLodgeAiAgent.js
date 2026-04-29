@@ -325,6 +325,32 @@ function normalizeGenreRecommendations(raw) {
   return out;
 }
 
+const GENERIC_GENRE_TERMS = new Set([
+  "drama",
+  "comedia",
+  "accion",
+  "acción",
+  "thriller",
+  "romance",
+  "terror",
+  "horror",
+  "fantasia",
+  "fantasía",
+  "musica",
+  "música",
+  "rock",
+  "pop",
+  "jazz",
+  "clasica",
+  "clásica",
+  "novela",
+  "ficcion",
+  "ficción",
+  "cine",
+  "arte",
+  "videojuegos",
+]);
+
 function normalizeGenreText(raw) {
   return String(raw || "")
     .normalize("NFD")
@@ -333,6 +359,29 @@ function normalizeGenreText(raw) {
     .replace(/[^a-z0-9\s-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function isGenericGenreLabel(label) {
+  const n = normalizeGenreText(label);
+  if (!n) return true;
+  if (GENERIC_GENRE_TERMS.has(n)) return true;
+  const tokenCount = n.split(" ").filter(Boolean).length;
+  return tokenCount <= 1;
+}
+
+function genreSpecificityMetrics(genreRecommendations) {
+  let total = 0;
+  let genericCount = 0;
+  for (const key of GENRE_REC_KEYS) {
+    const list = Array.isArray(genreRecommendations?.[key])
+      ? genreRecommendations[key]
+      : [];
+    for (const item of list) {
+      total += 1;
+      if (isGenericGenreLabel(item)) genericCount += 1;
+    }
+  }
+  return { total, genericCount, specificCount: Math.max(0, total - genericCount) };
 }
 
 function normalizeTitleForCompare(raw) {
@@ -1113,7 +1162,9 @@ Objetivo de escritura de la descripción:
 
 Campo "genreRecommendations" (obligatorio):
 - Debe incluir EXACTAMENTE estas claves: "cine", "musica", "literatura", "videojuegos", "arte-visual".
-- Cada clave: array de 2 a 6 strings (idealmente al menos 2) con GÉNEROS, subgéneros, estilos, movimientos o tipos de experiencia (ej. cine: "thriller psicológico", "drama de autor"; musica: "ambient", "soul"; arte-visual: "impresionismo", "arte conceptual").
+- Cada clave: array de 3 a 6 strings con GÉNEROS, subgéneros, estilos, movimientos o tipos de experiencia.
+- Evita etiquetas genéricas de una sola palabra ("drama", "comedia", "rock", "novela", "arte"); usa formulaciones más precisas y distintivas.
+- Al menos 70% de los elementos deben ser de dos o más palabras (ej. "thriller psicológico existencial", "post-rock atmosférico", "ficción especulativa filosófica", "simulación narrativa contemplativa", "minimalismo geométrico conceptual").
 - NO pongas títulos de obras ni nombres de artistas dentro de genreRecommendations; solo géneros/estilos.
 - Debe derivarse del perfil OCEAN actual y ser coherente con "description".
 
@@ -1204,6 +1255,29 @@ Reglas suggestedWorks:
         `La respuesta del modelo incompleta: genreRecommendations debe incluir al menos 1 género por ámbito. Faltan: ${missingGenreKeys.join(
           ", "
         )}`
+      );
+      err.statusCode = 502;
+      throw err;
+    }
+    const genreMetrics = genreSpecificityMetrics(genresNorm);
+    const genericRatio =
+      genreMetrics.total > 0 ? genreMetrics.genericCount / genreMetrics.total : 1;
+    if (genericRatio > 0.3) {
+      if (!options._retryGenreSpecificity) {
+        logger.warn(
+          "[dreamlodge][ia_obras] artistic_description retry_genre_specificity userId=%s genericRatio=%s",
+          userId || "(anon)",
+          genericRatio.toFixed(2)
+        );
+        return this.generateArtisticDescription(oceanResult, {
+          ...options,
+          regenerationSeed:
+            regenerationSeed || `auto-genre-specific-${Date.now().toString(36)}`,
+          _retryGenreSpecificity: true,
+        });
+      }
+      const err = new Error(
+        "genreRecommendations demasiado genérico; se requiere mayor especificidad por perfil."
       );
       err.statusCode = 502;
       throw err;

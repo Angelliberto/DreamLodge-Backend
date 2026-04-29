@@ -5,7 +5,7 @@ const ai = require("../services/ai");
 
 const BIG_FIVE_TRAITS = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism'];
 const ARTISTIC_REFRESH_MS = 24 * 60 * 60 * 1000;
-const ARTISTIC_PROMPT_VERSION = "v3-diversified";
+const ARTISTIC_PROMPT_VERSION = "v4-genre-specificity";
 
 function parseArtisticDescriptionPayload(raw) {
   if (!raw || typeof raw !== "string") return null;
