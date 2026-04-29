@@ -430,21 +430,6 @@ const getPersonalizedFeedCurated = async (req, res) => {
       MIN_ITEMS_PER_CATEGORY,
       200
     );
-    if (force && items.length < 8) {
-      // Safety valve: if strict non-repeat leaves too little content, recover from current pool.
-      items = buildBalancedCategoryFeed(
-        rerankedCurated,
-        mergeCulturalFeedDedupe(resolvedAnchors, resolvedCurated),
-        REQUIRED_FEED_CATEGORIES,
-        MIN_ITEMS_PER_CATEGORY,
-        200
-      );
-      console.log(
-        "[feed/personalized] force_non_repeat_relaxed userId=%s reason=low_inventory strictItems=%s",
-        key,
-        items.length
-      );
-    }
     const finalCounts = countByCategory(items, REQUIRED_FEED_CATEGORIES);
     const missingCategories = REQUIRED_FEED_CATEGORIES.filter(
       (cat) => (finalCounts[cat] || 0) < MIN_ITEMS_PER_CATEGORY
