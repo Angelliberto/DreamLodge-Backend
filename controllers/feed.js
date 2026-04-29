@@ -9,11 +9,7 @@ const {
 
 /** Caché en memoria por usuario (TTL corto; el cliente puede forzar refresh). */
 const FEED_CACHE = new Map();
-const FEED_TTL_MS = 24 * 60 * 60 * 1000;
-
-function dayKeyUTC(ts = Date.now()) {
-  return Math.floor(ts / (24 * 60 * 60 * 1000));
-}
+const FEED_TTL_MS = 2 * 60 * 60 * 1000;
 
 /**
  * GET|POST /api/feed/personalized
@@ -43,7 +39,6 @@ const getPersonalizedFeedCurated = async (req, res) => {
     const oceanUpdatedAt = oceanResult?.updatedAt
       ? new Date(oceanResult.updatedAt).getTime()
       : null;
-    const today = dayKeyUTC();
 
     if (anchorsOnly) {
       if (!oceanResult?.artisticDescription) {
@@ -78,15 +73,13 @@ const getPersonalizedFeedCurated = async (req, res) => {
       if (hit && Date.now() - hit.ts < FEED_TTL_MS) {
         const sameOceanVersion =
           Number(hit.oceanUpdatedAt || 0) === Number(oceanUpdatedAt || 0);
-        const sameDay = Number(hit.dayKey || -1) === Number(today);
         console.log(
-          "[feed/personalized] cache_check userId=%s sameOcean=%s sameDay=%s cacheAgeMs=%s",
+          "[feed/personalized] cache_check userId=%s sameOcean=%s cacheAgeMs=%s",
           key,
           Boolean(sameOceanVersion),
-          Boolean(sameDay),
           Date.now() - hit.ts
         );
-        if (Array.isArray(hit.data?.items) && sameOceanVersion && sameDay) {
+        if (Array.isArray(hit.data?.items) && sameOceanVersion) {
           console.log(
             "[feed/personalized] cache_hit userId=%s items=%s reason=%s",
             key,
@@ -171,7 +164,6 @@ const getPersonalizedFeedCurated = async (req, res) => {
         ts: Date.now(),
         data: fallback,
         oceanUpdatedAt,
-        dayKey: today,
       });
       return res.status(200).json({
         message: "ok",
@@ -207,7 +199,6 @@ const getPersonalizedFeedCurated = async (req, res) => {
       ts: Date.now(),
       data: responseData,
       oceanUpdatedAt,
-      dayKey: today,
     });
     return res.status(200).json({
       message: "ok",
