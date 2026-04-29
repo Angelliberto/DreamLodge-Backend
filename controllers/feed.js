@@ -129,6 +129,17 @@ function registerRecentUserTitles(userKey, items) {
   USER_RECENT_FEED_TITLES.set(key, { ts: Date.now(), titles });
 }
 
+function countByCategory(items, categories) {
+  const out = {};
+  for (const cat of categories || []) out[cat] = 0;
+  for (const item of items || []) {
+    const cat = item?.category;
+    if (!cat) continue;
+    out[cat] = Number(out[cat] || 0) + 1;
+  }
+  return out;
+}
+
 function buildBalancedCategoryFeed(primaryItems, fallbackPool, categories, minPerCategory, maxItems) {
   const primary = Array.isArray(primaryItems) ? primaryItems : [];
   const fallback = Array.isArray(fallbackPool) ? fallbackPool : [];
@@ -161,6 +172,13 @@ function buildBalancedCategoryFeed(primaryItems, fallbackPool, categories, minPe
   }
 
   return selected.slice(0, maxTotal);
+}
+
+function excludeRecentTitlesForForce(items, recentTitles) {
+  const list = Array.isArray(items) ? items : [];
+  const recent = recentTitles instanceof Set ? recentTitles : new Set();
+  if (!recent.size) return list;
+  return list.filter((item) => !recent.has(norm(item?.title)));
 }
 
 /**
@@ -324,6 +342,16 @@ const getPersonalizedFeedCurated = async (req, res) => {
     }
 
     const curated = data.candidates || [];
+    const aiCandidateCounts = countByCategory(curated, REQUIRED_FEED_CATEGORIES);
+    console.log(
+      "[feed/personalized] ai_candidates_by_category userId=%s cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s",
+      key,
+      aiCandidateCounts.cine || 0,
+      aiCandidateCounts.musica || 0,
+      aiCandidateCounts.literatura || 0,
+      aiCandidateCounts.videojuegos || 0,
+      aiCandidateCounts["arte-visual"] || 0
+    );
     const [resolvedAnchors, resolvedCurated, userWithSignals] = await Promise.all([
       resolveCuratedFeedCandidates(suggestedWorksRaw),
       resolveCuratedFeedCandidates(curated),
@@ -334,9 +362,32 @@ const getPersonalizedFeedCurated = async (req, res) => {
         .populate("dislikedArtworks")
         .populate("seenArtworks"),
     ]);
+    const resolvedCuratedCounts = countByCategory(resolvedCurated, REQUIRED_FEED_CATEGORIES);
+    const resolvedAnchorCounts = countByCategory(resolvedAnchors, REQUIRED_FEED_CATEGORIES);
+    console.log(
+      "[feed/personalized] resolved_by_category userId=%s curated(cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s) anchors(cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s)",
+      key,
+      resolvedCuratedCounts.cine || 0,
+      resolvedCuratedCounts.musica || 0,
+      resolvedCuratedCounts.literatura || 0,
+      resolvedCuratedCounts.videojuegos || 0,
+      resolvedCuratedCounts["arte-visual"] || 0,
+      resolvedAnchorCounts.cine || 0,
+      resolvedAnchorCounts.musica || 0,
+      resolvedAnchorCounts.literatura || 0,
+      resolvedAnchorCounts.videojuegos || 0,
+      resolvedAnchorCounts["arte-visual"] || 0
+    );
     const signals = buildUserInteractionSignals(userWithSignals);
     const recentUserTitles = getRecentUserTitles(key);
-    const rerankedCurated = [...resolvedCurated]
+    const resolvedCuratedEffective = force
+      ? excludeRecentTitlesForForce(resolvedCurated, recentUserTitles)
+      : resolvedCurated;
+    const resolvedAnchorsEffective = force
+      ? excludeRecentTitlesForForce(resolvedAnchors, recentUserTitles)
+      : resolvedAnchors;
+
+    const rerankedCurated = [...resolvedCuratedEffective]
       .map((item) => {
         const userScore = scoreByUserSignals(item, signals);
         const globalPenalty = getGlobalRepeatPenalty(item);
@@ -354,12 +405,24 @@ const getPersonalizedFeedCurated = async (req, res) => {
       .sort((a, b) => b.s - a.s)
       .map((row) => row.item)
       .slice(0, 120);
+    const rerankedCounts = countByCategory(rerankedCurated, REQUIRED_FEED_CATEGORIES);
+    console.log(
+      "[feed/personalized] reranked_by_category userId=%s cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s force=%s recentPenaltyPool=%s",
+      key,
+      rerankedCounts.cine || 0,
+      rerankedCounts.musica || 0,
+      rerankedCounts.literatura || 0,
+      rerankedCounts.videojuegos || 0,
+      rerankedCounts["arte-visual"] || 0,
+      Boolean(force),
+      recentUserTitles.size
+    );
 
     const categoryPool = mergeCulturalFeedDedupe(
       rerankedCurated,
-      mergeCulturalFeedDedupe(resolvedAnchors, resolvedCurated)
+      mergeCulturalFeedDedupe(resolvedAnchorsEffective, resolvedCuratedEffective)
     );
-    const items = buildBalancedCategoryFeed(
+    let items = buildBalancedCategoryFeed(
       rerankedCurated,
       categoryPool,
       REQUIRED_FEED_CATEGORIES
@@ -367,14 +430,39 @@ const getPersonalizedFeedCurated = async (req, res) => {
       MIN_ITEMS_PER_CATEGORY,
       200
     );
+    if (force && items.length < 8) {
+      // Safety valve: if strict non-repeat leaves too little content, recover from current pool.
+      items = buildBalancedCategoryFeed(
+        rerankedCurated,
+        mergeCulturalFeedDedupe(resolvedAnchors, resolvedCurated),
+        REQUIRED_FEED_CATEGORIES,
+        MIN_ITEMS_PER_CATEGORY,
+        200
+      );
+      console.log(
+        "[feed/personalized] force_non_repeat_relaxed userId=%s reason=low_inventory strictItems=%s",
+        key,
+        items.length
+      );
+    }
+    const finalCounts = countByCategory(items, REQUIRED_FEED_CATEGORIES);
+    const missingCategories = REQUIRED_FEED_CATEGORIES.filter(
+      (cat) => (finalCounts[cat] || 0) < MIN_ITEMS_PER_CATEGORY
+    );
     console.log(
-      "[feed/personalized] merge userId=%s anchors=%s curated=%s reranked=%s minPerCategory=%s final=%s",
+      "[feed/personalized] merge userId=%s anchors=%s curated=%s reranked=%s minPerCategory=%s final=%s finalByCategory(cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s) missingMin=%s",
       key,
       resolvedAnchors.length,
       resolvedCurated.length,
       rerankedCurated.length,
       MIN_ITEMS_PER_CATEGORY,
-      items.length
+      items.length,
+      finalCounts.cine || 0,
+      finalCounts.musica || 0,
+      finalCounts.literatura || 0,
+      finalCounts.videojuegos || 0,
+      finalCounts["arte-visual"] || 0,
+      missingCategories.length ? missingCategories.join(",") : "none"
     );
     registerGlobalTitles(items);
     registerRecentUserTitles(key, items);
