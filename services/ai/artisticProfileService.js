@@ -7,6 +7,7 @@ const {
   buildOceanFingerprint,
   normalizeGenreRecommendations,
   genreSpecificityMetrics,
+  genreNaturalnessMetrics,
   normalizeProfileDescription,
   normalizeSuggestedWorksByGenre,
   countDefaultCanonOverlap,
@@ -123,7 +124,9 @@ Campo "genreRecommendations" (obligatorio):
 - Debe incluir EXACTAMENTE estas claves: "cine", "musica", "literatura", "videojuegos", "arte-visual".
 - Cada clave: array de 3 a 6 strings con GÉNEROS, subgéneros, estilos, movimientos o tipos de experiencia.
 - Evita etiquetas genéricas de una sola palabra ("drama", "comedia", "rock", "novela", "arte"); usa formulaciones más precisas y distintivas.
-- Al menos 70% de los elementos deben ser de dos o más palabras.
+- Al menos 60% de los elementos pueden tener dos o más palabras, pero mantén lenguaje natural y común en crítica cultural.
+- Evita etiquetas rebuscadas o artificiales (demasiados adjetivos encadenados, mezclas forzadas, símbolos raros).
+- Longitud recomendada por etiqueta: 2 a 4 palabras.
 - NO pongas títulos de obras ni nombres de artistas dentro de genreRecommendations; solo géneros/estilos.
 - Debe derivarse del perfil OCEAN actual y ser coherente con "description".
 
@@ -200,13 +203,17 @@ Responde SOLO JSON válido, sin markdown:
 
   const genreMetrics = genreSpecificityMetrics(genresNorm);
   const genericRatio = genreMetrics.total > 0 ? genreMetrics.genericCount / genreMetrics.total : 1;
+  const naturalness = genreNaturalnessMetrics(genresNorm);
+  const overengineeredRatio =
+    naturalness.total > 0 ? naturalness.overengineeredCount / naturalness.total : 0;
   logger.info(
-    "[dreamlodge][ia_profile] genre_specificity userId=%s total=%s generic=%s specific=%s genericRatio=%s",
+    "[dreamlodge][ia_profile] genre_specificity userId=%s total=%s generic=%s specific=%s genericRatio=%s overengineeredRatio=%s",
     userId || "(anon)",
     genreMetrics.total,
     genreMetrics.genericCount,
     genreMetrics.specificCount,
-    genericRatio.toFixed(2)
+    genericRatio.toFixed(2),
+    overengineeredRatio.toFixed(2)
   );
   if (genericRatio > 0.3) {
     if (!options._retryGenreSpecificity) {
@@ -217,6 +224,24 @@ Responde SOLO JSON válido, sin markdown:
       }, deps);
     }
     const err = new Error("genreRecommendations demasiado genérico; se requiere mayor especificidad por perfil.");
+    err.statusCode = 502;
+    throw err;
+  }
+  if (overengineeredRatio > 0.35) {
+    if (!options._retryGenreNaturalness) {
+      return generateArtisticDescription(
+        agent,
+        oceanResult,
+        {
+          ...options,
+          regenerationSeed:
+            regenerationSeed || `auto-genre-natural-${Date.now().toString(36)}`,
+          _retryGenreNaturalness: true,
+        },
+        deps
+      );
+    }
+    const err = new Error("genreRecommendations demasiado rebuscado; se requiere lenguaje más natural.");
     err.statusCode = 502;
     throw err;
   }

@@ -333,6 +333,34 @@ function genreSpecificityMetrics(genreRecommendations) {
   return { total, genericCount, specificCount: Math.max(0, total - genericCount) };
 }
 
+function looksOverengineeredGenreLabel(label) {
+  const raw = String(label || "").trim();
+  if (!raw) return true;
+  const n = normalizeGenreText(raw);
+  const tokenCount = n.split(" ").filter(Boolean).length;
+  const weirdChars = (raw.match(/[\/|()[\]{}]/g) || []).length;
+  const commaCount = (raw.match(/,/g) || []).length;
+  // Penalize ultra-long or stacked compound tags that sound unnatural.
+  return raw.length > 42 || tokenCount > 5 || weirdChars >= 2 || commaCount >= 2;
+}
+
+function genreNaturalnessMetrics(genreRecommendations) {
+  let total = 0;
+  let overengineeredCount = 0;
+  for (const key of GENRE_REC_KEYS) {
+    const list = Array.isArray(genreRecommendations?.[key]) ? genreRecommendations[key] : [];
+    for (const item of list) {
+      total += 1;
+      if (looksOverengineeredGenreLabel(item)) overengineeredCount += 1;
+    }
+  }
+  return {
+    total,
+    overengineeredCount,
+    naturalCount: Math.max(0, total - overengineeredCount),
+  };
+}
+
 function normalizeTitleForCompare(raw) {
   return String(raw || "")
     .normalize("NFD")
@@ -457,6 +485,7 @@ module.exports = {
   buildOceanFingerprint,
   normalizeGenreRecommendations,
   genreSpecificityMetrics,
+  genreNaturalnessMetrics,
   normalizeTitleForCompare,
   normalizeProfileDescription,
   normalizeSuggestedWorksByGenre,

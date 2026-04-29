@@ -12,6 +12,13 @@ const FEED_CACHE = new Map();
 const FEED_TTL_MS = 2 * 60 * 60 * 1000;
 const GLOBAL_RECENT_TITLE_COUNTS = new Map();
 const GLOBAL_RECENT_TTL_MS = 6 * 60 * 60 * 1000;
+const REQUIRED_FEED_CATEGORIES = [
+  "cine",
+  "musica",
+  "literatura",
+  "videojuegos",
+  "arte-visual",
+];
 
 function norm(v) {
   return String(v || "")
@@ -90,6 +97,33 @@ function registerGlobalTitles(items) {
     const nextCount = row && Date.now() - row.ts <= GLOBAL_RECENT_TTL_MS ? Number(row.count || 0) + 1 : 1;
     GLOBAL_RECENT_TITLE_COUNTS.set(title, { count: nextCount, ts: Date.now() });
   }
+}
+
+function ensureCategoryCoverage(primaryItems, fallbackPool, categories) {
+  const list = Array.isArray(primaryItems) ? primaryItems : [];
+  const pool = Array.isArray(fallbackPool) ? fallbackPool : [];
+  const required = Array.isArray(categories) ? categories : [];
+  const byId = new Set();
+  const covered = new Set();
+
+  for (const item of list) {
+    if (!item?.id) continue;
+    byId.add(item.id);
+    if (item.category) covered.add(item.category);
+  }
+
+  const missingCoverItems = [];
+  for (const cat of required) {
+    if (covered.has(cat)) continue;
+    const pick = pool.find((item) => item?.id && item.category === cat && !byId.has(item.id));
+    if (!pick) continue;
+    byId.add(pick.id);
+    covered.add(cat);
+    missingCoverItems.push(pick);
+  }
+
+  if (!missingCoverItems.length) return list;
+  return [...missingCoverItems, ...list];
 }
 
 /**
@@ -273,11 +307,19 @@ const getPersonalizedFeedCurated = async (req, res) => {
       .filter((row) => row.s > -3.5)
       .sort((a, b) => b.s - a.s)
       .map((row) => row.item)
-      .slice(0, 15);
-    const items = mergeCulturalFeedDedupe(
+      .slice(0, 60);
+
+    const mergedBase = mergeCulturalFeedDedupe(
       rerankedCurated,
       resolvedAnchors
-    ).slice(0, 200);
+    );
+    const categoryPool = mergeCulturalFeedDedupe(resolvedCurated, resolvedAnchors);
+    const coveredFeed = ensureCategoryCoverage(
+      mergedBase,
+      categoryPool,
+      REQUIRED_FEED_CATEGORIES
+    );
+    const items = coveredFeed.slice(0, 200);
     console.log(
       "[feed/personalized] merge userId=%s anchors=%s curated=%s reranked=%s final=%s",
       key,
