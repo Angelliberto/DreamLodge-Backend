@@ -64,6 +64,8 @@ async function rerankByEmbeddingSimilarity({
   candidates,
   maxScan = 90,
   maxOnTheFlyEmbeddings = 24,
+  logger = null,
+  userId = "",
 }) {
   const list = Array.isArray(candidates) ? candidates : [];
   if (!agent?.configured?.() || !list.length) return list;
@@ -74,11 +76,13 @@ async function rerankByEmbeddingSimilarity({
   const tail = list.slice(maxScan);
   const scored = [];
   let onTheFlyCount = 0;
+  let storedCount = 0;
   for (const item of head) {
     const hasStored =
       Array.isArray(item?.embedding) &&
       item.embedding.length > 0 &&
       (!item?.embeddingModel || item.embeddingModel === EMBEDDING_MODEL);
+    if (hasStored) storedCount += 1;
     let itemVec = hasStored ? item.embedding : null;
     if (!itemVec && onTheFlyCount < maxOnTheFlyEmbeddings) {
       itemVec = await embedText(agent, buildArtworkEmbeddingText(item));
@@ -91,6 +95,20 @@ async function rerankByEmbeddingSimilarity({
     scored.push({ item, sim });
   }
   scored.sort((x, y) => y.sim - x.sim);
+  if (logger && typeof logger.info === "function") {
+    const top = scored
+      .slice(0, 5)
+      .map((x) => `${x.item?.category || "?"}:${x.item?.title || "?"}(${x.sim.toFixed(3)})`)
+      .join(" | ");
+    logger.info(
+      "[dreamlodge][embeddings] rerank userId=%s scanned=%s stored=%s onTheFly=%s top5=%s",
+      userId || "(anon)",
+      head.length,
+      storedCount,
+      onTheFlyCount,
+      top || "-"
+    );
+  }
   return [...scored.map((x) => x.item), ...tail];
 }
 

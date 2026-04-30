@@ -8,12 +8,10 @@ const {
   traitTotal,
   buildProfileDrivenCurationRules,
   buildOceanFingerprint,
-  normalizeSuggestedWorksByGenre,
   normalizeWorkCandidateRows,
   normalizeTitleForCompare,
   countDefaultCanonOverlap,
   countGlobalCanonOverlap,
-  GENRE_REC_KEYS,
 } = require("./agentUtils");
 
 const RECENT_FEED_TITLES = new Map();
@@ -317,16 +315,7 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
   if (artisticProfile && typeof artisticProfile === "object") {
     const prof = String(artisticProfile.profile || "").trim();
     const desc = String(artisticProfile.description || "").trim().slice(0, 500);
-    const gr = artisticProfile.genreRecommendations;
-    let genreLine = "";
-    if (gr && typeof gr === "object") {
-      genreLine = GENRE_REC_KEYS.map((k) => {
-        const arr = gr[k];
-        if (!Array.isArray(arr) || !arr.length) return null;
-        return `${k}: ${arr.filter(Boolean).map(String).join(", ")}`;
-      }).filter(Boolean).join(" | ");
-    }
-    artExtra = `\nPerfil artístico existente: ${prof}\n${desc}\n${genreLine ? `${genreLine}\n` : ""}`;
+    artExtra = `\nPerfil artístico existente: ${prof}\n${desc}\n`;
   }
   const prompt = `Eres curador cultural para una app de descubrimiento.
 Perfil OCEAN: Apertura ${o.toFixed(2)}, Responsabilidad ${c.toFixed(2)}, Extraversión ${e.toFixed(2)}, Amabilidad ${a.toFixed(2)}, Neuroticismo ${n.toFixed(2)}
@@ -339,8 +328,8 @@ Fragmentos web:
 ${webBlock || "(Sin resultados web: NO te limites a clásicos obvios; prioriza ajuste fino por subgénero, tono y rasgos OCEAN del usuario.)"}
 Genera exactamente ${TARGET_CANDIDATES} candidatos mezclando categorías, equilibrando cine/música/literatura/videojuegos/arte-visual.
 Mínimo 10 candidatos por categoría cuando sea posible.
-Haz recomendaciones más arriesgadas (menos obvias/mainstream) SIEMPRE que mantengan fidelidad al perfil OCEAN y a genreRecommendations.
-Riesgo controlado: la exploración debe ocurrir dentro de los subgéneros del perfil, no fuera de ellos.
+Haz recomendaciones más arriesgadas (menos obvias/mainstream) SIEMPRE que mantengan fidelidad al perfil OCEAN y al perfil artístico textual.
+Riesgo controlado: la exploración debe respetar rasgos y subfacetas OCEAN, no depender de listas de géneros predefinidas.
 Evita converger en títulos repetidos entre usuarios salvo encaje excepcional.
 Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":"...","genreHint":"..."}]}
 `;
@@ -374,20 +363,6 @@ Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":".
   if (!Array.isArray(rawList)) return { candidates: [], webSearchUsed: webUsed, reason: "no_candidates" };
 
   let cleaned = normalizeWorkCandidateRows(rawList, TARGET_CANDIDATES);
-  const genreRecs = artisticProfile?.genreRecommendations;
-  if (genreRecs && typeof genreRecs === "object") {
-    const aligned = normalizeSuggestedWorksByGenre(rawList, genreRecs, TARGET_CANDIDATES);
-    const combined = mergePreferredCandidates(aligned, cleaned, TARGET_CANDIDATES);
-    const alignedRatio = cleaned.length > 0 ? aligned.length / cleaned.length : 0;
-    logger.info(
-      "[dreamlodge][feed] genre_alignment raw=%s aligned=%s alignedRatio=%s merged=%s",
-      Array.isArray(rawList) ? rawList.length : 0,
-      aligned.length,
-      alignedRatio.toFixed(2),
-      combined.length
-    );
-    cleaned = combined;
-  }
 
   try {
     const userProfileText = buildUserProfileText({
@@ -396,7 +371,10 @@ Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":".
       e,
       a,
       n,
-      artisticProfile,
+      artisticProfile: {
+        profile: artisticProfile?.profile,
+        description: artisticProfile?.description,
+      },
       oceanFingerprint,
     });
     const vectorReranked = await rerankByEmbeddingSimilarity({
@@ -404,6 +382,10 @@ Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":".
       userProfileText,
       candidates: cleaned,
       maxScan: 90,
+      logger,
+      userId: String(
+        oceanResult.entityId != null ? oceanResult.entityId : oceanResult.entity_id || ""
+      ),
     });
     if (Array.isArray(vectorReranked) && vectorReranked.length) {
       cleaned = vectorReranked;
