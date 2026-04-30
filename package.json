@@ -29,6 +29,7 @@
     "swagger-ui-express": "^5.0.1"
   },
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "embeddings:backfill": "node scripts/backfillArtworkEmbeddings.js"
   }
 }

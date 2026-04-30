@@ -1,5 +1,9 @@
 const { buildCuratorContextFromSerper } = require("./webSearch");
 const {
+  buildUserProfileText,
+  rerankByEmbeddingSimilarity,
+} = require("./vectorRetriever");
+const {
   formatExceptionForClient,
   traitTotal,
   buildProfileDrivenCurationRules,
@@ -383,6 +387,29 @@ Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":".
       combined.length
     );
     cleaned = combined;
+  }
+
+  try {
+    const userProfileText = buildUserProfileText({
+      o,
+      c,
+      e,
+      a,
+      n,
+      artisticProfile,
+      oceanFingerprint,
+    });
+    const vectorReranked = await rerankByEmbeddingSimilarity({
+      agent,
+      userProfileText,
+      candidates: cleaned,
+      maxScan: 90,
+    });
+    if (Array.isArray(vectorReranked) && vectorReranked.length) {
+      cleaned = vectorReranked;
+    }
+  } catch (_) {
+    // Fallback silencioso: si embeddings falla, se conserva flujo actual.
   }
 
   const feedEntityId = oceanResult.entityId != null ? oceanResult.entityId : oceanResult.entity_id;

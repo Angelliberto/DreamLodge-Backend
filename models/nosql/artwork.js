@@ -35,6 +35,9 @@ const artworkSchema = new mongoose.Schema({
     label: String, // "Nintendo", "Sony Music", "Oleo sobre lienzo"
     contextLink: String // Link a la web original o app
   },
+  embedding: [Number], // Vector semántico para retrieval/reranking
+  embeddingModel: String,
+  embeddingUpdatedAt: Date,
   
   // Legacy fields (kept for backward compatibility if needed)
   tone_tags: [String], 
