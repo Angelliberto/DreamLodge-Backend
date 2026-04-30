@@ -181,6 +181,13 @@ function excludeRecentTitlesForForce(items, recentTitles) {
   return list.filter((item) => !recent.has(norm(item?.title)));
 }
 
+function hasCategorySurplus(item, categoryCounts, minPerCategory) {
+  const cat = item?.category;
+  if (!cat) return false;
+  const count = Number(categoryCounts?.[cat] || 0);
+  return count > Math.max(2, Number(minPerCategory || 0));
+}
+
 /**
  * GET|POST /api/feed/personalized
  * Query: force=1, anchorsOnly=1 (solo obras del perfil artístico, sin curación Gemini)
@@ -241,15 +248,12 @@ const getPersonalizedFeedCurated = async (req, res) => {
     if (!force) {
       const hit = FEED_CACHE.get(key);
       if (hit && Date.now() - hit.ts < FEED_TTL_MS) {
-        const sameOceanVersion =
-          Number(hit.oceanUpdatedAt || 0) === Number(oceanUpdatedAt || 0);
         console.log(
-          "[feed/personalized] cache_check userId=%s sameOcean=%s cacheAgeMs=%s",
+          "[feed/personalized] cache_check userId=%s cacheAgeMs=%s",
           key,
-          Boolean(sameOceanVersion),
           Date.now() - hit.ts
         );
-        if (Array.isArray(hit.data?.items) && sameOceanVersion) {
+        if (Array.isArray(hit.data?.items)) {
           console.log(
             "[feed/personalized] cache_hit userId=%s items=%s reason=%s",
             key,
@@ -380,28 +384,29 @@ const getPersonalizedFeedCurated = async (req, res) => {
     );
     const signals = buildUserInteractionSignals(userWithSignals);
     const recentUserTitles = getRecentUserTitles(key);
-    const resolvedCuratedEffective = force
-      ? excludeRecentTitlesForForce(resolvedCurated, recentUserTitles)
-      : resolvedCurated;
-    const resolvedAnchorsEffective = force
-      ? excludeRecentTitlesForForce(resolvedAnchors, recentUserTitles)
-      : resolvedAnchors;
+    const resolvedCuratedEffective = resolvedCurated;
+    const resolvedAnchorsEffective = resolvedAnchors;
 
     const rerankedCurated = [...resolvedCuratedEffective]
       .map((item) => {
         const userScore = scoreByUserSignals(item, signals);
-        const globalPenalty = getGlobalRepeatPenalty(item);
+        const canPenalizeRecent = hasCategorySurplus(
+          item,
+          resolvedCuratedCounts,
+          MIN_ITEMS_PER_CATEGORY
+        );
         const recentPenalty =
-          force && recentUserTitles.has(norm(item?.title)) ? 2.6 : 0;
+          force && canPenalizeRecent && recentUserTitles.has(norm(item?.title))
+            ? 1.0
+            : 0;
         return {
           item,
-          s: userScore - globalPenalty - recentPenalty,
+          s: userScore - recentPenalty,
           userScore,
-          globalPenalty,
           recentPenalty,
         };
       })
-      .filter((row) => row.s > -3.5)
+      .filter((row) => row.s > -4.5)
       .sort((a, b) => b.s - a.s)
       .map((row) => row.item)
       .slice(0, 120);
