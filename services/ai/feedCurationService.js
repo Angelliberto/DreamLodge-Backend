@@ -17,6 +17,92 @@ const RECENT_TTL_MS = 24 * 60 * 60 * 1000;
 const RECENT_KEEP = 40;
 const TARGET_CANDIDATES = 60;
 
+function scoreBand(v) {
+  const n = Number(v) || 0;
+  if (n >= 3.8) return "alta";
+  if (n <= 2.2) return "baja";
+  return "media";
+}
+
+function facetValue(scores, traitKey, facetKey) {
+  const trait = scores?.[traitKey];
+  if (!trait || typeof trait !== "object") return null;
+  const raw = trait[facetKey];
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatFacetLine(scores, traitKey, facetKey, label) {
+  const v = facetValue(scores, traitKey, facetKey);
+  if (v == null) return null;
+  return `${label}: ${v.toFixed(2)} (${scoreBand(v)})`;
+}
+
+function buildOceanFacetInterpretation(scores, totals) {
+  const oBand = scoreBand(totals.o);
+  const cBand = scoreBand(totals.c);
+  const eBand = scoreBand(totals.e);
+  const aBand = scoreBand(totals.a);
+  const nBand = scoreBand(totals.n);
+  const dimensionRows = [
+    { key: "apertura", value: Number(totals.o) || 0 },
+    { key: "responsabilidad", value: Number(totals.c) || 0 },
+    { key: "extraversion", value: Number(totals.e) || 0 },
+    { key: "amabilidad", value: Number(totals.a) || 0 },
+    { key: "neuroticismo", value: Number(totals.n) || 0 },
+  ];
+  const dominantFacet = [...dimensionRows].sort((x, y) => y.value - x.value)[0];
+
+  const keySubfacets = [
+    formatFacetLine(scores, "openness", "imagination", "Apertura/imaginación"),
+    formatFacetLine(scores, "conscientiousness", "orderliness", "Responsabilidad/meticulosidad"),
+    formatFacetLine(scores, "conscientiousness", "perfectionism", "Responsabilidad/perfeccionismo"),
+    formatFacetLine(scores, "extraversion", "sociability", "Extraversión/sociabilidad"),
+    formatFacetLine(scores, "agreeableness", "empathy", "Amabilidad/empatía"),
+    formatFacetLine(scores, "neuroticism", "calmness", "Neuroticismo/calma"),
+  ].filter(Boolean);
+
+  return `Traducción OCEAN a estilo de recomendación (obligatorio):
+- APERTURA (actual: ${oBand})
+  - baja: accesible, narrativo claro, emociones directas, formatos familiares.
+  - media: mezcla de piezas accesibles con exploración moderada.
+  - alta: experimental, simbólico, estructuras no lineales, mundos raros.
+- RESPONSABILIDAD (actual: ${cBand})
+  - baja: vibra desordenada/caótica, espontánea, punk, experimental cruda, anti-perfeccionista.
+  - media: equilibrio estructura-libertad, complejidad moderada, claridad con giros.
+  - alta: precisión formal, patrones, puzzles, lógica, diseño elegante.
+- EXTRAVERSIÓN (actual: ${eBand})
+  - baja: intimista, solitario, contemplativo, ritmo lento.
+  - media: alterna social e introspectivo.
+  - alta: energía social, ritmo alto, performance, celebración colectiva.
+- AMABILIDAD (actual: ${aBand})
+  - baja: fricción moral, ironía, conflicto, personajes ásperos.
+  - media: equilibrio entre calidez y tensión dramática.
+  - alta: calidez humana, cooperación, ternura, esperanza.
+- NEUROTICISMO (actual: ${nBand})
+  - baja: serenidad, estabilidad, foco, atmósferas limpias.
+  - media: contraste emocional moderado sin extremos.
+  - alta: catarsis emocional, intensidad psicológica, vulnerabilidad.
+- Subfacetas a priorizar para afinar la selección:
+${keySubfacets.length ? keySubfacets.map((x) => `  - ${x}`).join("\n") : "  - (sin subfacetas disponibles en este perfil)"}
+
+Regla crítica:
+- NO uses solo 'alto/bajo' de forma genérica.
+- Convierte cada faceta en tono/estructura/energía concretos al proponer obras.
+- La traducción OCEAN aplica a la vibra general de la obra, no solo a la estética visual.
+- En videojuegos considera también mecánicas, loop de juego, ritmo, dificultad, agencia del jugador, narrativa y tono emocional.
+- Faceta dominante del usuario: ${dominantFacet?.key || "no_disponible"} (${(dominantFacet?.value || 0).toFixed(2)}). Trátala SIEMPRE como ALTA y úsala como prioridad principal de curaduría.
+- Apertura baja/media/alta: usa respectivamente formatos familiares, mezcla exploración moderada, o propuestas experimentales.
+- Responsabilidad baja/media/alta: usa respectivamente caos espontáneo, equilibrio estructura-libertad, o precisión lógica/puzzles.
+- Extraversión baja/media/alta: usa respectivamente intimidad contemplativa, balance social-introspectivo, o energía social alta.
+- Amabilidad baja/media/alta: usa respectivamente conflicto e ironía, equilibrio tensión-calidez, o calidez cooperativa.
+- Neuroticismo baja/media/alta: usa respectivamente serenidad estable, contraste emocional moderado, o catarsis/intensidad emocional.
+- Si Responsabilidad/meticulosidad es baja, prioriza propuestas con estética caótica o desordenada.
+- Si Responsabilidad/meticulosidad es media, prioriza equilibrio: obras híbridas (parte estructuradas y parte libres), con complejidad moderada y narrativa clara con giros.
+- Si Responsabilidad/perfeccionismo o meticulosidad es alta, prioriza obras de precisión, lógica y puzzles.`;
+}
+
 function getRecentTitlesForUser(userId) {
   const key = String(userId || "").trim();
   if (!key) return new Set();
@@ -87,6 +173,7 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
   const n = traitTotal(scores, "neuroticism");
   const oceanFingerprint = buildOceanFingerprint(scores);
   const profileDrivenRules = buildProfileDrivenCurationRules({ o, c, e, a, n, fingerprint: oceanFingerprint });
+  const facetInterpretation = buildOceanFacetInterpretation(scores, { o, c, e, a, n });
 
   const personalityLine = `openness ${o.toFixed(1)} conscientiousness ${c.toFixed(1)} extraversion ${e.toFixed(1)} agreeableness ${a.toFixed(1)} neuroticism ${n.toFixed(1)}`;
   const [webBlock, webUsed] = await buildCuratorContextFromSerper(personalityLine);
@@ -112,6 +199,7 @@ Huella del perfil: ${oceanFingerprint}
 ${artExtra}
 Reglas de diferenciación:
 - ${profileDrivenRules.rulesText}
+${facetInterpretation}
 Fragmentos web:
 ${webBlock || "(Sin resultados web: NO te limites a clásicos obvios; prioriza ajuste fino por subgénero, tono y rasgos OCEAN del usuario.)"}
 Genera exactamente ${TARGET_CANDIDATES} candidatos mezclando categorías, equilibrando cine/música/literatura/videojuegos/arte-visual.
