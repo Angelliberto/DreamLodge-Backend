@@ -384,10 +384,12 @@ const getPersonalizedFeedCurated = async (req, res) => {
     );
     const signals = buildUserInteractionSignals(userWithSignals);
     const recentUserTitles = getRecentUserTitles(key);
+    const favoriteTitles = signals.favorite;
     const resolvedCuratedEffective = resolvedCurated;
     const resolvedAnchorsEffective = resolvedAnchors;
 
     const rerankedCurated = [...resolvedCuratedEffective]
+      .filter((item) => !favoriteTitles.has(norm(item?.title)))
       .map((item) => {
         const userScore = scoreByUserSignals(item, signals);
         const canPenalizeRecent = hasCategorySurplus(
@@ -427,9 +429,12 @@ const getPersonalizedFeedCurated = async (req, res) => {
       rerankedCurated,
       mergeCulturalFeedDedupe(resolvedAnchorsEffective, resolvedCuratedEffective)
     );
+    const categoryPoolFiltered = categoryPool.filter(
+      (item) => !favoriteTitles.has(norm(item?.title))
+    );
     let items = buildBalancedCategoryFeed(
       rerankedCurated,
-      categoryPool,
+      categoryPoolFiltered,
       REQUIRED_FEED_CATEGORIES
       ,
       MIN_ITEMS_PER_CATEGORY,
