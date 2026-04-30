@@ -97,6 +97,18 @@ function bestVariantTokenDiff(wantedTitle, variants) {
   return best;
 }
 
+function passesStrictCineTitleGate(wantedTitle, tokenCount, pick, variants) {
+  if (!pick || !variants?.length) return false;
+  if (tokenCount <= 0) return true;
+  const exact = hasExactTitleVariant(wantedTitle, variants);
+  if (exact) return true;
+  if (tokenCount <= 3) {
+    const tokenDiff = bestVariantTokenDiff(wantedTitle, variants);
+    return pick.score >= 0.93 && tokenDiff <= 1;
+  }
+  return true;
+}
+
 function bestCreatorSimilarity(hint, names) {
   const list = Array.isArray(names) ? names.filter(Boolean) : [];
   if (!list.length) return 0;
@@ -236,18 +248,30 @@ async function resolveOne(c, genreMap) {
         searchTmdbMovies(q),
         searchTmdbTv(q),
       ]);
-      const moviePick = pickBestTitleMatch(
+      const rawMoviePick = pickBestTitleMatch(
         movies,
         (m) => [m.title, m.original_title].filter(Boolean),
         title,
         { minScore, maxScan: 12 }
       );
-      const tvPick = pickBestTitleMatch(
+      const rawTvPick = pickBestTitleMatch(
         tvshows,
         (t) => [t.name, t.original_name].filter(Boolean),
         title,
         { minScore, maxScan: 12 }
       );
+      const movieVariants = rawMoviePick
+        ? [rawMoviePick.item.title, rawMoviePick.item.original_title].filter(Boolean)
+        : [];
+      const tvVariants = rawTvPick
+        ? [rawTvPick.item.name, rawTvPick.item.original_name].filter(Boolean)
+        : [];
+      const moviePick = passesStrictCineTitleGate(title, tokenCount, rawMoviePick, movieVariants)
+        ? rawMoviePick
+        : null;
+      const tvPick = passesStrictCineTitleGate(title, tokenCount, rawTvPick, tvVariants)
+        ? rawTvPick
+        : null;
       if (moviePick && tvPick) {
         let movieDirectors;
         let tvCreators;
@@ -274,8 +298,6 @@ async function resolveOne(c, genreMap) {
           }
         }
 
-        const movieVariants = [moviePick.item.title, moviePick.item.original_title].filter(Boolean);
-        const tvVariants = [tvPick.item.name, tvPick.item.original_name].filter(Boolean);
         const movieExact = hasExactTitleVariant(title, movieVariants);
         const tvExact = hasExactTitleVariant(title, tvVariants);
         if (movieExact !== tvExact) {
@@ -305,7 +327,8 @@ async function resolveOne(c, genreMap) {
         if (creator.length >= 2 && moviePick.score < 0.95) {
           movieDirectors = await getTmdbMovieDirectors(moviePick.item?.id);
           const movieCreatorScore = bestCreatorSimilarity(creator, movieDirectors);
-          if (movieDirectors.length && movieCreatorScore < 0.42) return null;
+          // Avoid dropping good title matches due to noisy creator hints from IA.
+          if (movieDirectors.length && movieCreatorScore < 0.25 && moviePick.score < 0.86) return null;
           return await adaptTmdbCineOrNull(moviePick.item, "movie", genreMap, movieDirectors);
         }
         return await adaptTmdbCineOrNull(moviePick.item, "movie", genreMap, movieDirectors);
@@ -315,7 +338,8 @@ async function resolveOne(c, genreMap) {
         if (creator.length >= 2 && tvPick.score < 0.95) {
           tvCreators = await getTmdbTvCreators(tvPick.item?.id);
           const tvCreatorScore = bestCreatorSimilarity(creator, tvCreators);
-          if (tvCreators.length && tvCreatorScore < 0.42) return null;
+          // Avoid dropping good title matches due to noisy creator hints from IA.
+          if (tvCreators.length && tvCreatorScore < 0.25 && tvPick.score < 0.86) return null;
           return await adaptTmdbCineOrNull(tvPick.item, "tv", genreMap, tvCreators);
         }
         return await adaptTmdbCineOrNull(tvPick.item, "tv", genreMap, tvCreators);
@@ -372,7 +396,7 @@ async function resolveOne(c, genreMap) {
         (hint) => {
           const authors = bookPick.item.volumeInfo?.authors || [];
           if (!authors.length) return true;
-          return authors.some((n) => personNameSimilarity(hint, n) >= 0.42);
+          return authors.some((n) => personNameSimilarity(hint, n) >= 0.32);
         }
       );
       if (!okCreator) return null;
