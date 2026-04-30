@@ -49,12 +49,166 @@ function formatFacetLine(scores, traitKey, facetKey, label) {
   return `${label}: ${v.toFixed(2)} (${scoreBand(v)})`;
 }
 
+const FACET_DETAIL_LABELS = {
+  "muy-baja": "muy-baja",
+  baja: "baja",
+  "media-baja": "media-baja",
+  "media-alta": "media-alta",
+  alta: "alta",
+  "muy-alta": "muy-alta",
+};
+
+const FACET_PROMPT_RULES = {
+  apertura: {
+    "muy-baja": "lenguaje claro, estructura lineal, simbolismo mínimo y entrada inmediata.",
+    baja: "base familiar con narrativa clara y baja ambiguedad.",
+    "media-baja": "base familiar con una capa de rareza controlada.",
+    "media-alta": "exploración formal moderada con ambiguedad legible.",
+    alta: "propuesta experimental, simbólica y no lineal.",
+    "muy-alta": "riesgo formal extremo, ruptura de convenciones y alta abstracción.",
+  },
+  responsabilidad: {
+    "muy-baja": "caos intencional, improvisación y ruptura fuerte de reglas.",
+    baja: "energía cruda y progresión flexible con poco apego a método.",
+    "media-baja": "alterna orden y desorden con foco en sorpresa.",
+    "media-alta": "estructura clara con libertad parcial y reto medio.",
+    alta: "precisión formal, patrones, lógica y consistencia sistémica.",
+    "muy-alta": "optimización, mastery, alta exigencia de método y control.",
+  },
+  extraversion: {
+    "muy-baja": "intimista, contemplativo y de baja estimulación social.",
+    baja: "escala pequeña, ritmo lento y foco interno.",
+    "media-baja": "social selectivo con energía contenida.",
+    "media-alta": "mezcla introspección con picos sociales moderados.",
+    alta: "energía social alta, ritmo dinámico y alta interacción.",
+    "muy-alta": "máxima expresividad social y alto impulso performativo.",
+  },
+  amabilidad: {
+    "muy-baja": "fricción moral intensa, ironía dura y personajes ásperos.",
+    baja: "conflicto interpersonal y decisiones moralmente grises.",
+    "media-baja": "empatía selectiva con tensión narrativa.",
+    "media-alta": "calidez parcial con conflicto moderado.",
+    alta: "cooperación, ternura, cuidado y esperanza.",
+    "muy-alta": "prosocialidad extrema, reconciliación y soporte emocional.",
+  },
+  neuroticismo: {
+    "muy-baja": "serenidad alta, regulación emocional firme y atmósfera estable.",
+    baja: "calma, foco y baja reactividad emocional.",
+    "media-baja": "sensibilidad moderada con control afectivo.",
+    "media-alta": "vulnerabilidad mayor y tensión psicológica recurrente.",
+    alta: "catarsis emocional marcada e intensidad afectiva.",
+    "muy-alta": "alta carga emocional, ansiedad dramática y picos afectivos.",
+  },
+};
+
+const GAME_RULES = {
+  apertura:
+    "Apertura: baja=experiencias claras; media-baja=fórmula conocida con twist; media-alta=mundos inventivos moderados; alta/muy-alta=diseño experimental y narrativa no convencional.",
+  responsabilidad:
+    "Responsabilidad: baja=sandbox/caos; media-baja=progresión flexible; media-alta=loops estructurados con objetivos claros; alta/muy-alta=estrategia, simulación, puzzle complejo y mastery.",
+  extraversion:
+    "Extraversión: baja=single-player íntimo; media-baja=social opcional; media-alta=mixto solo-social; alta/muy-alta=multijugador de alta interacción.",
+  amabilidad:
+    "Amabilidad: baja=conflicto duro; media-baja=tensión ética con empatía parcial; media-alta=cooperación parcial; alta/muy-alta=cooperación, soporte y comunidad prosocial.",
+  neuroticismo:
+    "Neuroticismo: baja=ritmo estable y bajo estrés; media-baja=tensión controlada; media-alta=intensidad con respiros; alta/muy-alta=survival/psicológico y catarsis.",
+};
+
+const MUSIC_RULES = {
+  apertura:
+    "Apertura: baja=estructura tradicional y melodía clara; media-baja=alternativo accesible; media-alta=híbridos y texturas menos obvias; alta/muy-alta=experimental, avant-pop o ambient abstracto.",
+  responsabilidad:
+    "Responsabilidad: baja=crudeza espontánea; media-baja=groove flexible; media-alta=producción cuidada con libertad; alta/muy-alta=arreglos meticulosos y composición compleja.",
+  extraversion:
+    "Extraversión: baja=íntimo/acústico; media-baja=energía media; media-alta=alternancia introspectiva-bailable; alta/muy-alta=alta energía, himnos y performance social.",
+  amabilidad:
+    "Amabilidad: baja=letra filosa/irónica; media-baja=ambivalencia; media-alta=calidez con tensión; alta/muy-alta=empatía, ternura y unión.",
+  neuroticismo:
+    "Neuroticismo: baja=calma reguladora; media-baja=melancolía suave; media-alta=tensión emocional notable; alta/muy-alta=catarsis intensa y vulnerabilidad explícita.",
+};
+
+const CINEMA_RULES = {
+  apertura:
+    "Apertura: baja=narrativa clásica y legible; media-baja=convención con giro; media-alta=lenguaje visual más arriesgado; alta/muy-alta=estructura no lineal y apuesta autoral.",
+  responsabilidad:
+    "Responsabilidad: baja=energía cruda e impredecible; media-baja=ritmo flexible; media-alta=estructura sólida con libertad; alta/muy-alta=guion preciso, montaje metódico y diseño formal.",
+  extraversion:
+    "Extraversión: baja=drama íntimo y foco interno; media-baja=social contenido; media-alta=balance intimidad-espectáculo; alta/muy-alta=dinamismo colectivo y alto pulso social.",
+  amabilidad:
+    "Amabilidad: baja=fricción moral y personajes ásperos; media-baja=empatía selectiva; media-alta=humanidad con tensión; alta/muy-alta=calidez, cooperación y reparación.",
+  neuroticismo:
+    "Neuroticismo: baja=tono estable y regulado; media-baja=melancolía controlada; media-alta=tensión psicológica frecuente; alta/muy-alta=catarsis emocional intensa.",
+};
+
+const LITERATURE_RULES = {
+  apertura:
+    "Apertura: baja=prosa clara y lineal; media-baja=forma clásica con innovación leve; media-alta=capas simbólicas moderadas; alta/muy-alta=experimentación formal y ambigüedad rica.",
+  responsabilidad:
+    "Responsabilidad: baja=voz espontánea y borde caótico; media-baja=estructura flexible; media-alta=arquitectura narrativa coherente; alta/muy-alta=estructura precisa, lógica interna y alta densidad de diseño.",
+  extraversion:
+    "Extraversión: baja=introspección profunda; media-baja=escala interpersonal contenida; media-alta=alterna mundo interno y social; alta/muy-alta=novelas corales y alta interacción social.",
+  amabilidad:
+    "Amabilidad: baja=cinismo, ironía y conflicto ético duro; media-baja=ambivalencia afectiva; media-alta=empatía parcial; alta/muy-alta=compasión, vínculos y cuidado.",
+  neuroticismo:
+    "Neuroticismo: baja=serenidad reflexiva; media-baja=tensión leve y controlada; media-alta=vulnerabilidad psicológica marcada; alta/muy-alta=intensidad emocional y catarsis.",
+};
+
+const VISUAL_ART_RULES = {
+  apertura:
+    "Apertura: baja=figuración accesible; media-baja=lenguaje tradicional con desviaciones; media-alta=abstracción parcial y concepto moderado; alta/muy-alta=alto riesgo conceptual y ruptura estética.",
+  responsabilidad:
+    "Responsabilidad: baja=gestualidad cruda y caos expresivo; media-baja=orden parcial; media-alta=composición clara con libertad; alta/muy-alta=geometría, precisión técnica y control compositivo.",
+  extraversion:
+    "Extraversión: baja=obra íntima y contemplativa; media-baja=presencia social discreta; media-alta=equilibrio entre introspección y exhibición; alta/muy-alta=obra performativa, pública e inmersiva.",
+  amabilidad:
+    "Amabilidad: baja=fricción política/moral y aspereza visual; media-baja=ambivalencia afectiva; media-alta=calidez moderada; alta/muy-alta=humanismo, ternura y cooperación simbólica.",
+  neuroticismo:
+    "Neuroticismo: baja=atmósfera estable y reguladora; media-baja=melancolía contenida; media-alta=tensión expresiva constante; alta/muy-alta=descarga emocional intensa.",
+};
+
+function buildCompactFacetPrompt({ scores, totals, dominantFacet, keySubfacets }) {
+  const dimensions = [
+    ["apertura", totals.o],
+    ["responsabilidad", totals.c],
+    ["extraversion", totals.e],
+    ["amabilidad", totals.a],
+    ["neuroticismo", totals.n],
+  ];
+
+  const dimLines = dimensions.map(([key, value]) => {
+    const detail = scoreDetailBand(value);
+    const current = Number(value || 0).toFixed(2);
+    const rule = FACET_PROMPT_RULES[key]?.[detail] || FACET_PROMPT_RULES[key]?.media || "";
+    return `- ${key}: ${current} (${FACET_DETAIL_LABELS[detail] || detail}) => ${rule}`;
+  });
+
+  const dimKeys = dimensions.map(([key]) => key);
+  const gameLines = dimKeys.map((key) => `  - ${GAME_RULES[key]}`).join("\n");
+  const musicLines = dimKeys.map((key) => `  - ${MUSIC_RULES[key]}`).join("\n");
+  const cinemaLines = dimKeys.map((key) => `  - ${CINEMA_RULES[key]}`).join("\n");
+  const literatureLines = dimKeys.map((key) => `  - ${LITERATURE_RULES[key]}`).join("\n");
+  const visualArtLines = dimKeys.map((key) => `  - ${VISUAL_ART_RULES[key]}`).join("\n");
+
+  return `Traducción OCEAN compacta y dinámica (OBLIGATORIO):
+${dimLines.join("\n")}
+- Subfacetas clave:
+${keySubfacets.length ? keySubfacets.map((x) => `  - ${x}`).join("\n") : "  - (sin subfacetas disponibles en este perfil)"}
+- Faceta dominante: ${dominantFacet?.key || "no_disponible"} (${(dominantFacet?.value || 0).toFixed(2)}), tratarla SIEMPRE como ALTA y prioritaria.
+- Reglas para VIDEOJUEGOS (aplican según nivel actual por faceta):
+${gameLines}
+- Reglas para MÚSICA (aplican según nivel actual por faceta):
+${musicLines}
+- Reglas para CINE (aplican según nivel actual por faceta):
+${cinemaLines}
+- Reglas para LITERATURA (aplican según nivel actual por faceta):
+${literatureLines}
+- Reglas para ARTE-VISUAL (aplican según nivel actual por faceta):
+${visualArtLines}
+- Aplica esta lógica a la vibra general (mecánicas, loop, ritmo, dificultad, agencia, narrativa y tono), no solo estética visual.
+- Distingue media-baja de media-alta y evita recomendaciones clónicas entre usuarios.`;
+}
+
 function buildOceanFacetInterpretation(scores, totals) {
-  const oBand = scoreBand(totals.o);
-  const cBand = scoreBand(totals.c);
-  const eBand = scoreBand(totals.e);
-  const aBand = scoreBand(totals.a);
-  const nBand = scoreBand(totals.n);
   const dimensionRows = [
     { key: "apertura", value: Number(totals.o) || 0 },
     { key: "responsabilidad", value: Number(totals.c) || 0 },
@@ -72,68 +226,12 @@ function buildOceanFacetInterpretation(scores, totals) {
     formatFacetLine(scores, "agreeableness", "empathy", "Amabilidad/empatía"),
     formatFacetLine(scores, "neuroticism", "calmness", "Neuroticismo/calma"),
   ].filter(Boolean);
-  const oDetail = scoreDetailBand(totals.o);
-  const cDetail = scoreDetailBand(totals.c);
-  const eDetail = scoreDetailBand(totals.e);
-  const aDetail = scoreDetailBand(totals.a);
-  const nDetail = scoreDetailBand(totals.n);
-
-  return `Traducción OCEAN a estilo de recomendación (obligatorio):
-- APERTURA (actual: ${oBand})
-  - baja: lenguaje claro, estructura lineal, símbolos mínimos, conflicto comprensible, curva de entrada rápida.
-  - media-baja: base familiar con 1 capa de rareza (giro formal o temático) sin romper legibilidad.
-  - media-alta: exploración evidente de forma/idea, ambigüedad controlada, capas interpretativas accesibles.
-  - alta: experimental, simbólico, no lineal, riesgo estético alto, propuestas conceptuales y mundos raros.
-- RESPONSABILIDAD (actual: ${cBand})
-  - baja: caos intencional, energía cruda, improvisación, fricción y ruptura de reglas.
-  - media-baja: alterna orden y desorden, progresión flexible, foco en sorpresa más que precisión.
-  - media-alta: estructura clara con momentos de libertad, diseño coherente, reto moderado y lógica parcial.
-  - alta: precisión formal, patrones, puzzles, optimización, consistencia sistémica, diseño elegante y metódico.
-- EXTRAVERSIÓN (actual: ${eBand})
-  - baja: intimista, contemplativo, escala pequeña, ritmo lento, foco interno.
-  - media-baja: social selectivo, tono cálido pero reservado, baja sobreestimulación.
-  - media-alta: alterna introspección con picos sociales/energéticos, dinamismo moderado.
-  - alta: energía social intensa, ritmo alto, performance, celebración colectiva, impulso expresivo.
-- AMABILIDAD (actual: ${aBand})
-  - baja: conflicto moral, ironía dura, tensión interpersonal, personajes ásperos y decisiones difíciles.
-  - media-baja: empatía selectiva, ambivalencia ética, calidez limitada con fricción narrativa.
-  - media-alta: cooperación parcial, humanidad visible con tensión dramática moderada.
-  - alta: calidez humana, cooperación, ternura, reconciliación, cuidado y esperanza.
-- NEUROTICISMO (actual: ${nBand})
-  - baja: serenidad, estabilidad, foco, atmósferas limpias, regulación emocional sostenida.
-  - media-baja: sensibilidad moderada con control, intensidad dosificada y cierre relativamente estable.
-  - media-alta: mayor vulnerabilidad, tensión psicológica frecuente, catarsis parcial.
-  - alta: catarsis emocional intensa, alta vulnerabilidad, ansiedad/drama psicológico y picos afectivos.
-- Intensidad fina por rango (para evitar perfiles clónicos):
-  - Apertura ${Number(totals.o || 0).toFixed(2)} => ${oDetail}
-  - Responsabilidad ${Number(totals.c || 0).toFixed(2)} => ${cDetail}
-  - Extraversión ${Number(totals.e || 0).toFixed(2)} => ${eDetail}
-  - Amabilidad ${Number(totals.a || 0).toFixed(2)} => ${aDetail}
-  - Neuroticismo ${Number(totals.n || 0).toFixed(2)} => ${nDetail}
-- Subfacetas a priorizar para afinar la selección:
-${keySubfacets.length ? keySubfacets.map((x) => `  - ${x}`).join("\n") : "  - (sin subfacetas disponibles en este perfil)"}
-
-Regla crítica:
-- NO uses solo 'alto/bajo' de forma genérica.
-- Convierte cada faceta en tono/estructura/energía concretos al proponer obras.
-- La traducción OCEAN aplica a la vibra general de la obra, no solo a la estética visual.
-- En videojuegos considera también mecánicas, loop de juego, ritmo, dificultad, agencia del jugador, narrativa y tono emocional.
-- Si hay test profundo con subfacetas, recomienda también en función de CADA subfaceta relevante (no solo por el total de la dimensión).
-- Para cada subfaceta alta/media/baja, traduce el nivel a decisiones concretas de curaduría (tono, estructura, ritmo, complejidad, tipo de experiencia).
-- Distingue explícitamente media-baja vs media-alta en dimensiones y subfacetas; NO las trates igual.
-- Da prioridad a subfacetas con mayor puntuación y evita contradicciones con subfacetas claramente bajas.
-- Faceta dominante del usuario: ${dominantFacet?.key || "no_disponible"} (${(dominantFacet?.value || 0).toFixed(2)}). Trátala SIEMPRE como ALTA y úsala como prioridad principal de curaduría.
-- Usa combinaciones de rasgos (no reglas aisladas): cada candidato debe reflejar al menos 2 dimensiones + 1 subfaceta.
-- Si dos usuarios comparten solo el nivel global (ej. media), usa diferencias de subfacetas y rango fino para separar recomendaciones.
-- Evita listas genéricas repetibles entre usuarios: cambia subgénero, época, país, formato, pacing y densidad conceptual según el perfil exacto.
-- Apertura baja/media/alta: usa respectivamente formatos familiares, mezcla exploración moderada, o propuestas experimentales.
-- Responsabilidad baja/media/alta: usa respectivamente caos espontáneo, equilibrio estructura-libertad, o precisión lógica/puzzles.
-- Extraversión baja/media/alta: usa respectivamente intimidad contemplativa, balance social-introspectivo, o energía social alta.
-- Amabilidad baja/media/alta: usa respectivamente conflicto e ironía, equilibrio tensión-calidez, o calidez cooperativa.
-- Neuroticismo baja/media/alta: usa respectivamente serenidad estable, contraste emocional moderado, o catarsis/intensidad emocional.
-- Si Responsabilidad/meticulosidad es baja, prioriza propuestas con estética caótica o desordenada.
-- Si Responsabilidad/meticulosidad es media, prioriza equilibrio: obras híbridas (parte estructuradas y parte libres), con complejidad moderada y narrativa clara con giros.
-- Si Responsabilidad/perfeccionismo o meticulosidad es alta, prioriza obras de precisión, lógica y puzzles.`;
+  return buildCompactFacetPrompt({
+    scores,
+    totals,
+    dominantFacet,
+    keySubfacets,
+  });
 }
 
 function getRecentTitlesForUser(userId) {

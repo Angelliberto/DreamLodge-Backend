@@ -101,6 +101,18 @@ function buildDetailedOceanGuidance(scores, totals) {
   - media-baja: sensibilidad moderada y regulación.
   - media-alta: mayor vulnerabilidad y tensión psicológica.
   - alta: catarsis e intensidad emocional marcada.
+- Matriz ESPECÍFICA para VIDEOJUEGOS (por faceta y nivel):
+  - Apertura baja/media-baja/media-alta/alta: experiencias conocidas y claras / fórmula conocida con un twist / mundos inventivos con experimentación moderada / diseño experimental y narrativa no convencional.
+  - Responsabilidad baja/media-baja/media-alta/alta: sandbox caótico o party impredecible / progresión flexible / loops estructurados con reto medio / estrategia, simulación, puzzle complejo y mastery.
+  - Extraversión baja/media-baja/media-alta/alta: single-player íntimo / social opcional / mix solo-social / multijugador de alta interacción.
+  - Amabilidad baja/media-baja/media-alta/alta: conflicto duro y aristas morales / tensión con empatía parcial / cooperación parcial / cooperación y comunidad prosocial.
+  - Neuroticismo baja/media-baja/media-alta/alta: bajo estrés y ritmo estable / tensión controlada / intensidad frecuente con respiros / survival o psicológico de alta catarsis.
+- Matriz ESPECÍFICA para MÚSICA (por faceta y nivel):
+  - Apertura baja/media-baja/media-alta/alta: estructura tradicional y melodía clara / pop alternativo accesible / híbridos y texturas menos obvias / experimental, avant-pop, ambient abstracto.
+  - Responsabilidad baja/media-baja/media-alta/alta: crudeza e impulso / groove flexible / producción cuidada con libertad / composición técnica y arreglos meticulosos.
+  - Extraversión baja/media-baja/media-alta/alta: íntimo/acústico / energía media / alternancia introspectiva-bailable / himnos de alta energía y performance social.
+  - Amabilidad baja/media-baja/media-alta/alta: ironía y filo / ambivalencia / calidez con tensión / empatía, ternura y unión.
+  - Neuroticismo baja/media-baja/media-alta/alta: calma reguladora / melancolía suave / tensión emocional notable / catarsis intensa y vulnerabilidad explícita.
 - Intensidad fina:
   - Apertura ${Number(totals.o || 0).toFixed(2)} => ${oDetail}
   - Responsabilidad ${Number(totals.c || 0).toFixed(2)} => ${cDetail}
