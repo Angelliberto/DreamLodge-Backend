@@ -24,6 +24,16 @@ function scoreBand(v) {
   return "media";
 }
 
+function scoreDetailBand(v) {
+  const n = Number(v) || 0;
+  if (n < 1.8) return "muy-baja";
+  if (n <= 2.2) return "baja";
+  if (n < 3.0) return "media-baja";
+  if (n < 3.8) return "media-alta";
+  if (n < 4.4) return "alta";
+  return "muy-alta";
+}
+
 function facetValue(scores, traitKey, facetKey) {
   const trait = scores?.[traitKey];
   if (!trait || typeof trait !== "object") return null;
@@ -62,28 +72,44 @@ function buildOceanFacetInterpretation(scores, totals) {
     formatFacetLine(scores, "agreeableness", "empathy", "Amabilidad/empatía"),
     formatFacetLine(scores, "neuroticism", "calmness", "Neuroticismo/calma"),
   ].filter(Boolean);
+  const oDetail = scoreDetailBand(totals.o);
+  const cDetail = scoreDetailBand(totals.c);
+  const eDetail = scoreDetailBand(totals.e);
+  const aDetail = scoreDetailBand(totals.a);
+  const nDetail = scoreDetailBand(totals.n);
 
   return `Traducción OCEAN a estilo de recomendación (obligatorio):
 - APERTURA (actual: ${oBand})
-  - baja: accesible, narrativo claro, emociones directas, formatos familiares.
-  - media: mezcla de piezas accesibles con exploración moderada.
-  - alta: experimental, simbólico, estructuras no lineales, mundos raros.
+  - baja: lenguaje claro, estructura lineal, símbolos mínimos, conflicto comprensible, curva de entrada rápida.
+  - media-baja: base familiar con 1 capa de rareza (giro formal o temático) sin romper legibilidad.
+  - media-alta: exploración evidente de forma/idea, ambigüedad controlada, capas interpretativas accesibles.
+  - alta: experimental, simbólico, no lineal, riesgo estético alto, propuestas conceptuales y mundos raros.
 - RESPONSABILIDAD (actual: ${cBand})
-  - baja: vibra desordenada/caótica, espontánea, punk, experimental cruda, anti-perfeccionista.
-  - media: equilibrio estructura-libertad, complejidad moderada, claridad con giros.
-  - alta: precisión formal, patrones, puzzles, lógica, diseño elegante.
+  - baja: caos intencional, energía cruda, improvisación, fricción y ruptura de reglas.
+  - media-baja: alterna orden y desorden, progresión flexible, foco en sorpresa más que precisión.
+  - media-alta: estructura clara con momentos de libertad, diseño coherente, reto moderado y lógica parcial.
+  - alta: precisión formal, patrones, puzzles, optimización, consistencia sistémica, diseño elegante y metódico.
 - EXTRAVERSIÓN (actual: ${eBand})
-  - baja: intimista, solitario, contemplativo, ritmo lento.
-  - media: alterna social e introspectivo.
-  - alta: energía social, ritmo alto, performance, celebración colectiva.
+  - baja: intimista, contemplativo, escala pequeña, ritmo lento, foco interno.
+  - media-baja: social selectivo, tono cálido pero reservado, baja sobreestimulación.
+  - media-alta: alterna introspección con picos sociales/energéticos, dinamismo moderado.
+  - alta: energía social intensa, ritmo alto, performance, celebración colectiva, impulso expresivo.
 - AMABILIDAD (actual: ${aBand})
-  - baja: fricción moral, ironía, conflicto, personajes ásperos.
-  - media: equilibrio entre calidez y tensión dramática.
-  - alta: calidez humana, cooperación, ternura, esperanza.
+  - baja: conflicto moral, ironía dura, tensión interpersonal, personajes ásperos y decisiones difíciles.
+  - media-baja: empatía selectiva, ambivalencia ética, calidez limitada con fricción narrativa.
+  - media-alta: cooperación parcial, humanidad visible con tensión dramática moderada.
+  - alta: calidez humana, cooperación, ternura, reconciliación, cuidado y esperanza.
 - NEUROTICISMO (actual: ${nBand})
-  - baja: serenidad, estabilidad, foco, atmósferas limpias.
-  - media: contraste emocional moderado sin extremos.
-  - alta: catarsis emocional, intensidad psicológica, vulnerabilidad.
+  - baja: serenidad, estabilidad, foco, atmósferas limpias, regulación emocional sostenida.
+  - media-baja: sensibilidad moderada con control, intensidad dosificada y cierre relativamente estable.
+  - media-alta: mayor vulnerabilidad, tensión psicológica frecuente, catarsis parcial.
+  - alta: catarsis emocional intensa, alta vulnerabilidad, ansiedad/drama psicológico y picos afectivos.
+- Intensidad fina por rango (para evitar perfiles clónicos):
+  - Apertura ${Number(totals.o || 0).toFixed(2)} => ${oDetail}
+  - Responsabilidad ${Number(totals.c || 0).toFixed(2)} => ${cDetail}
+  - Extraversión ${Number(totals.e || 0).toFixed(2)} => ${eDetail}
+  - Amabilidad ${Number(totals.a || 0).toFixed(2)} => ${aDetail}
+  - Neuroticismo ${Number(totals.n || 0).toFixed(2)} => ${nDetail}
 - Subfacetas a priorizar para afinar la selección:
 ${keySubfacets.length ? keySubfacets.map((x) => `  - ${x}`).join("\n") : "  - (sin subfacetas disponibles en este perfil)"}
 
@@ -92,7 +118,14 @@ Regla crítica:
 - Convierte cada faceta en tono/estructura/energía concretos al proponer obras.
 - La traducción OCEAN aplica a la vibra general de la obra, no solo a la estética visual.
 - En videojuegos considera también mecánicas, loop de juego, ritmo, dificultad, agencia del jugador, narrativa y tono emocional.
+- Si hay test profundo con subfacetas, recomienda también en función de CADA subfaceta relevante (no solo por el total de la dimensión).
+- Para cada subfaceta alta/media/baja, traduce el nivel a decisiones concretas de curaduría (tono, estructura, ritmo, complejidad, tipo de experiencia).
+- Distingue explícitamente media-baja vs media-alta en dimensiones y subfacetas; NO las trates igual.
+- Da prioridad a subfacetas con mayor puntuación y evita contradicciones con subfacetas claramente bajas.
 - Faceta dominante del usuario: ${dominantFacet?.key || "no_disponible"} (${(dominantFacet?.value || 0).toFixed(2)}). Trátala SIEMPRE como ALTA y úsala como prioridad principal de curaduría.
+- Usa combinaciones de rasgos (no reglas aisladas): cada candidato debe reflejar al menos 2 dimensiones + 1 subfaceta.
+- Si dos usuarios comparten solo el nivel global (ej. media), usa diferencias de subfacetas y rango fino para separar recomendaciones.
+- Evita listas genéricas repetibles entre usuarios: cambia subgénero, época, país, formato, pacing y densidad conceptual según el perfil exacto.
 - Apertura baja/media/alta: usa respectivamente formatos familiares, mezcla exploración moderada, o propuestas experimentales.
 - Responsabilidad baja/media/alta: usa respectivamente caos espontáneo, equilibrio estructura-libertad, o precisión lógica/puzzles.
 - Extraversión baja/media/alta: usa respectivamente intimidad contemplativa, balance social-introspectivo, o energía social alta.
