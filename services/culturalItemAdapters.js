@@ -17,23 +17,6 @@ function formatTags(tags) {
   return tags.map(formatTag).filter((t) => t.length > 0);
 }
 
-function getDecadeTag(year) {
-  const y = parseInt(String(year), 10);
-  if (Number.isNaN(y)) return null;
-  return `${Math.floor(y / 10) * 10}s`;
-}
-
-function getEraTag(year) {
-  const y = parseInt(String(year), 10);
-  if (Number.isNaN(y)) return null;
-  const age = new Date().getFullYear() - y;
-  if (age <= 2) return "Reciente";
-  if (age <= 10) return "Moderno";
-  if (age <= 30) return "Clásico";
-  if (age <= 50) return "Vintage";
-  return "Antiguo";
-}
-
 function adaptIGDB(game) {
   const year = game.first_release_date
     ? new Date(game.first_release_date * 1000).getFullYear().toString()
@@ -44,17 +27,6 @@ function adaptIGDB(game) {
     .map((p) => p.name || p.abbreviation)
     .filter(Boolean);
   const other = [];
-  if (game.rating) {
-    const r = Math.round(game.rating / 10);
-    if (r >= 9) tags.push("Excelente");
-    else if (r >= 8) tags.push("Alta Calificación");
-  }
-  if (year) {
-    const dec = getDecadeTag(year);
-    if (dec) tags.push(dec);
-    const era = getEraTag(year);
-    if (era) tags.push(era);
-  }
   (game.game_modes || []).forEach((m) => m.name && tags.push(m.name));
   (game.involved_companies || []).forEach((c) => {
     if (c.company?.name) other.push(c.company.name);
@@ -89,21 +61,6 @@ function adaptTMDBMovie(movie, genreMap) {
   const year = movie.release_date ? movie.release_date.split("-")[0] : undefined;
   const tags = [];
   const other = [];
-  if (movie.vote_average) {
-    const r = parseFloat(Number(movie.vote_average).toFixed(1));
-    if (r >= 9) tags.push("Excelente");
-    else if (r >= 8) tags.push("Alta Calificación");
-    else if (r >= 7.5) tags.push("Bien Valorada");
-  }
-  if (movie.popularity && movie.popularity > 50) tags.push("Popular");
-  if (year) {
-    const d = getDecadeTag(year);
-    if (d) tags.push(d);
-    const e = getEraTag(year);
-    if (e) tags.push(e);
-  }
-  if (movie.adult) tags.push("Para Adultos");
-  tags.push("Película");
   const allForFeed = [...genres, ...tags, ...other];
   return {
     id: `movie-${movie.id}`,
@@ -131,19 +88,6 @@ function adaptTMDBTv(show, genreMap) {
   const genres = (show.genre_ids || []).map((id) => genreMap[id]).filter(Boolean);
   const year = show.first_air_date ? show.first_air_date.split("-")[0] : undefined;
   const tags = [];
-  if (show.vote_average) {
-    const r = parseFloat(Number(show.vote_average).toFixed(1));
-    if (r >= 8) tags.push("Alta Calificación");
-    else if (r >= 7) tags.push("Bien Valorada");
-  }
-  if (show.popularity && show.popularity > 40) tags.push("Popular");
-  tags.push("Serie");
-  if (year) {
-    const d = getDecadeTag(year);
-    if (d) tags.push(d);
-    const e = getEraTag(year);
-    if (e) tags.push(e);
-  }
   const allForFeed = [...genres, ...tags];
   return {
     id: `tv-${show.id}`,
@@ -173,7 +117,6 @@ function adaptSpotifyAlbum(album) {
   const tags = [];
   const platforms = [];
   // En feed priorizamos mostrar géneros reales del álbum/artista, no el tipo "Álbum".
-  if (album.popularity && album.popularity > 70) tags.push("Popular");
   if (album.label) platforms.push(album.label);
   const allForFeed = [...genres, ...tags];
   return {
@@ -210,13 +153,6 @@ function adaptBook(volumeItem) {
   const platforms = [];
   const other = [];
   if (vol.language && vol.language !== "en") other.push(vol.language.toUpperCase());
-  if (vol.publishedDate) {
-    const y = vol.publishedDate.split("-")[0];
-    const d = getDecadeTag(y);
-    if (d) tags.push(d);
-    const e = getEraTag(y);
-    if (e) tags.push(e);
-  }
   if (vol.publisher) platforms.push(vol.publisher);
   if (vol.printType) tags.push(formatTag(vol.printType));
   const allForFeed = [...genres, ...tags, ...platforms, ...other];
@@ -295,8 +231,6 @@ function adaptCmaArt(row) {
 module.exports = {
   formatTag,
   formatTags,
-  getDecadeTag,
-  getEraTag,
   adaptIGDB,
   adaptTMDBMovie,
   adaptTMDBTv,
