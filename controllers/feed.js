@@ -511,13 +511,8 @@ const getPersonalizedFeedCurated = async (req, res) => {
         favoriteTitles
       );
       if (favoritesDriven.items.length > 0) {
-        items = buildBalancedCategoryFeed(
-          favoritesDriven.items,
-          categoryPoolFiltered,
-          REQUIRED_FEED_CATEGORIES,
-          MIN_ITEMS_PER_CATEGORY,
-          200
-        );
+        // En modo favoritos, las principales deben venir de similitud con favoritos.
+        items = mergeCulturalFeedDedupe(favoritesDriven.items, []);
         recommendationMode = "favorites";
       } else {
         recommendationMode = "ocean";
