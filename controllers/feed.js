@@ -188,6 +188,58 @@ function hasCategorySurplus(item, categoryCounts, minPerCategory) {
   return count > Math.max(2, Number(minPerCategory || 0));
 }
 
+async function buildFavoritesDrivenRecommendations(userDoc, favoriteTitleSet) {
+  const favorites = Array.isArray(userDoc?.favoriteArtworks)
+    ? userDoc.favoriteArtworks.filter((row) => row && typeof row === "object")
+    : [];
+  if (!favorites.length) {
+    return { items: [], reason: "no_favorites" };
+  }
+
+  const seeds = favorites.slice(0, 4);
+  const batches = await Promise.all(
+    seeds.map(async (fav) => {
+      try {
+        const result = await ai.recommendSimilarWorks(
+          {
+            id: fav.id,
+            title: fav.title,
+            category: fav.category,
+            creator: fav.creator,
+            description: fav.description,
+            metadata: fav.metadata || {},
+          },
+          { limit: 10 }
+        );
+        return Array.isArray(result?.candidates) ? result.candidates : [];
+      } catch (_) {
+        return [];
+      }
+    })
+  );
+
+  const mergedCandidates = [];
+  const seenCandidateKey = new Set();
+  for (const batch of batches) {
+    for (const row of batch || []) {
+      const key = `${String(row?.category || "").trim().toLowerCase()}|${norm(row?.title)}`;
+      if (!key || seenCandidateKey.has(key)) continue;
+      seenCandidateKey.add(key);
+      mergedCandidates.push(row);
+      if (mergedCandidates.length >= 80) break;
+    }
+    if (mergedCandidates.length >= 80) break;
+  }
+
+  if (!mergedCandidates.length) {
+    return { items: [], reason: "favorites_mode_empty_candidates" };
+  }
+
+  const resolved = await resolveCuratedFeedCandidates(mergedCandidates);
+  const filtered = resolved.filter((item) => !favoriteTitleSet.has(norm(item?.title)));
+  return { items: filtered, reason: filtered.length ? "ok" : "favorites_mode_no_resolved_items" };
+}
+
 /**
  * GET|POST /api/feed/personalized
  * Query: force=1, anchorsOnly=1 (solo obras del perfil artístico, sin curación Gemini)
@@ -204,7 +256,11 @@ const getPersonalizedFeedCurated = async (req, res) => {
     const anchorsOnly =
       req.query.anchorsOnly === "1" || req.query.anchorsOnly === "true";
 
-    const key = String(userId);
+    const preferFavorites =
+      req.query.preferFavorites === "1" ||
+      req.query.preferFavorites === "true" ||
+      (req.body && req.body.preferFavorites === true);
+    const key = `${String(userId)}:fav_${preferFavorites ? 1 : 0}`;
     const oceanResult = await OceanModel.findOne({
       entityType: "user",
       entityId: userId,
@@ -317,7 +373,7 @@ const getPersonalizedFeedCurated = async (req, res) => {
 
     let data;
     try {
-      data = await ai.curatePersonalizedFeed(payload);
+        data = await ai.curatePersonalizedFeed(payload);
       console.log(
         "[feed/personalized] ai_curate userId=%s candidates=%s reason=%s webSearchUsed=%s",
         key,
@@ -440,6 +496,33 @@ const getPersonalizedFeedCurated = async (req, res) => {
       MIN_ITEMS_PER_CATEGORY,
       200
     );
+    let recommendationMode = "ocean";
+    let oceanItems = buildBalancedCategoryFeed(
+      rerankedCurated,
+      categoryPoolFiltered,
+      REQUIRED_FEED_CATEGORIES,
+      2,
+      80
+    );
+
+    if (preferFavorites) {
+      const favoritesDriven = await buildFavoritesDrivenRecommendations(
+        userWithSignals,
+        favoriteTitles
+      );
+      if (favoritesDriven.items.length > 0) {
+        items = buildBalancedCategoryFeed(
+          favoritesDriven.items,
+          categoryPoolFiltered,
+          REQUIRED_FEED_CATEGORIES,
+          MIN_ITEMS_PER_CATEGORY,
+          200
+        );
+        recommendationMode = "favorites";
+      } else {
+        recommendationMode = "ocean";
+      }
+    }
     const finalCounts = countByCategory(items, REQUIRED_FEED_CATEGORIES);
     const missingCategories = REQUIRED_FEED_CATEGORIES.filter(
       (cat) => (finalCounts[cat] || 0) < MIN_ITEMS_PER_CATEGORY
@@ -464,6 +547,8 @@ const getPersonalizedFeedCurated = async (req, res) => {
 
     const responseData = {
       items,
+      oceanItems,
+      recommendationMode,
       webSearchUsed: Boolean(data.webSearchUsed),
       reason: data.reason,
       cached: false,
@@ -491,7 +576,12 @@ const getPersonalizedFeedCurated = async (req, res) => {
 
 function clearPersonalizedFeedCacheForUser(userId) {
   if (userId == null) return;
-  FEED_CACHE.delete(String(userId));
+  const keyPrefix = `${String(userId)}:`;
+  for (const key of FEED_CACHE.keys()) {
+    if (String(key).startsWith(keyPrefix)) {
+      FEED_CACHE.delete(key);
+    }
+  }
 }
 
 module.exports = {
