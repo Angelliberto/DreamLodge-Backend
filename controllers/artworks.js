@@ -20,6 +20,7 @@ function normalizeTitleForCompare(v) {
 function buildSimilarCacheKey(payload) {
   return [
     String(payload.category || "").trim().toLowerCase(),
+    String(payload.targetCategory || "").trim().toLowerCase(),
     normalizeTitleForCompare(payload.title),
     normalizeTitleForCompare(payload.creator || ""),
   ].join("|");
@@ -641,14 +642,27 @@ const getSimilarArtworks = async (req, res) => {
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const artwork = body.artwork && typeof body.artwork === "object" ? body.artwork : {};
     const limit = Math.max(1, Math.min(6, Number(body.limit) || 3));
+    const requestedTargetCategory = String(body.targetCategory || "")
+      .trim()
+      .toLowerCase();
+    const allowedCategories = new Set([
+      "cine",
+      "musica",
+      "literatura",
+      "videojuegos",
+      "arte-visual",
+    ]);
     const title = String(artwork.title || "").trim();
     const category = String(artwork.category || "").trim().toLowerCase();
+    const targetCategory = allowedCategories.has(requestedTargetCategory)
+      ? requestedTargetCategory
+      : category;
 
     if (!title || !category) {
       return handleHTTPError(res, { message: "artwork.title y artwork.category son requeridos" }, 400);
     }
 
-    const key = buildSimilarCacheKey(artwork);
+    const key = buildSimilarCacheKey({ ...artwork, targetCategory });
     const cacheHit = getSimilarCache(key);
     if (cacheHit) {
       return res.status(200).json({
@@ -656,14 +670,18 @@ const getSimilarArtworks = async (req, res) => {
       });
     }
 
-    const aiResult = await ai.recommendSimilarWorks(artwork, { limit });
+    const aiResult = await ai.recommendSimilarWorks(artwork, {
+      limit,
+      targetCategory,
+    });
     const candidates = Array.isArray(aiResult?.candidates) ? aiResult.candidates : [];
     const resolved = await resolveCuratedFeedCandidates(candidates);
     const wantedTitle = normalizeTitleForCompare(title);
     const wantedMediaType = normalizeCinemaMediaType(artwork?.metadata?.mediaType);
     const filtered = resolved.filter((item) => {
+      if (String(item?.category || "").trim().toLowerCase() !== targetCategory) return false;
       if (normalizeTitleForCompare(item?.title) === wantedTitle) return false;
-      if (category === "cine" && wantedMediaType) {
+      if (targetCategory === "cine" && wantedMediaType) {
         const itemMediaType = normalizeCinemaMediaType(item?.metadata?.mediaType);
         if (itemMediaType && itemMediaType !== wantedMediaType) return false;
       }

@@ -644,7 +644,20 @@ class DreamLodgeAIAgent {
       return { candidates: [], reason: "no_gemini" };
     }
     const limit = Math.max(1, Math.min(10, Number(options.limit) || 3));
+    const requestedCategory = String(options.targetCategory || "")
+      .trim()
+      .toLowerCase();
     const category = String(artwork?.category || "").trim().toLowerCase();
+    const allowedCategories = new Set([
+      "cine",
+      "musica",
+      "literatura",
+      "videojuegos",
+      "arte-visual",
+    ]);
+    const targetCategory = allowedCategories.has(requestedCategory)
+      ? requestedCategory
+      : category;
     const title = String(artwork?.title || "").trim();
     const creator = String(artwork?.creator || "").trim();
     const description = String(artwork?.description || "")
@@ -676,6 +689,7 @@ Devuelve SOLO JSON válido, sin markdown:
 
 Reglas:
 - category exactamente uno de: cine, musica, literatura, videojuegos, arte-visual
+- category objetivo para TODAS las recomendaciones: ${targetCategory}
 - Devuelve entre ${wantedCount} y ${wantedCount + 1} candidatos.
 - Prioriza obras muy parecidas en estilo/tema/tono a la obra base.
 - Usa también el contexto de creator y description para evitar obras con mismo título pero de otra obra distinta.
@@ -712,7 +726,9 @@ Reglas:
 
     const rawList = parsed?.candidates;
     if (!Array.isArray(rawList)) return { candidates: [], reason: "no_candidates" };
-    const cleaned = normalizeWorkCandidateRows(rawList, wantedCount + 2);
+    const cleaned = normalizeWorkCandidateRows(rawList, wantedCount + 2).filter(
+      (row) => String(row?.category || "").trim().toLowerCase() === targetCategory
+    );
     logIaRecommendedWorks("recommend_similar", {
       id: `${category}:${title.slice(0, 120)}`,
       works: cleaned,
