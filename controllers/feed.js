@@ -510,12 +510,13 @@ const getPersonalizedFeedCurated = async (req, res) => {
         userWithSignals,
         favoriteTitles
       );
+      recommendationMode = "favorites";
       if (favoritesDriven.items.length > 0) {
         // En modo favoritos, las principales deben venir de similitud con favoritos.
         items = mergeCulturalFeedDedupe(favoritesDriven.items, []);
-        recommendationMode = "favorites";
       } else {
-        recommendationMode = "ocean";
+        // Sin fallback a OCEAN en principales cuando el modo favoritos está activo.
+        items = [];
       }
     }
     const finalCounts = countByCategory(items, REQUIRED_FEED_CATEGORIES);
@@ -545,7 +546,7 @@ const getPersonalizedFeedCurated = async (req, res) => {
       oceanItems,
       recommendationMode,
       webSearchUsed: Boolean(data.webSearchUsed),
-      reason: data.reason,
+      reason: data.reason || (preferFavorites && !items.length ? "favorites_mode_no_resolved_items" : undefined),
       cached: false,
     };
 
