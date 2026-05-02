@@ -160,6 +160,10 @@ function normalizeWorkCandidateRows(rawList, maxItems = 24) {
     seen.add(key);
     const row = { category: cat, title: title.slice(0, 200) };
     if (creator) row.creator = creator.slice(0, 120);
+    const genreHint = String(item.genreHint || item.genre || "").trim();
+    if (genreHint) row.genreHint = genreHint.slice(0, 160);
+    const oceanFit = String(item.oceanFitReason || item.ocean_fit_reason || "").trim();
+    if (oceanFit) row.oceanFitReason = oceanFit.slice(0, 280);
     cleaned.push(row);
   }
   return cleaned;

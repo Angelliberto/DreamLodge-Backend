@@ -1,4 +1,3 @@
-const { buildArtisticWebContext } = require("./webSearch");
 const {
   formatExceptionForClient,
   traitTotal,
@@ -118,20 +117,6 @@ async function generateArtisticDescription(agent, oceanResult, options = {}, dep
   }
 
   const sub = testType === "deep" ? buildDeepSubfacetsBlock(scores) : "";
-  const [webBlock, webSearchUsedArtistic] = await buildArtisticWebContext(
-    o,
-    c,
-    e,
-    a,
-    n,
-    testType,
-    sub ? sub.slice(0, 400) : ""
-  );
-  logger.info(
-    "artistic_description: web_context_chars=%s web_used=%s",
-    (webBlock || "").length,
-    webSearchUsedArtistic
-  );
 
   const descriptionGuidelines = `Descripción (campo "description") para TODOS los tests:
 - Debe ser UN SOLO RESUMEN (1 párrafo), claro y directo.
@@ -166,8 +151,7 @@ Reglas de diferenciación entre perfiles (OBLIGATORIO):
 - ${profileDrivenRules.rulesText}
 ${detailedOceanGuidance}
 
-Fragmentos web (títulos y listas; prioriza obras que aparezcan aquí si encajan con OCEAN):
-${webBlock || "(Sin resultados web: prioriza obras menos obvias pero fieles al perfil; evita caer en los mismos títulos universales.)"}
+Contexto: no se usa búsqueda web externa. Prioriza obras menos obvias pero fieles al perfil; evita caer en los mismos títulos universales.
 
 En tu razonamiento interno (no lo escribas): elige 10-16 obras reales mezclando categorías; que cada categoría tenga al menos una obra coherente con la descripción del perfil.
 

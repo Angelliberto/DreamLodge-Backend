@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { getSpotifyMarket } = require("./contentLocaleConfig");
 
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
 
@@ -71,8 +72,9 @@ async function searchSpotifyAlbums(query, opts = {}) {
   const token = await getSpotifyAccessToken();
   if (!token) return [];
   try {
+    const market = getSpotifyMarket();
     const { data } = await axios.get("https://api.spotify.com/v1/search", {
-      params: { q: query, type: "album", limit },
+      params: { q: query, type: "album", limit, market },
       headers: { Authorization: `Bearer ${token}` },
       timeout: 15000,
     });
@@ -82,6 +84,7 @@ async function searchSpotifyAlbums(query, opts = {}) {
         if (album.genres?.length) return album;
         try {
           const det = await axios.get(`https://api.spotify.com/v1/albums/${album.id}`, {
+            params: { market },
             headers: { Authorization: `Bearer ${token}` },
             timeout: 12000,
           });

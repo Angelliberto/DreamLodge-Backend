@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { getIgdbAcceptLanguage } = require("./contentLocaleConfig");
 
 let _token = null;
 let _exp = 0;
@@ -68,6 +69,7 @@ offset ${offset};
         "Client-ID": cid,
         Authorization: `Bearer ${token}`,
         "Content-Type": "text/plain",
+        "Accept-Language": getIgdbAcceptLanguage(),
       },
       timeout: 20000,
     });

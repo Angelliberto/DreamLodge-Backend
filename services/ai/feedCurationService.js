@@ -1,4 +1,3 @@
-const { buildCuratorContextFromSerper } = require("./webSearch");
 const {
   buildUserProfileText,
   rerankByEmbeddingSimilarity,
@@ -168,15 +167,42 @@ const VISUAL_ART_RULES = {
     "Neuroticismo: baja=atmósfera estable y reguladora; media-baja=melancolía contenida; media-alta=tensión expresiva constante; alta/muy-alta=descarga emocional intensa.",
 };
 
-function buildCompactFacetPrompt({ scores, totals, dominantFacet, keySubfacets }) {
-  const dimensions = [
-    ["apertura", totals.o],
-    ["responsabilidad", totals.c],
-    ["extraversion", totals.e],
-    ["amabilidad", totals.a],
-    ["neuroticismo", totals.n],
-  ];
+const CATEGORY_RULE_BLOCKS = [
+  { heading: "VIDEOJUEGOS", rules: GAME_RULES },
+  { heading: "MÚSICA", rules: MUSIC_RULES },
+  { heading: "CINE", rules: CINEMA_RULES },
+  { heading: "LITERATURA", rules: LITERATURE_RULES },
+  { heading: "ARTE-VISUAL", rules: VISUAL_ART_RULES },
+];
 
+/** @returns {[string, number][]} pares [clave_es, valor] para prompts de faceta */
+function spanishOceanDimensionsFromTotals(totals) {
+  return [
+    ["apertura", Number(totals.o) || 0],
+    ["responsabilidad", Number(totals.c) || 0],
+    ["extraversion", Number(totals.e) || 0],
+    ["amabilidad", Number(totals.a) || 0],
+    ["neuroticismo", Number(totals.n) || 0],
+  ];
+}
+
+function dominantFacetFromDimensions(dimensions) {
+  const sorted = [...dimensions].sort((a, b) => b[1] - a[1]);
+  const [key, value] = sorted[0] || ["no_disponible", 0];
+  return { key, value };
+}
+
+function formatCategoryRuleSections(dimKeys) {
+  return CATEGORY_RULE_BLOCKS.map(
+    ({ heading, rules }) =>
+      `- Reglas para ${heading} (aplican según nivel actual por faceta):\n${dimKeys
+        .map((k) => `  - ${rules[k]}`)
+        .join("\n")}`
+  ).join("\n");
+}
+
+function buildCompactFacetPrompt(dimensions, dominantFacet) {
+  const dimKeys = dimensions.map(([key]) => key);
   const dimLines = dimensions.map(([key, value]) => {
     const detail = scoreDetailBand(value);
     const current = Number(value || 0).toFixed(2);
@@ -184,56 +210,202 @@ function buildCompactFacetPrompt({ scores, totals, dominantFacet, keySubfacets }
     return `- ${key}: ${current} (${FACET_DETAIL_LABELS[detail] || detail}) => ${rule}`;
   });
 
-  const dimKeys = dimensions.map(([key]) => key);
-  const gameLines = dimKeys.map((key) => `  - ${GAME_RULES[key]}`).join("\n");
-  const musicLines = dimKeys.map((key) => `  - ${MUSIC_RULES[key]}`).join("\n");
-  const cinemaLines = dimKeys.map((key) => `  - ${CINEMA_RULES[key]}`).join("\n");
-  const literatureLines = dimKeys.map((key) => `  - ${LITERATURE_RULES[key]}`).join("\n");
-  const visualArtLines = dimKeys.map((key) => `  - ${VISUAL_ART_RULES[key]}`).join("\n");
-
   return `Traducción OCEAN compacta y dinámica (OBLIGATORIO):
 ${dimLines.join("\n")}
-- Subfacetas clave:
-${keySubfacets.length ? keySubfacets.map((x) => `  - ${x}`).join("\n") : "  - (sin subfacetas disponibles en este perfil)"}
 - Faceta dominante: ${dominantFacet?.key || "no_disponible"} (${(dominantFacet?.value || 0).toFixed(2)}), tratarla SIEMPRE como ALTA y prioritaria.
-- Reglas para VIDEOJUEGOS (aplican según nivel actual por faceta):
-${gameLines}
-- Reglas para MÚSICA (aplican según nivel actual por faceta):
-${musicLines}
-- Reglas para CINE (aplican según nivel actual por faceta):
-${cinemaLines}
-- Reglas para LITERATURA (aplican según nivel actual por faceta):
-${literatureLines}
-- Reglas para ARTE-VISUAL (aplican según nivel actual por faceta):
-${visualArtLines}
+${formatCategoryRuleSections(dimKeys)}
 - Aplica esta lógica a la vibra general (mecánicas, loop, ritmo, dificultad, agencia, narrativa y tono), no solo estética visual.
 - Distingue media-baja de media-alta y evita recomendaciones clónicas entre usuarios.`;
 }
 
-function buildOceanFacetInterpretation(scores, totals) {
-  const dimensionRows = [
-    { key: "apertura", value: Number(totals.o) || 0 },
-    { key: "responsabilidad", value: Number(totals.c) || 0 },
-    { key: "extraversion", value: Number(totals.e) || 0 },
-    { key: "amabilidad", value: Number(totals.a) || 0 },
-    { key: "neuroticismo", value: Number(totals.n) || 0 },
-  ];
-  const dominantFacet = [...dimensionRows].sort((x, y) => y.value - x.value)[0];
+const KEY_SUBFACET_SPECS = [
+  ["openness", "imagination", "Apertura/imaginación"],
+  ["conscientiousness", "orderliness", "Responsabilidad/meticulosidad"],
+  ["conscientiousness", "perfectionism", "Responsabilidad/perfeccionismo"],
+  ["extraversion", "sociability", "Extraversión/sociabilidad"],
+  ["agreeableness", "empathy", "Amabilidad/empatía"],
+  ["neuroticism", "calmness", "Neuroticismo/calma"],
+];
 
-  const keySubfacets = [
-    formatFacetLine(scores, "openness", "imagination", "Apertura/imaginación"),
-    formatFacetLine(scores, "conscientiousness", "orderliness", "Responsabilidad/meticulosidad"),
-    formatFacetLine(scores, "conscientiousness", "perfectionism", "Responsabilidad/perfeccionismo"),
-    formatFacetLine(scores, "extraversion", "sociability", "Extraversión/sociabilidad"),
-    formatFacetLine(scores, "agreeableness", "empathy", "Amabilidad/empatía"),
-    formatFacetLine(scores, "neuroticism", "calmness", "Neuroticismo/calma"),
-  ].filter(Boolean);
-  return buildCompactFacetPrompt({
-    scores,
-    totals,
-    dominantFacet,
-    keySubfacets,
-  });
+function collectKeySubfacetLines(scores) {
+  return KEY_SUBFACET_SPECS.map(([traitKey, facetKey, label]) =>
+    formatFacetLine(scores, traitKey, facetKey, label)
+  ).filter(Boolean);
+}
+
+function buildOceanFacetInterpretation(scores, totals) {
+  const dimensions = spanishOceanDimensionsFromTotals(totals);
+  const dominantFacet = dominantFacetFromDimensions(dimensions);
+  const keySubfacets = collectKeySubfacetLines(scores);
+  const compactRules = buildCompactFacetPrompt(dimensions, dominantFacet);
+  return { compactRules, keySubfacets };
+}
+
+const MECHANICAL_LINE_BY_BAND = {
+  c: {
+    alta:
+      "Responsabilidad ALTA: prioriza sistemas complejos, metódicos y obras con estructuras arquitectónicas (diseño, precisión, lógica interna).",
+    baja:
+      "Responsabilidad BAJA: prioriza energía cruda, improvisación y ruptura de reglas sin forzar rigidez formal.",
+    media:
+      "Responsabilidad MEDIA: alterna orden y libertad; evita solo obras hiperclásicas o solo caos extremo.",
+  },
+  n: {
+    alta:
+      'Neuroticismo ALTO: prioriza alta resolución emocional y catarsis (vulnerabilidad, tensión psicológica), no solo "obras tristes" genéricas.',
+    baja: "Neuroticismo BAJO: puedes incluir obras serenas y reguladoras sin forzar melodrama constante.",
+    media:
+      "Neuroticismo MEDIO: mezcla tensión afectiva moderada con respiros; evita un solo registro emocional.",
+  },
+};
+
+function mechanicalCurationLines(c, n) {
+  const bc = scoreBand(c);
+  const bn = scoreBand(n);
+  return [MECHANICAL_LINE_BY_BAND.c[bc], MECHANICAL_LINE_BY_BAND.n[bn]];
+}
+
+/** Qué NO saturar según banda OCEAN (complementa las directrices positivas). */
+const NEGATIVE_ANTIPATTERNS = {
+  o: {
+    alta:
+      "Apertura ALTA: NO llenes la lista solo con remakes, blockbusters de fórmula o \"obras raras\" vacías sin sustancia; la rareza debe ir acompañada de intención clara.",
+    baja:
+      "Apertura BAJA: NO fuerces vanguardia ilegible, metaficción constante ni formalismo extremo como mayoría; respeta necesidad de anclas narrativas o melódicas.",
+    media:
+      "Apertura MEDIA: NO polarices todo entre catálogo mainstream y experimentación inaccesible; evita el cliché de mezcla \"de manual\" sin matices.",
+  },
+  c: {
+    alta:
+      "Responsabilidad ALTA: NO propongas como eje obras caóticas sin sistema, sin reglas internas ni progresión comprensible en la mayoría de entradas.",
+    baja:
+      "Responsabilidad BAJA: NO satures de simulación milimétrica, puzzles ultra-rígidos o narrativas hiper-controladas sin respiradero creativo.",
+    media:
+      "Responsabilidad MEDIA: NO caigas en \"solo orden\" o \"solo caos\"; evita listas que ignoren el equilibrio entre método y libertad.",
+  },
+  e: {
+    alta:
+      "Extraversión ALTA: NO te quedes solo en íntimo, lento y de baja estimulación social en la mayoría de candidatos; evita monotonía contemplativa.",
+    baja:
+      "Extraversión BAJA: NO priorices solo multijugador ruidoso, maximalismo social o alto bombardeo performativo sin pausas introspectivas.",
+    media:
+      "Extraversión MEDIA: NO uses solo un registro (fiesta continua o ermitaño total); alterna mal la escala social.",
+  },
+  a: {
+    alta:
+      "Amabilidad ALTA: NO abuses de crueldad gratuita, humillación voyerista, cinismo fácil ni conflictos resueltos solo con sarcasmo duro.",
+    baja:
+      "Amabilidad BAJA: NO rellenes con fábulas edulcoradas, moralina ingenua ni arcos de redención forzada y complacientes en exceso.",
+    media:
+      "Amabilidad MEDIA: NO homogeneices todo a \"bondad light\" ni todo a fricción cínica; evita tono único en toda la tanda.",
+  },
+  n: {
+    alta:
+      "Neuroticismo ALTO: NO suavices el feed a catálogo solo \"zen/bienestar\" ni trivialices emociones fuertes con soluciones genéricas.",
+    baja:
+      "Neuroticismo BAJO: NO conviertas la lista en maratón de tragedia, terror psicológico o ansiedad constante sin respiros reguladores.",
+    media:
+      "Neuroticismo MEDIO: NO mezcles solo melodrama barato ni solo frialdad emocional; evita ausencia de arco afectivo creíble.",
+  },
+};
+
+function negativeCurationLines(o, c, e, a, n) {
+  return [
+    NEGATIVE_ANTIPATTERNS.o[scoreBand(o)],
+    NEGATIVE_ANTIPATTERNS.c[scoreBand(c)],
+    NEGATIVE_ANTIPATTERNS.e[scoreBand(e)],
+    NEGATIVE_ANTIPATTERNS.a[scoreBand(a)],
+    NEGATIVE_ANTIPATTERNS.n[scoreBand(n)],
+  ];
+}
+
+function entropyBucketCounts(targetTotal) {
+  const safe = Math.round(targetTotal * 0.2);
+  const niche = Math.round(targetTotal * 0.5);
+  return { safe, niche, risk: targetTotal - safe - niche };
+}
+
+function formatSubfacetBlockForPrompt(keySubfacets) {
+  if (!keySubfacets.length) {
+    return "   (sin subfacetas numéricas; infiere con cuidado desde los totales OCEAN.)";
+  }
+  return keySubfacets.map((line) => `   ${line}`).join("\n");
+}
+
+function buildArtisticProfileExtra(artisticProfile) {
+  if (!artisticProfile || typeof artisticProfile !== "object") return "";
+  const prof = String(artisticProfile.profile || "").trim();
+  const desc = String(artisticProfile.description || "").trim().slice(0, 500);
+  return `\nPerfil artístico existente: ${prof}\n${desc}\n`;
+}
+
+function diversityPromptSalt() {
+  return Math.random().toString(36).substring(2, 10);
+}
+
+function feedEntityIdFromOceanResult(oceanResult) {
+  if (!oceanResult || typeof oceanResult !== "object") return undefined;
+  return oceanResult.entityId != null ? oceanResult.entityId : oceanResult.entity_id;
+}
+
+function buildPersonalizedFeedCuratorPrompt({
+  o,
+  c,
+  e,
+  a,
+  n,
+  oceanFingerprint,
+  artExtra,
+  rulesText,
+  facetInterpretation,
+  keySubfacets,
+}) {
+  const { safe: nEntropySafe, niche: nEntropyNiche, risk: nEntropyRisk } = entropyBucketCounts(
+    TARGET_CANDIDATES
+  );
+  const subfacetBlock = formatSubfacetBlockForPrompt(keySubfacets);
+  const mechanicalLines = mechanicalCurationLines(c, n);
+  const negativeLines = negativeCurationLines(o, c, e, a, n);
+  const diversitySalt = diversityPromptSalt();
+
+  return `Eres un Curador Cultural de élite y un psicólogo experimental. Tu objetivo es generar una lista de descubrimiento radicalmente personalizada (sesgo a rareza y nicho real, sin alucinar títulos inexistentes).
+
+### PERFIL PSICOMÉTRICO (INPUT)
+- OCEAN: O:${o.toFixed(2)}, C:${c.toFixed(2)}, E:${e.toFixed(2)}, A:${a.toFixed(2)}, N:${n.toFixed(2)}
+- Huella: ${oceanFingerprint}
+${artExtra}
+### DIFERENCIACIÓN POR PERFIL (OBLIGATORIO)
+- ${rulesText}
+
+### DIRECTRICES DE CURACIÓN (ROMPER CONVERGENCIA)
+1) NO CLÁSICOS OBVIOS: evita blockbuster de manual, sagas ultra citadas y "listas de todo el mundo" (p. ej. Inception, The Witcher, Radiohead, 1984, GOT, etc.) salvo que la Apertura del usuario sea muy baja (< 2.5). Si Apertura > 3.5, incluye culto, sellos independientes, cine de autor contemporáneo u obras de long tail verificables.
+2) SUBFACETAS: no uses solo el rasgo global; cruza decisiones con estas subfacetas:
+${subfacetBlock}
+3) REGLA DE ENTROPÍA: genera exactamente ${TARGET_CANDIDATES} candidatos repartidos en cinco categorías (cine, musica, literatura, videojuegos, arte-visual), con ~10–14 por categoría si encaja el perfil.
+   - ${nEntropySafe} obras "seguras" (alto encaje OCEAN, popularidad media).
+   - ${nEntropyNiche} obras de nicho (alto encaje, baja popularidad / indie / autor).
+   - ${nEntropyRisk} "apuestas de riesgo" (desafían al usuario pero encajan en apertura o neuroticismo del perfil).
+4) LÓGICA MECÁNICA (NO SOLO ESTÉTICA):
+${mechanicalLines.map((x) => `   - ${x}`).join("\n")}
+
+### LO QUE NO DEBES SATURAR (ANTI-PATRONES POR ESTE PERFIL)
+Estas líneas son negativas: no las uses como estilo dominante del feed; equilíbralas con lo que sí encaja.
+${negativeLines.map((x) => `   - ${x}`).join("\n")}
+
+### REGLAS ESPECÍFICAS POR CATEGORÍA Y FACETA
+${facetInterpretation}
+
+### CONTEXTO TÉCNICO
+No hay búsqueda web: usa solo conocimiento del modelo. Títulos y autores deben ser reales y buscables.
+
+### FORMATO DE SALIDA (JSON ESTRICTO)
+Devuelve SOLO un objeto JSON:
+{"candidates":[{"category":"cine|musica|literatura|videojuegos|arte-visual","title":"Título original","creator":"Autor/Director/Estudio","genreHint":"Subgénero hiper-específico (ej. post-punk báltico, slow cinema distópico)","oceanFitReason":"Breve vínculo con un rasgo o subfaceta concreta del usuario"}]}
+
+### NOTA FINAL
+Si entregas la misma tanda que a un usuario promedio, el sistema falla. Sé específico y prioriza joyas ocultas coherentes con OCEAN.
+Random seed diversidad (no repetir sesgo entre llamadas): ${diversitySalt}
+`;
 }
 
 function getRecentTitlesForUser(userId) {
@@ -306,34 +478,28 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
   const n = traitTotal(scores, "neuroticism");
   const oceanFingerprint = buildOceanFingerprint(scores);
   const profileDrivenRules = buildProfileDrivenCurationRules({ o, c, e, a, n, fingerprint: oceanFingerprint });
-  const facetInterpretation = buildOceanFacetInterpretation(scores, { o, c, e, a, n });
+  const { compactRules: facetInterpretation, keySubfacets } = buildOceanFacetInterpretation(scores, {
+    o,
+    c,
+    e,
+    a,
+    n,
+  });
 
-  const personalityLine = `openness ${o.toFixed(1)} conscientiousness ${c.toFixed(1)} extraversion ${e.toFixed(1)} agreeableness ${a.toFixed(1)} neuroticism ${n.toFixed(1)}`;
-  const [webBlock, webUsed] = await buildCuratorContextFromSerper(personalityLine);
-
-  let artExtra = "";
-  if (artisticProfile && typeof artisticProfile === "object") {
-    const prof = String(artisticProfile.profile || "").trim();
-    const desc = String(artisticProfile.description || "").trim().slice(0, 500);
-    artExtra = `\nPerfil artístico existente: ${prof}\n${desc}\n`;
-  }
-  const prompt = `Eres curador cultural para una app de descubrimiento.
-Perfil OCEAN: Apertura ${o.toFixed(2)}, Responsabilidad ${c.toFixed(2)}, Extraversión ${e.toFixed(2)}, Amabilidad ${a.toFixed(2)}, Neuroticismo ${n.toFixed(2)}
-Huella del perfil: ${oceanFingerprint}
-${artExtra}
-Reglas de diferenciación:
-- ${profileDrivenRules.rulesText}
-${facetInterpretation}
-Fragmentos web:
-${webBlock || "(Sin resultados web: NO te limites a clásicos obvios; prioriza ajuste fino por subgénero, tono y rasgos OCEAN del usuario.)"}
-Genera exactamente ${TARGET_CANDIDATES} candidatos mezclando categorías, equilibrando cine/música/literatura/videojuegos/arte-visual.
-Mínimo 10 candidatos por categoría cuando sea posible.
-Haz recomendaciones más arriesgadas (menos obvias/mainstream) SIEMPRE que mantengan fidelidad al perfil OCEAN y al perfil artístico textual.
-Riesgo controlado: la exploración debe respetar rasgos y subfacetas OCEAN, no depender de listas de géneros predefinidas.
-Evita converger en títulos repetidos entre usuarios salvo encaje excepcional.
-En videojuegos: alterna entre obras masivas y títulos menos obvios pero reales (indie, nicho, clásicos menos citados) que encajen en el perfil; evita que todos los usuarios reciban la misma tanda de blockbusters.
-Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":"...","genreHint":"..."}]}
-`;
+  const webUsed = false;
+  const artExtra = buildArtisticProfileExtra(artisticProfile);
+  const prompt = buildPersonalizedFeedCuratorPrompt({
+    o,
+    c,
+    e,
+    a,
+    n,
+    oceanFingerprint,
+    artExtra,
+    rulesText: profileDrivenRules.rulesText,
+    facetInterpretation,
+    keySubfacets,
+  });
 
   let text;
   try {
@@ -384,9 +550,7 @@ Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":".
       candidates: cleaned,
       maxScan: 90,
       logger,
-      userId: String(
-        oceanResult.entityId != null ? oceanResult.entityId : oceanResult.entity_id || ""
-      ),
+      userId: String(feedEntityIdFromOceanResult(oceanResult) || ""),
     });
     if (Array.isArray(vectorReranked) && vectorReranked.length) {
       cleaned = vectorReranked;
@@ -395,7 +559,7 @@ Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":".
     // Fallback silencioso: si embeddings falla, se conserva flujo actual.
   }
 
-  const feedEntityId = oceanResult.entityId != null ? oceanResult.entityId : oceanResult.entity_id;
+  const feedEntityId = feedEntityIdFromOceanResult(oceanResult);
   const recentTitles = getRecentTitlesForUser(feedEntityId);
   const reordered = reorderByNovelty(cleaned, recentTitles);
   if (recentTitles.size) {

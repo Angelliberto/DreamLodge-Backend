@@ -2,6 +2,7 @@
  * TMDB: cabeceras, URL base, imagen w500 y mapa de géneros (película + TV) con caché compartida.
  */
 const axios = require("axios");
+const { getTmdbLanguage } = require("./contentLocaleConfig");
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 const TMDB_IMG_W500 = "https://image.tmdb.org/t/p/w500";
@@ -14,7 +15,7 @@ function tmdbHeaders() {
   };
 }
 
-let _genreCache = { map: null, ts: 0 };
+let _genreCache = { map: null, ts: 0, lang: null };
 const GENRE_TTL_MS = 6 * 60 * 60 * 1000;
 const PEOPLE_TTL_MS = 24 * 60 * 60 * 1000;
 const _movieDirectorsCache = new Map();
@@ -35,17 +36,20 @@ function setPeopleCache(cache, key, data) {
 }
 
 async function getTmdbGenreMap() {
+  const lang = getTmdbLanguage();
   const now = Date.now();
-  if (_genreCache.map && now - _genreCache.ts < GENRE_TTL_MS) {
+  if (_genreCache.map && _genreCache.lang === lang && now - _genreCache.ts < GENRE_TTL_MS) {
     return _genreCache.map;
   }
   const map = {};
   const settled = await Promise.allSettled([
-    axios.get(`${TMDB_BASE}/genre/movie/list?language=es-ES`, {
+    axios.get(`${TMDB_BASE}/genre/movie/list`, {
+      params: { language: lang },
       headers: tmdbHeaders(),
       timeout: 15000,
     }),
-    axios.get(`${TMDB_BASE}/genre/tv/list?language=es-ES`, {
+    axios.get(`${TMDB_BASE}/genre/tv/list`, {
+      params: { language: lang },
       headers: tmdbHeaders(),
       timeout: 15000,
     }),
@@ -57,14 +61,14 @@ async function getTmdbGenreMap() {
       });
     }
   }
-  _genreCache = { map, ts: now };
+  _genreCache = { map, ts: now, lang };
   return map;
 }
 
 async function searchTmdbMovies(query) {
   try {
     const { data } = await axios.get(`${TMDB_BASE}/search/movie`, {
-      params: { query, include_adult: false, language: "es-ES", page: 1 },
+      params: { query, include_adult: false, language: getTmdbLanguage(), page: 1 },
       headers: tmdbHeaders(),
       timeout: 15000,
     });
@@ -77,7 +81,7 @@ async function searchTmdbMovies(query) {
 async function searchTmdbTv(query) {
   try {
     const { data } = await axios.get(`${TMDB_BASE}/search/tv`, {
-      params: { query, include_adult: false, language: "es-ES", page: 1 },
+      params: { query, include_adult: false, language: getTmdbLanguage(), page: 1 },
       headers: tmdbHeaders(),
       timeout: 15000,
     });
@@ -90,7 +94,7 @@ async function searchTmdbTv(query) {
 async function discoverPopularMovies() {
   try {
     const { data } = await axios.get(`${TMDB_BASE}/discover/movie`, {
-      params: { include_adult: false, language: "es-ES", sort_by: "popularity.desc" },
+      params: { include_adult: false, language: getTmdbLanguage(), sort_by: "popularity.desc" },
       headers: tmdbHeaders(),
       timeout: 15000,
     });
@@ -103,12 +107,13 @@ async function discoverPopularMovies() {
 async function getTmdbMovieDirectors(movieId) {
   const id = Number.parseInt(String(movieId || ""), 10);
   if (!Number.isFinite(id) || id <= 0) return [];
-  const key = `movie:${id}`;
+  const lang = getTmdbLanguage();
+  const key = `movie:${id}:${lang}`;
   const hit = getPeopleCache(_movieDirectorsCache, key);
   if (hit) return hit;
   try {
     const { data } = await axios.get(`${TMDB_BASE}/movie/${id}/credits`, {
-      params: { language: "es-ES" },
+      params: { language: lang },
       headers: tmdbHeaders(),
       timeout: 15000,
     });
@@ -126,12 +131,13 @@ async function getTmdbMovieDirectors(movieId) {
 async function getTmdbTvCreators(tvId) {
   const id = Number.parseInt(String(tvId || ""), 10);
   if (!Number.isFinite(id) || id <= 0) return [];
-  const key = `tv:${id}`;
+  const lang = getTmdbLanguage();
+  const key = `tv:${id}:${lang}`;
   const hit = getPeopleCache(_tvCreatorsCache, key);
   if (hit) return hit;
   try {
     const { data } = await axios.get(`${TMDB_BASE}/tv/${id}`, {
-      params: { language: "es-ES" },
+      params: { language: lang },
       headers: tmdbHeaders(),
       timeout: 15000,
     });

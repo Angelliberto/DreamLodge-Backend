@@ -1,5 +1,6 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
 const { ArtworkModel, UserModel } = require("../models");
+const { clearPersonalizedFeedCacheForUser } = require("./feed");
 const mongoose = require("mongoose");
 const ai = require("../services/ai");
 const { resolveCuratedFeedCandidates } = require("../services/feedCandidateResolver");
@@ -539,6 +540,9 @@ async function addToUserArtworkList(req, res, field, successMessage) {
     if (!updatedUser) {
       return handleHTTPError(res, { message: "Usuario no encontrado" }, 404);
     }
+    if (field === "notInterestedArtworks") {
+      clearPersonalizedFeedCacheForUser(userId);
+    }
     return res.status(200).json({
       message: successMessage,
       data: { artworkId, [field]: updatedUser[field] || [] },
@@ -569,6 +573,9 @@ async function removeFromUserArtworkList(req, res, field, paramName, successMess
     ).populate(field);
     if (!updatedUser) {
       return handleHTTPError(res, { message: "Usuario no encontrado" }, 404);
+    }
+    if (field === "notInterestedArtworks") {
+      clearPersonalizedFeedCacheForUser(userId);
     }
     return res.status(200).json({
       message: successMessage,

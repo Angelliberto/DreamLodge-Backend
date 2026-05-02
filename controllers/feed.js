@@ -33,6 +33,35 @@ function norm(v) {
     .trim();
 }
 
+/** Bloqueo estricto solo para "no me interesa" (no confundir con vistas o dislikes). */
+function buildNotInterestedBlocklist(userDoc) {
+  const titles = new Set();
+  const ids = new Set();
+  for (const it of userDoc?.notInterestedArtworks || []) {
+    if (!it || typeof it !== "object") continue;
+    const t = norm(it?.title);
+    if (t) titles.add(t);
+    const id = String(it?.id || "").trim();
+    if (id) ids.add(id);
+  }
+  return { titles, ids };
+}
+
+function itemMatchesNotInterestedBlocklist(item, blocklist) {
+  if (!item || !blocklist) return false;
+  const id = String(item?.id || "").trim();
+  if (id && blocklist.ids.has(id)) return true;
+  const t = norm(item?.title);
+  if (t && blocklist.titles.has(t)) return true;
+  return false;
+}
+
+function filterOutNotInterestedItems(items, blocklist) {
+  const list = Array.isArray(items) ? items : [];
+  if (!blocklist || (!blocklist.ids.size && !blocklist.titles.size)) return list;
+  return list.filter((item) => !itemMatchesNotInterestedBlocklist(item, blocklist));
+}
+
 function buildUserInteractionSignals(userDoc) {
   const sets = {
     favorite: new Set(),
@@ -522,6 +551,7 @@ const getPersonalizedFeedCurated = async (req, res) => {
       80
     );
 
+    const notInterestedBlocklist = buildNotInterestedBlocklist(userWithSignals);
     if (preferFavorites) {
       const favoritesDriven = await buildFavoritesDrivenRecommendations(
         userWithSignals,
@@ -530,7 +560,10 @@ const getPersonalizedFeedCurated = async (req, res) => {
       recommendationMode = "favorites";
       if (favoritesDriven.items.length > 0) {
         // En modo favoritos, las principales deben venir de similitud con favoritos.
-        items = mergeCulturalFeedDedupe(favoritesDriven.items, []);
+        items = mergeCulturalFeedDedupe(
+          filterOutNotInterestedItems(favoritesDriven.items, notInterestedBlocklist),
+          []
+        );
       } else {
         // Sin fallback a OCEAN en principales cuando el modo favoritos está activo.
         items = [];
@@ -555,6 +588,9 @@ const getPersonalizedFeedCurated = async (req, res) => {
       finalCounts["arte-visual"] || 0,
       missingCategories.length ? missingCategories.join(",") : "none"
     );
+    items = filterOutNotInterestedItems(items, notInterestedBlocklist);
+    oceanItems = filterOutNotInterestedItems(oceanItems, notInterestedBlocklist);
+
     registerGlobalTitles(items);
     registerRecentUserTitles(key, items);
 

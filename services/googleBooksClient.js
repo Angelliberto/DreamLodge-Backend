@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { getGoogleBooksLangRestrict } = require("./contentLocaleConfig");
 
 const GOOGLE_BOOKS = "https://www.googleapis.com/books/v1/volumes";
 
@@ -12,6 +13,7 @@ async function fetchGoogleBooksVolumesMerged(queries, options) {
   const maxTotal = options.maxTotal;
   const shortCircuit = options.shortCircuitAfterQueryIfAtLeast;
   const key = (process.env.GOOGLE_BOOKS_API_KEY || "").trim();
+  const langRestrict = getGoogleBooksLangRestrict();
   const seen = new Set();
   const merged = [];
 
@@ -19,6 +21,7 @@ async function fetchGoogleBooksVolumesMerged(queries, options) {
     try {
       const params = { q, maxResults: maxPerQuery };
       if (key) params.key = key;
+      if (langRestrict) params.langRestrict = langRestrict;
       const { data } = await axios.get(GOOGLE_BOOKS, { params, timeout: 15000 });
       for (const item of data.items || []) {
         const id = item.id;
