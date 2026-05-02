@@ -23,6 +23,7 @@ function buildSimilarCacheKey(payload) {
     String(payload.targetCategory || "").trim().toLowerCase(),
     normalizeTitleForCompare(payload.title),
     normalizeTitleForCompare(payload.creator || ""),
+    String(payload.resolverScope || "anon"),
   ].join("|");
 }
 
@@ -662,7 +663,8 @@ const getSimilarArtworks = async (req, res) => {
       return handleHTTPError(res, { message: "artwork.title y artwork.category son requeridos" }, 400);
     }
 
-    const key = buildSimilarCacheKey({ ...artwork, targetCategory });
+    const resolverScope = req.user?._id ? String(req.user._id) : "anon";
+    const key = buildSimilarCacheKey({ ...artwork, targetCategory, resolverScope });
     const cacheHit = getSimilarCache(key);
     if (cacheHit) {
       return res.status(200).json({
@@ -675,7 +677,9 @@ const getSimilarArtworks = async (req, res) => {
       targetCategory,
     });
     const candidates = Array.isArray(aiResult?.candidates) ? aiResult.candidates : [];
-    const resolved = await resolveCuratedFeedCandidates(candidates);
+    const resolved = await resolveCuratedFeedCandidates(candidates, {
+      diversitySeed: resolverScope,
+    });
     const wantedTitle = normalizeTitleForCompare(title);
     const wantedMediaType = normalizeCinemaMediaType(artwork?.metadata?.mediaType);
     const filtered = resolved.filter((item) => {

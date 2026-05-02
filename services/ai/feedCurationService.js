@@ -331,6 +331,7 @@ Mínimo 10 candidatos por categoría cuando sea posible.
 Haz recomendaciones más arriesgadas (menos obvias/mainstream) SIEMPRE que mantengan fidelidad al perfil OCEAN y al perfil artístico textual.
 Riesgo controlado: la exploración debe respetar rasgos y subfacetas OCEAN, no depender de listas de géneros predefinidas.
 Evita converger en títulos repetidos entre usuarios salvo encaje excepcional.
+En videojuegos: alterna entre obras masivas y títulos menos obvios pero reales (indie, nicho, clásicos menos citados) que encajen en el perfil; evita que todos los usuarios reciban la misma tanda de blockbusters.
 Devuelve SOLO JSON: {"candidates":[{"category":"cine","title":"...","creator":"...","genreHint":"..."}]}
 `;
 

@@ -675,6 +675,11 @@ class DreamLodgeAIAgent {
     }
 
     const wantedCount = Math.max(limit + 2, 4);
+    const gameVarietyRules =
+      targetCategory === "videojuegos"
+        ? `
+- En videojuegos: además de similitud clara con la base, incluye al menos un par de títulos menos masificados (indie, nicho o clásico menos repetido) cuando sigan siendo buscables en IGDB; evita devolver solo la misma lista de éxitos obvia que cualquier modelo usaría por defecto.`
+        : "";
     const prompt = `Eres un recomendador cultural.
 Obra base:
 - category: ${category}
@@ -698,7 +703,7 @@ Reglas:
 - Cuando sea posible, incluye creator en cine, musica y literatura para mejorar la validación.
 - En cine, si un título es ambiguo (misma palabra para película y serie u homónimos), NO lo pongas sin creator/director: o incluye creator, o elige otra obra que puedas anclar.
 - Si una sugerencia no se puede respaldar con director/creador ni con el tono/plot coherente con la descripción base, sustitúyela por otra recomendación.
-- Usa títulos reales y buscables en APIs públicas.`;
+- Usa títulos reales y buscables en APIs públicas.${gameVarietyRules}`;
 
     let text;
     try {

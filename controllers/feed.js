@@ -92,6 +92,15 @@ function getGlobalRepeatPenalty(item) {
   return Math.min(3.0, 0.35 * count);
 }
 
+/** Penaliza juegos ultra-masificados en IGDB (muchos votos) para variar el feed entre usuarios. */
+function getVideoGamePopularityPenalty(item) {
+  if (String(item?.category || "").trim().toLowerCase() !== "videojuegos") return 0;
+  const md = item?.metadata && typeof item.metadata === "object" ? item.metadata : {};
+  const n = Number(md.igdbRatingCount);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(1.15, 0.14 * Math.log10(1 + n / 80));
+}
+
 function registerGlobalTitles(items) {
   for (const item of items || []) {
     const title = norm(item?.title);
@@ -235,7 +244,9 @@ async function buildFavoritesDrivenRecommendations(userDoc, favoriteTitleSet) {
     return { items: [], reason: "favorites_mode_empty_candidates" };
   }
 
-  const resolved = await resolveCuratedFeedCandidates(mergedCandidates);
+  const resolved = await resolveCuratedFeedCandidates(mergedCandidates, {
+    diversitySeed: String(userDoc?._id || ""),
+  });
   const filtered = resolved.filter((item) => !favoriteTitleSet.has(norm(item?.title)));
   return { items: filtered, reason: filtered.length ? "ok" : "favorites_mode_no_resolved_items" };
 }
@@ -289,7 +300,9 @@ const getPersonalizedFeedCurated = async (req, res) => {
       const rawWorks = extractSuggestedWorksFromArtisticJson(
         oceanResult.artisticDescription
       );
-      const items = await resolveCuratedFeedCandidates(rawWorks);
+      const items = await resolveCuratedFeedCandidates(rawWorks, {
+        diversitySeed: String(userId),
+      });
       return res.status(200).json({
         message: "ok",
         data: {
@@ -383,7 +396,9 @@ const getPersonalizedFeedCurated = async (req, res) => {
       );
     } catch (curateErr) {
       console.error("[feed/personalized] curación IA falló:", curateErr?.message || curateErr);
-      const resolvedAnchors = await resolveCuratedFeedCandidates(suggestedWorksRaw);
+      const resolvedAnchors = await resolveCuratedFeedCandidates(suggestedWorksRaw, {
+        diversitySeed: String(userId),
+      });
       const fallback = {
         items: resolvedAnchors.slice(0, 200),
         webSearchUsed: false,
@@ -413,8 +428,8 @@ const getPersonalizedFeedCurated = async (req, res) => {
       aiCandidateCounts["arte-visual"] || 0
     );
     const [resolvedAnchors, resolvedCurated, userWithSignals] = await Promise.all([
-      resolveCuratedFeedCandidates(suggestedWorksRaw),
-      resolveCuratedFeedCandidates(curated),
+      resolveCuratedFeedCandidates(suggestedWorksRaw, { diversitySeed: String(userId) }),
+      resolveCuratedFeedCandidates(curated, { diversitySeed: String(userId) }),
       UserModel.findById(userId)
         .populate("favoriteArtworks")
         .populate("pendingArtworks")
@@ -457,9 +472,11 @@ const getPersonalizedFeedCurated = async (req, res) => {
           force && canPenalizeRecent && recentUserTitles.has(norm(item?.title))
             ? 1.0
             : 0;
+        const globalPen = getGlobalRepeatPenalty(item);
+        const gamePopPen = getVideoGamePopularityPenalty(item);
         return {
           item,
-          s: userScore - recentPenalty,
+          s: userScore - recentPenalty - globalPen - gamePopPen,
           userScore,
           recentPenalty,
         };

@@ -52,6 +52,12 @@ function adaptIGDB(game) {
       platforms: formatTags(platforms),
       other: formatTags(other),
       label: "IGDB",
+      igdbRatingCount:
+        typeof game.total_rating_count === "number" && Number.isFinite(game.total_rating_count)
+          ? game.total_rating_count
+          : undefined,
+      igdbHypes:
+        typeof game.hypes === "number" && Number.isFinite(game.hypes) ? game.hypes : undefined,
     },
   };
 }

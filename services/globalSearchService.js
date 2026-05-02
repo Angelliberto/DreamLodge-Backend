@@ -18,7 +18,7 @@ const {
   adaptCmaArt,
 } = require("./culturalItemAdapters");
 const { searchSpotifyAlbums } = require("./spotifyClient");
-const { searchIgdbGames } = require("./igdbClient");
+const { searchIgdbGames, stableStringHash32 } = require("./igdbClient");
 const { fetchGoogleBooksVolumesMerged } = require("./googleBooksClient");
 const { searchMetArtworkRows } = require("./metMuseumClient");
 const { fetchCmaRandomArtworkRows } = require("./cmaArtClient");
@@ -198,7 +198,7 @@ async function runGlobalSearch(query, rawFilters = {}) {
 
   if (qt.length > 1) {
     promises.push(
-      searchIgdbGames(qt, 15)
+      searchIgdbGames(qt, 18, { offset: stableStringHash32(qt) % 22 })
         .then((games) => games.map(adaptIGDB))
         .catch(() => [])
     );

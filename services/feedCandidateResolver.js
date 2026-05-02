@@ -20,7 +20,7 @@ const {
 } = require("./culturalItemAdapters");
 const { searchSpotifyAlbums } = require("./spotifyClient");
 const { fetchGoogleBooksVolumesMerged } = require("./googleBooksClient");
-const { searchIgdbGames } = require("./igdbClient");
+const { searchIgdbGames, stableStringHash32 } = require("./igdbClient");
 const { searchMetArtworkRows } = require("./metMuseumClient");
 const {
   pickBestTitleMatch,
@@ -131,16 +131,15 @@ function igdbCompanyNames(game) {
  * Títulos de una palabra (p. ej. "Journey") suelen chocar con DLC/expansiones que solo contienen la palabra.
  * Prioriza coincidencia exacta (normalizada) y, si hay creador, alinea con el estudio en involved_companies.
  */
-function pickBestIgdbGameMatch(games, wantedTitle, creatorHint, minTitleScore) {
+function pickBestIgdbGameMatch(games, wantedTitle, creatorHint, minTitleScore, diversitySeed) {
   const wanted = (wantedTitle || "").trim();
   const nw = normalizeForMatch(wanted);
   const wantedTokens = nw ? nw.split(" ").filter(Boolean).length : 0;
   const creator = (creatorHint || "").trim();
   const list = Array.isArray(games) ? games : [];
+  const seed = diversitySeed ? String(diversitySeed) : "";
 
-  let best = null;
-  let bestCombined = -1;
-
+  const scored = [];
   for (const g of list) {
     const name = g?.name;
     if (!name) continue;
@@ -170,19 +169,32 @@ function pickBestIgdbGameMatch(games, wantedTitle, creatorHint, minTitleScore) {
       combined -= 0.15;
     }
 
-    if (combined > bestCombined) {
-      bestCombined = combined;
-      best = { item: g, titleSc, devSc, exact };
+    scored.push({ g, combined, titleSc, devSc, exact });
+  }
+
+  if (!scored.length) return null;
+
+  const passesFinalGate = (row) => {
+    if (creator.length >= 2 && row.titleSc < 0.93 && row.devSc < 0.28 && !row.exact) {
+      return false;
     }
-  }
+    return true;
+  };
+  const gated = scored.filter(passesFinalGate);
+  if (!gated.length) return null;
 
-  if (!best) return null;
-
-  if (creator.length >= 2 && best.titleSc < 0.93 && best.devSc < 0.28 && !best.exact) {
-    return null;
-  }
-
-  return best;
+  let bestCombined = gated.reduce((m, r) => Math.max(m, r.combined), -1);
+  const epsilon = seed ? 0.048 : 1e-9;
+  const pool = gated.filter((r) => r.combined >= bestCombined - epsilon);
+  pool.sort((a, b) => {
+    if (Math.abs(b.combined - a.combined) > 1e-6) return b.combined - a.combined;
+    if (!seed) return 0;
+    const ha = stableStringHash32(`${seed}:${a.g?.id}`);
+    const hb = stableStringHash32(`${seed}:${b.g?.id}`);
+    return hb - ha;
+  });
+  const best = pool[0];
+  return { item: best.g, titleSc: best.titleSc, devSc: best.devSc, exact: best.exact };
 }
 
 /** Sinopsis mínima en resultados de búsqueda TMDB (si falta, exigimos director/creador). */
@@ -228,7 +240,8 @@ function passesCreatorGate(category, creator, titleScore, checkCreatorFn) {
   return checkCreatorFn(hint);
 }
 
-async function resolveOne(c, genreMap) {
+async function resolveOne(c, genreMap, ctx = {}) {
+  const diversitySeed = ctx.diversitySeed ? String(ctx.diversitySeed) : "";
   const title = (c.title || "").trim();
   if (title.length < 2) return null;
   const creator = (c.creator || "").trim();
@@ -442,12 +455,29 @@ async function resolveOne(c, genreMap) {
           merged.push(g);
         }
       };
-      pushGames(await searchIgdbGames(gq, 18));
+      const igdbOffset =
+        diversitySeed.length >= 2
+          ? stableStringHash32(`${diversitySeed}:${normalizedTitle || gq}`) % 26
+          : 0;
+      const primaryLimit = 32;
+      pushGames(await searchIgdbGames(gq, primaryLimit, { offset: igdbOffset }));
       if (creator.length >= 3) {
-        pushGames(await searchIgdbGames(`${title} ${creator}`, 18));
+        const off2 = (igdbOffset + 11) % 26;
+        pushGames(
+          await searchIgdbGames(`${title} ${creator}`, primaryLimit, { offset: off2 })
+        );
+      }
+      if (merged.length < 10 && igdbOffset > 0) {
+        pushGames(await searchIgdbGames(gq, 22, { offset: 0 }));
       }
 
-      const gamePick = pickBestIgdbGameMatch(merged, title, creator, minGameScore);
+      const gamePick = pickBestIgdbGameMatch(
+        merged,
+        title,
+        creator,
+        minGameScore,
+        diversitySeed || undefined
+      );
       return gamePick ? adaptIGDB(gamePick.item) : null;
     }
     case "arte-visual": {
@@ -495,10 +525,12 @@ function mergeCulturalFeedDedupe(primary, more) {
 
 /**
  * @param {Array<{category:string,title:string,creator?:string}>} candidates
+ * @param {{ diversitySeed?: string }} [opts]
  * @returns {Promise<object[]>}
  */
-async function resolveCuratedFeedCandidates(candidates) {
+async function resolveCuratedFeedCandidates(candidates, opts = {}) {
   if (!candidates?.length) return [];
+  const baseSeed = opts.diversitySeed ? String(opts.diversitySeed) : "";
   const normalized = [];
   const seen = new Set();
   for (const row of candidates.slice(0, 80)) {
@@ -517,7 +549,13 @@ async function resolveCuratedFeedCandidates(candidates) {
   const chunk = 8;
   for (let i = 0; i < normalized.length; i += chunk) {
     const slice = normalized.slice(i, i + chunk);
-    const batch = await Promise.all(slice.map((c) => resolveOne(c, genreMap)));
+    const batch = await Promise.all(
+      slice.map((c, j) =>
+        resolveOne(c, genreMap, {
+          diversitySeed: baseSeed ? `${baseSeed}:${i + j}:${c.category}` : "",
+        })
+      )
+    );
     for (const item of batch) {
       if (item && !idSeen.has(item.id)) {
         idSeen.add(item.id);
