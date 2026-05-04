@@ -255,6 +255,7 @@ function buildProfileDrivenCurationRules({ o, c, e, a, n, fingerprint }) {
       : "Mezcla innovación moderada con formatos familiares.",
     `Usa la huella ${String(fingerprint || "na")} para que la selección sea única del perfil y no clónica frente a otros usuarios.`,
     "Prioriza subgéneros concretos y menos obvios cuando encajen con el perfil, sin bloquear obras por lista fija.",
+    "Videojuegos: evita que tu lista sea intercambiable con la de otro usuario con OCEAN distinto; varía década, plataforma, región del estudio y subgénero mecánico.",
   ];
   return { rulesText: rules.join("\n- "), avoidTitles: [] };
 }
@@ -375,6 +376,48 @@ function normalizeTitleForCompare(raw) {
     .trim();
 }
 
+const VIDEOGAME_FEED_EXPLORATION_AXES = [
+  "CRPG o isométrico narrativo de PC europeo (no saga mainstream reciente)",
+  "Simulación, tycoon o 4X de PC entre 1995 y 2012",
+  "Metroidvania o acción-plataformas de estudio pequeño o regional",
+  "Novela visual, adventure point-and-click o walking sim con fuerte guion",
+  "Shooter o acción de PS2/Xbox/Dreamcast fuera de franquicias anuales",
+  "JRPG de consola clásica (PS1/PS2/DS) que no sea la subsaga más citada",
+  "Estrategia por turnos o táctica en cuadrícula de nicho (war games, roguelike táctico)",
+  "Juego de puzles o diseño experimental con reglas propias",
+  "Carreras, arcades o compilaciones retro poco streamadas",
+  "RPG de mesa digital, deckbuilder roguelike o autoral indie hispanohablante",
+  "Horror psicológico o survival de bajo presupuesto con identidad clara",
+  "Sandbox físico o simulación rara (física, logística, oficios)",
+  "Beat em up, shoot em up o run and gun de arcade o 16-bit",
+  "MMO o servicio en vivo antiguo o regional con comunidad distintiva",
+  "Aventura gráfica española o latinoamericana de estudio mediano",
+  "Musical, ritmo o party game fuera de las dos franquicias dominantes",
+];
+
+function hashString32(input) {
+  const s = String(input ?? "");
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/** Elige ejes distintos por huella / semilla para des-correlacionar listas entre usuarios. */
+function pickVideoGameExplorationAxes(seed, count = 2) {
+  const pool = [...VIDEOGAME_FEED_EXPLORATION_AXES];
+  const out = [];
+  let h = hashString32(seed || "na");
+  for (let i = 0; i < count && pool.length; i += 1) {
+    const idx = h % pool.length;
+    out.push(pool.splice(idx, 1)[0]);
+    h = Math.imul(h ^ (i + 1), 1103515245) >>> 0;
+  }
+  return out;
+}
+
 function isGenreHintCompatible(genreHint, allowedGenres) {
   if (!genreHint || !Array.isArray(allowedGenres) || !allowedGenres.length) return false;
   const hint = normalizeGenreText(genreHint);
@@ -478,6 +521,10 @@ function normalizeForIntent(text) {
     .replace(/\s+/g, " ");
 }
 
+/** Bloque corto para prompts: títulos alineados con TMDB España (es-ES). */
+const PROMPT_TMDB_SPAIN_CINE_TITLE_RULE =
+  "- CINE (película o serie): en \"title\" usa el nombre comercial en español de España exactamente como lo lista TMDB con locale es-ES (cartelera España). No uses título en inglés ni variantes latinoamericanas si en TMDB España el estreno tiene otro título; así el validador automático encuentra la ficha.";
+
 module.exports = {
   GENRE_REC_KEYS,
   normalizeWorkCandidateRows,
@@ -496,4 +543,6 @@ module.exports = {
   countGlobalCanonOverlap,
   envModels,
   normalizeForIntent,
+  PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
+  pickVideoGameExplorationAxes,
 };

@@ -3,6 +3,7 @@
  *
  * Variables de entorno (opcionales):
  * - CONTENT_LOCALE: idioma TMDB (ej. es-ES, es-MX, en-US). Alternativa: TMDB_LANGUAGE.
+ *   Si solo indicas "es", se normaliza a es-ES (España) para alinear títulos con el catálogo TMDB España.
  * - CONTENT_REGION o CONTENT_MARKET o SPOTIFY_MARKET: país ISO 3166-1 alpha-2 (ej. ES, MX, AR)
  *   para catálogo Spotify (parámetro `market`).
  * - CONTENT_LANG: idioma BCP-47 corto para Google Books `langRestrict` e IGDB `Accept-Language`
@@ -22,9 +23,18 @@ function firstEnv(...names) {
   return "";
 }
 
+/** Normaliza código TMDB: `es` suelto → es-ES (cartelera España). */
+function normalizeTmdbLanguage(lang) {
+  const s = trim(lang).replace(/_/g, "-");
+  if (!s) return "es-ES";
+  const lo = s.toLowerCase();
+  if (lo === "es" || lo === "esp") return "es-ES";
+  return s;
+}
+
 /** Idioma para parámetro `language` de TMDB (títulos, sinopsis, géneros). */
 function getTmdbLanguage() {
-  return firstEnv("CONTENT_LOCALE", "TMDB_LANGUAGE") || "es-ES";
+  return normalizeTmdbLanguage(firstEnv("CONTENT_LOCALE", "TMDB_LANGUAGE") || "es-ES");
 }
 
 /** País para parámetro `market` de Spotify (catálogo disponible en esa región). */
@@ -54,6 +64,7 @@ function getIgdbAcceptLanguage() {
 
 module.exports = {
   getTmdbLanguage,
+  normalizeTmdbLanguage,
   getSpotifyMarket,
   getGoogleBooksLangRestrict,
   getIgdbAcceptLanguage,

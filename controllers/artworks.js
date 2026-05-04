@@ -4,6 +4,9 @@ const { clearPersonalizedFeedCacheForUser } = require("./feed");
 const mongoose = require("mongoose");
 const ai = require("../services/ai");
 const { resolveCuratedFeedCandidates } = require("../services/feedCandidateResolver");
+const {
+  enrichSpotifyAlbumDescriptionIfNeeded,
+} = require("../services/albumDescriptionEnricher");
 
 const SIMILAR_CACHE = new Map();
 const SIMILAR_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -76,8 +79,22 @@ const getArtworkById = async (req, res) => {
       return handleHTTPError(res, { message: "Obra no encontrada" }, 404);
     }
 
+    const payload = typeof artwork.toObject === "function" ? artwork.toObject() : { ...artwork };
+    try {
+      const enriched = await enrichSpotifyAlbumDescriptionIfNeeded(payload);
+      if (enriched?.description && enriched.description !== payload.description) {
+        payload.description = enriched.description;
+        ArtworkModel.updateOne(
+          { _id: artwork._id },
+          { $set: { description: enriched.description } }
+        ).catch(() => undefined);
+      }
+    } catch (enrichErr) {
+      console.warn("[artworks/:id] enriquecer descripción álbum:", enrichErr?.message || enrichErr);
+    }
+
     return res.status(200).json({
-      data: artwork
+      data: payload,
     });
 
   } catch (error) {

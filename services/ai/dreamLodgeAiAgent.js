@@ -9,6 +9,8 @@ const {
   formatExceptionForClient,
   envModels,
   normalizeForIntent,
+  PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
+  pickVideoGameExplorationAxes,
 } = require("./agentUtils");
 const { generateArtisticDescription } = require("./artisticProfileService");
 const { curatePersonalizedFeed } = require("./feedCurationService");
@@ -675,11 +677,18 @@ class DreamLodgeAIAgent {
     }
 
     const wantedCount = Math.max(limit + 2, 4);
+    const gameExplorationAxes =
+      targetCategory === "videojuegos"
+        ? pickVideoGameExplorationAxes(`${title}|${creator}|${category}|${mediaType}`, 2)
+        : [];
     const gameVarietyRules =
       targetCategory === "videojuegos"
         ? `
-- En videojuegos: además de similitud clara con la base, incluye al menos un par de títulos menos masificados (indie, nicho o clásico menos repetido) cuando sigan siendo buscables en IGDB; evita devolver solo la misma lista de éxitos obvia que cualquier modelo usaría por defecto.`
+- En videojuegos: prioriza la similitud real con la obra base (mecánica, tono, temática, estudio) por encima de moda o actualidad. Reparte candidatos entre distintas décadas de lanzamiento y entre distintas familias de plataforma (PC, consolas clásicas o modernas, portátiles, arcade, etc.); no concentres la lista en lanzamientos recientes ni en un solo ecosistema. Incluye títulos buscables en IGDB de cualquier época; no sesgues hacia éxitos masivos del momento.
+- Anti-plantilla: no devuelvas el mismo pack de megatítulos (Witcher 3, BOTW, GTA V, Minecraft, Fortnite, FIFA, CoD, Elden Ring, Cyberpunk 2077, RDR2, BG3, etc.) que servirías a cualquier usuario; al menos la mitad de los candidatos deben ser menos masificados pero igualmente buscables en IGDB. Evita que casi todos los títulos coincidan con el mismo subconjunto de "indies canónicos" que el modelo recuerda de listas genéricas en inglés: prioriza variedad de década, región y estudio.
+- Ejes de exploración (al menos 2 candidatos deben encajar claramente con cada eje): (1) ${gameExplorationAxes[0] || "nicho mecánico distinto"} (2) ${gameExplorationAxes[1] || "época o plataforma distinta"}.`
         : "";
+    const cineTmdbSpainRules = targetCategory === "cine" ? `\n${PROMPT_TMDB_SPAIN_CINE_TITLE_RULE}` : "";
     const prompt = `Eres un recomendador cultural.
 Obra base:
 - category: ${category}
@@ -703,7 +712,7 @@ Reglas:
 - Cuando sea posible, incluye creator en cine, musica y literatura para mejorar la validación.
 - En cine, si un título es ambiguo (misma palabra para película y serie u homónimos), NO lo pongas sin creator/director: o incluye creator, o elige otra obra que puedas anclar.
 - Si una sugerencia no se puede respaldar con director/creador ni con el tono/plot coherente con la descripción base, sustitúyela por otra recomendación.
-- Usa títulos reales y buscables en APIs públicas.${gameVarietyRules}`;
+- Usa títulos reales y buscables en APIs públicas.${cineTmdbSpainRules}${gameVarietyRules}`;
 
     let text;
     try {

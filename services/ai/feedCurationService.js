@@ -11,6 +11,8 @@ const {
   normalizeTitleForCompare,
   countDefaultCanonOverlap,
   countGlobalCanonOverlap,
+  PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
+  pickVideoGameExplorationAxes,
 } = require("./agentUtils");
 
 const RECENT_FEED_TITLES = new Map();
@@ -102,17 +104,80 @@ const FACET_PROMPT_RULES = {
   },
 };
 
-const GAME_RULES = {
-  apertura:
-    "Apertura: baja=experiencias claras; media-baja=fórmula conocida con twist; media-alta=mundos inventivos moderados; alta/muy-alta=diseño experimental y narrativa no convencional.",
-  responsabilidad:
-    "Responsabilidad: baja=sandbox/caos; media-baja=progresión flexible; media-alta=loops estructurados con objetivos claros; alta/muy-alta=estrategia, simulación, puzzle complejo y mastery.",
-  extraversion:
-    "Extraversión: baja=single-player íntimo; media-baja=social opcional; media-alta=mixto solo-social; alta/muy-alta=multijugador de alta interacción.",
-  amabilidad:
-    "Amabilidad: baja=conflicto duro; media-baja=tensión ética con empatía parcial; media-alta=cooperación parcial; alta/muy-alta=cooperación, soporte y comunidad prosocial.",
-  neuroticismo:
-    "Neuroticismo: baja=ritmo estable y bajo estrés; media-baja=tensión controlada; media-alta=intensidad con respiros; alta/muy-alta=survival/psicológico y catarsis.",
+/**
+ * Calibración de matiz por faceta + banda. No son preferidos, semilla para similares ni repertorio a priorizar.
+ */
+const FACET_VIDEOGAME_EXAMPLES = {
+  apertura: {
+    "muy-baja":
+      "Tetris — reglas mínimas; Super Mario Bros — plataforma lineal clásica; Candy Crush Saga — bucle inmediato.",
+    baja:
+      "Portal — acertijos guiados con narración clara; Uncharted 2 — blockbuster cinematográfico legible; Minecraft (supervivencia guiada) — metas concretas.",
+    "media-baja":
+      "The Legend of Zelda: Breath of the Wild — open world familiar con curiosidad; Hollow Knight — metroidvania con mapa progresivo; Portal 2 — spin conocido con más capas.",
+    "media-alta":
+      "Outer Wilds — bucle y exploración no convencional; Death Stranding — logística y metáfora arriesgada; Subnautica — descubrimiento y tensión controlada.",
+    alta:
+      "Return of the Obra Dinn — investigación no lineal; Her Story — narrativa fragmentada; Hypnospace Outlaw — interfaz como tema.",
+    "muy-alta":
+      "Immortality — interfaz fílmica experimental; Eliza — diálogo sobre IA con estructura rara; The Stanley Parable — metanarrativa extrema.",
+  },
+  responsabilidad: {
+    "muy-baja":
+      "Goat Simulator — física caótica; Untitled Goose Game — reglas como sugerencia; Saints Row IV — sandbox irreverente.",
+    baja:
+      "Just Cause 3 — explosiones y libertad loca; No Man's Sky (modo creativo/zen) — metas abiertas; Skate 3 — flow improvisado.",
+    "media-baja":
+      "Slay the Spire — runs variables con reglas claras; Hades — progresión flexible entre intentos; Rogue Legacy — bucles con sorpresa.",
+    "media-alta":
+      "Dark Souls — patrones duros pero aprendibles; Monster Hunter: World — caza con rutinas claras; Celeste — plataformas exigentes por salas.",
+    alta:
+      "Factorio — líneas y optimización; Into the Breach — táctica cerrada y precisa; Opus Magnum — puzzle de ensamblaje sistémico.",
+    "muy-alta":
+      "Kerbal Space Program — simulación orbital; Chess Ultra — precisión pura; Baba Is You — reglas como objeto de diseño.",
+  },
+  extraversion: {
+    "muy-baja":
+      "Firewatch — solo y contemplativo; Gone Home — escala doméstica; Everybody's Gone to the Rapture — mapa vacío y contemplativo.",
+    baja:
+      "Journey — encuentros escasos y meditativos; Shadow of the Colossus — aislamiento épico; ABZÛ — flotación solitaria.",
+    "media-baja":
+      "It Takes Two — co-op elegido; Deep Rock Galactic — squad cuando quieres; Divinity: Original Sin 2 — party opcional.",
+    "media-alta":
+      "Sea of Thieves — crew flexible; Monster Hunter Rise — caza solo o en grupo; Destiny 2 — mix misiones solo/grupo.",
+    alta:
+      "Rocket League — equipos y ritmo; Mario Kart 8 Deluxe — multijugador social; Overwatch 2 — roles y comunicación.",
+    "muy-alta":
+      "Fall Guys — masivo y performativo; Jackbox Party Pack — improvisación grupal; Among Us — deducción social alta.",
+  },
+  amabilidad: {
+    "muy-baja":
+      "Spec Ops: The Line — choque moral duro; This War of Mine — supervivencia despiadada; Hotline Miami — violencia cruda.",
+    baja:
+      "The Witcher 3 — decisiones grises; Papers, Please — dilemas burocráticos; Disco Elysium — ética cínica con carisma.",
+    "media-baja":
+      "Detroit: Become Human — ramas morales tensas; The Last of Us Part II — empatía y conflicto; Frostpunk — líder ante dilemas.",
+    "media-alta":
+      "Life is Strange — vínculos con conflicto; Spiritfarer — duelo con calidez; Coffee Talk — tensión conversacional suave.",
+    alta:
+      "Animal Crossing: New Horizons — cuidado e isla; Stardew Valley — cooperación rural; A Short Hike — ternura sin moralina.",
+    "muy-alta":
+      "Kind Words (lo fi chill beats to write to) — apoyo anónimo; Sky: Children of the Light — gestos prosociales; Chicory: A Colorful Tale — cuidado como mecánica.",
+  },
+  neuroticismo: {
+    "muy-baja":
+      "Alto's Adventure — ritmo calmado; Unpacking — orden sereno; PowerWash Simulator — regulación casi meditativa.",
+    baja:
+      "Euro Truck Simulator 2 — viaje estable; Stardew Valley — rutina reconfortante; A Short Hike — descanso afectivo.",
+    "media-baja":
+      "Night in the Woods — melancolía juvenil contenida; Oxenfree — tensión sobrenatural moderada; Coffee Talk — conflicto bajo lluvia.",
+    "media-alta":
+      "Silent Hill 2 — angustia psicológica sostenida; Inside — incomodidad controlada; Limbo — tensión visual.",
+    alta:
+      "Hellblade: Senua's Sacrifice — vulnerabilidad sensorial; Fran Bow — inquietud onírica; NieR: Automata — duelo y vértigo narrativo.",
+    "muy-alta":
+      "OMORI — picos afectivos intensos; Darkwood — ansiedad survival; Cry of Fear — carga emocional extrema.",
+  },
 };
 
 const MUSIC_RULES = {
@@ -168,7 +233,7 @@ const VISUAL_ART_RULES = {
 };
 
 const CATEGORY_RULE_BLOCKS = [
-  { heading: "VIDEOJUEGOS", rules: GAME_RULES },
+  { heading: "VIDEOJUEGOS", rules: null },
   { heading: "MÚSICA", rules: MUSIC_RULES },
   { heading: "CINE", rules: CINEMA_RULES },
   { heading: "LITERATURA", rules: LITERATURE_RULES },
@@ -192,17 +257,37 @@ function dominantFacetFromDimensions(dimensions) {
   return { key, value };
 }
 
-function formatCategoryRuleSections(dimKeys) {
-  return CATEGORY_RULE_BLOCKS.map(
-    ({ heading, rules }) =>
-      `- Reglas para ${heading} (aplican según nivel actual por faceta):\n${dimKeys
-        .map((k) => `  - ${rules[k]}`)
-        .join("\n")}`
-  ).join("\n");
+function formatVideoGameFacetExamplesBlock(dimensions) {
+  const lines = dimensions.map(([key, value]) => {
+    const detail = scoreDetailBand(value);
+    const ex =
+      FACET_VIDEOGAME_EXAMPLES[key]?.[detail] ||
+      FACET_VIDEOGAME_EXAMPLES[key]?.["media-baja"] ||
+      "";
+    const label = FACET_DETAIL_LABELS[detail] || detail;
+    return `  - ${key} (${label}): ${ex}`;
+  });
+  return (
+    `- VIDEOJUEGOS — analogías de matiz OCEAN por faceta/banda (solo calibran el tipo de encaje; **no** son menú de recomendación ni semilla obligatoria para similares).\n` +
+    `  PROHIBIDO: saturar el feed con estos títulos, ni usarlos como única base ni “expandir” solo con variaciones de los mismos.\n` +
+    `  OBLIGATORIO: proponer **otros** juegos reales que expresen el mismo matiz (otras regiones, estudios y épocas cuando puedas).\n` +
+    `${lines.join("\n")}`
+  );
+}
+
+function formatCategoryRuleSections(dimensions) {
+  const dimKeys = dimensions.map(([key]) => key);
+  return CATEGORY_RULE_BLOCKS.map(({ heading, rules }) => {
+    if (heading === "VIDEOJUEGOS") {
+      return formatVideoGameFacetExamplesBlock(dimensions);
+    }
+    return `- Reglas para ${heading} (aplican según nivel actual por faceta):\n${dimKeys
+      .map((k) => `  - ${rules[k]}`)
+      .join("\n")}`;
+  }).join("\n");
 }
 
 function buildCompactFacetPrompt(dimensions, dominantFacet) {
-  const dimKeys = dimensions.map(([key]) => key);
   const dimLines = dimensions.map(([key, value]) => {
     const detail = scoreDetailBand(value);
     const current = Number(value || 0).toFixed(2);
@@ -213,9 +298,10 @@ function buildCompactFacetPrompt(dimensions, dominantFacet) {
   return `Traducción OCEAN compacta y dinámica (OBLIGATORIO):
 ${dimLines.join("\n")}
 - Faceta dominante: ${dominantFacet?.key || "no_disponible"} (${(dominantFacet?.value || 0).toFixed(2)}), tratarla SIEMPRE como ALTA y prioritaria.
-${formatCategoryRuleSections(dimKeys)}
+${formatCategoryRuleSections(dimensions)}
 - Aplica esta lógica a la vibra general (mecánicas, loop, ritmo, dificultad, agencia, narrativa y tono), no solo estética visual.
-- Distingue media-baja de media-alta y evita recomendaciones clónicas entre usuarios.`;
+- Distingue media-baja de media-alta y evita recomendaciones clónicas entre usuarios.
+- Los nombres del bloque VIDEOJUEGOS arriba **no** son repertorio: no ancles curación ni similares a esa lista; solo captura el matiz numérico OCEAN.`;
 }
 
 const KEY_SUBFACET_SPECS = [
@@ -367,6 +453,15 @@ function buildPersonalizedFeedCuratorPrompt({
   const mechanicalLines = mechanicalCurationLines(c, n);
   const negativeLines = negativeCurationLines(o, c, e, a, n);
   const diversitySalt = diversityPromptSalt();
+  const gameAxes = pickVideoGameExplorationAxes(oceanFingerprint, 2);
+  const gameAxisA = gameAxes[0] || "(eje no disponible)";
+  const gameAxisB = gameAxes[1] || "(eje no disponible)";
+  const gameOpennessRule =
+    o >= 3.2
+      ? "Apertura O ≥ 3.2: en videojuegos, cero títulos de la lista de megablocks globalizados (Witcher 3, BOTW, GTA V, Minecraft, Fortnite, FIFA, Call of Duty, Elden Ring, Cyberpunk 2077, RDR2, BG3, Mario Odyssey, Among Us, Apex, LoL, TLoU, Horizon FW, Starfield, Valorant, Genshin, WoW, Hogwarts Legacy, Diablo IV, RE4 remake, CS2, PUBG salvo nombres parciales en títulos distintos); elige alternativas de mecánica parecida pero menos masificadas."
+      : o < 2.4
+        ? "Apertura O < 2.4: puedes incluir como máximo 2 megatítulos de esa familia si encajan de verdad con el perfil; el resto debe ser catálogo menos obvio."
+        : "Apertura media: como máximo 1 megatítulo de esa familia; prioriza variedad de estudio, época y plataforma.";
 
   return `Eres un Curador Cultural de élite y un psicólogo experimental. Tu objetivo es generar una lista de descubrimiento radicalmente personalizada (sesgo a rareza y nicho real, sin alucinar títulos inexistentes).
 
@@ -379,6 +474,11 @@ ${artExtra}
 
 ### DIRECTRICES DE CURACIÓN (ROMPER CONVERGENCIA)
 1) NO CLÁSICOS OBVIOS: evita blockbuster de manual, sagas ultra citadas y "listas de todo el mundo" (p. ej. Inception, The Witcher, Radiohead, 1984, GOT, etc.) salvo que la Apertura del usuario sea muy baja (< 2.5). Si Apertura > 3.5, incluye culto, sellos independientes, cine de autor contemporáneo u obras de long tail verificables.
+   - VIDEOJUEGOS: no concentres candidatos en lanzamientos recientes ni en un solo ecosistema (p. ej. solo consolas actuales); mezcla décadas (desde 8-bit/16-bit hasta reciente cuando encaje) y plataformas variadas. No priorices por hype o popularidad actual; los clásicos y los nichos cuentan igual si encajan con OCEAN.
+   - VIDEOJUEGOS (ANTI-CLON ENTRE USUARIOS): la huella **${oceanFingerprint}** es tu semilla de diversidad. Al menos **6** candidatos con category "videojuegos" deben encajar de forma explícita con **ambos** ejes siguientes (menciónalos en oceanFitReason o genreHint): (1) ${gameAxisA} (2) ${gameAxisB}. Otros videojuegos pueden ser libres pero no deben repetir la misma tanda genérica que servirías a cualquier perfil.
+   - VIDEOJUEGOS Y OCEAN: los cinco números OCEAN y las subfacetas del bloque son el **único** ancla psicométrica; no basta con decir que un juego "encaja con apertura". En oceanFitReason de **cada** candidato videojuegos, vincula con **al menos un valor numérico** del bloque OCEAN (p. ej. O:${o.toFixed(2)}) o con una subfaceta nombrada arriba, y explica por qué **ese** título y no otro con el mismo tono general.
+   - VIDEOJUEGOS (EJEMPLOS EN EL BLOQUE DE FACETA): los nombres que aparecen como ilustración por banda **no** son candidatos preferidos ni punto de partida para recomendar el resto; no completes el feed con ellos ni con “similares” que sean solo vecinos de esa lista. Propón otras obras reales que mantengan el matiz OCEAN.
+   - ${gameOpennessRule}
 2) SUBFACETAS: no uses solo el rasgo global; cruza decisiones con estas subfacetas:
 ${subfacetBlock}
 3) REGLA DE ENTROPÍA: genera exactamente ${TARGET_CANDIDATES} candidatos repartidos en cinco categorías (cine, musica, literatura, videojuegos, arte-visual), con ~10–14 por categoría si encaja el perfil.
@@ -397,13 +497,15 @@ ${facetInterpretation}
 
 ### CONTEXTO TÉCNICO
 No hay búsqueda web: usa solo conocimiento del modelo. Títulos y autores deben ser reales y buscables.
+Los videojuegos citados solo como “analogías” o ejemplos en la traducción OCEAN **no** definen el catálogo a recomendar: sirven para interpretar la banda de cada faceta, no para poblar la lista salvo coincidencia accidental y minoritaria.
+${PROMPT_TMDB_SPAIN_CINE_TITLE_RULE}
 
 ### FORMATO DE SALIDA (JSON ESTRICTO)
 Devuelve SOLO un objeto JSON:
-{"candidates":[{"category":"cine|musica|literatura|videojuegos|arte-visual","title":"Título original","creator":"Autor/Director/Estudio","genreHint":"Subgénero hiper-específico (ej. post-punk báltico, slow cinema distópico)","oceanFitReason":"Breve vínculo con un rasgo o subfaceta concreta del usuario"}]}
+{"candidates":[{"category":"cine|musica|literatura|videojuegos|arte-visual","title":"Título en español de España (TMDB es-ES) u original si no hay traducción","creator":"Autor/Director/Estudio","genreHint":"Subgénero hiper-específico (ej. post-punk báltico, slow cinema distópico)","oceanFitReason":"Breve vínculo con un rasgo o subfaceta concreta del usuario"}]}
 
 ### NOTA FINAL
-Si entregas la misma tanda que a un usuario promedio, el sistema falla. Sé específico y prioriza joyas ocultas coherentes con OCEAN.
+Si entregas la misma tanda que a un usuario promedio, el sistema falla. Sé específico y prioriza joyas ocultas coherentes con OCEAN. En videojuegos, dos huellas distintas deben producir listas claramente distintas (no reutilizar el mismo pack de AAA); evita converger al subconjunto de indies que los modelos suelen citar en hilos genéricos en inglés aunque no estén en ninguna lista prohibida.
 Random seed diversidad (no repetir sesgo entre llamadas): ${diversitySalt}
 `;
 }

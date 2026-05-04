@@ -12,6 +12,7 @@ const {
   countDefaultCanonOverlap,
   countGlobalCanonOverlap,
   GENRE_REC_KEYS,
+  PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
 } = require("./agentUtils");
 
 function scoreBand(v) {
@@ -140,6 +141,7 @@ Tu tarea es:
 1) Crear un perfil artístico breve en "profile".
 2) Inferir GÉNEROS base por ámbito cultural en "genreRecommendations" (sin nombres de obras en ese objeto).
 3) Proponer OBRAS CONCRETAS ancla en "suggestedWorks" (reales, buscables en TMDB, Spotify, Google Books, IGDB o museos), alineadas con el perfil, con "description" y con los géneros declarados en genreRecommendations.
+${PROMPT_TMDB_SPAIN_CINE_TITLE_RULE}
 
 ${variationBlock}
 
@@ -153,7 +155,7 @@ ${detailedOceanGuidance}
 
 Contexto: no se usa búsqueda web externa. Prioriza obras menos obvias pero fieles al perfil; evita caer en los mismos títulos universales.
 
-En tu razonamiento interno (no lo escribas): elige 10-16 obras reales mezclando categorías; que cada categoría tenga al menos una obra coherente con la descripción del perfil.
+En tu razonamiento interno (no lo escribas): elige 10-16 obras reales mezclando categorías; que cada categoría tenga al menos una obra coherente con la descripción del perfil. En videojuegos, alterna épocas de lanzamiento y familias de plataforma; no agrupes varias obras solo en lo más popular o reciente del mercado.
 
 ${descriptionGuidelines}
 
@@ -185,7 +187,7 @@ Responde SOLO JSON válido, sin markdown:
     "arte-visual": ["..."]
   },
   "suggestedWorks": [
-    {"category":"cine","title":"Título exacto buscable","creator":"director o autor opcional","genreHint":"uno de los géneros exactos declarados en genreRecommendations.cine"}
+    {"category":"cine","title":"Título en español de España (TMDB es-ES) si aplica","creator":"director o autor opcional","genreHint":"uno de los géneros exactos declarados en genreRecommendations.cine"}
   ]
 }`;
 
