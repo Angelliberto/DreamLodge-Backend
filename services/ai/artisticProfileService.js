@@ -121,8 +121,9 @@ async function generateArtisticDescription(agent, oceanResult, options = {}, dep
 
   const descriptionGuidelines = `Descripción (campo "description") para TODOS los tests:
 - Debe ser UN SOLO RESUMEN (1 párrafo), claro y directo.
-- Extensión objetivo: 70 a 120 palabras.
+- Extensión objetivo: 170 a 260 palabras.
 - Debe conectar rasgos OCEAN con preferencias culturales probables.
+- Debe incluir matices sobre ritmo, tono, complejidad, tipo de narrativa y forma de descubrimiento cultural.
 - No repetir puntuaciones numéricas ni listas largas.
 - No usar subtítulos, viñetas ni markdown.
 - No mencionar "test", "evaluación", "resultado" ni diagnósticos clínicos.`;
@@ -138,7 +139,7 @@ async function generateArtisticDescription(agent, oceanResult, options = {}, dep
 
   const prompt = `Actúa como analista psicométrico-cultural de alta precisión.
 Tu tarea es:
-1) Crear un perfil artístico breve en "profile".
+1) Usar exactamente "Análisis IA" en "profile" (no inventes otro nombre).
 2) Inferir GÉNEROS base por ámbito cultural en "genreRecommendations" (sin nombres de obras en ese objeto).
 3) Proponer OBRAS CONCRETAS ancla en "suggestedWorks" (reales, buscables en TMDB, Spotify, Google Books, IGDB o museos), alineadas con el perfil, con "description" y con los géneros declarados en genreRecommendations.
 ${PROMPT_TMDB_SPAIN_CINE_TITLE_RULE}
@@ -162,8 +163,8 @@ ${descriptionGuidelines}
 ${toneAndLanguageRules}
 
 Objetivo de escritura de la descripción:
-- Entregar una síntesis breve y útil para descubrir cultura.
-- Prioriza claridad y aplicabilidad sobre profundidad técnica.
+- Entregar una síntesis extensa y útil para descubrir cultura.
+- Prioriza claridad y aplicabilidad, con mayor riqueza de contexto.
 - Conecta la personalidad con posibles intereses en tipos de obras, géneros, atmósferas y formatos.
 
 Campo "genreRecommendations" (obligatorio):
@@ -177,7 +178,7 @@ Campo "genreRecommendations" (obligatorio):
 
 Responde SOLO JSON válido, sin markdown:
 {
-  "profile": "nombre corto del perfil artístico",
+  "profile": "Análisis IA",
   "description": "texto en español que cumpla estrictamente las reglas anteriores",
   "genreRecommendations": {
     "cine": ["género o estilo 1", "género o estilo 2"],
@@ -223,7 +224,7 @@ Responde SOLO JSON válido, sin markdown:
     throw err;
   }
 
-  const profile = String(parsed.profile || "").trim();
+  const profile = "Análisis IA";
   const description = normalizeProfileDescription(parsed.description);
   if (!profile || !description) {
     const err = new Error("La respuesta del modelo está incompleta (falta profile o description).");

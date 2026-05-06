@@ -18,7 +18,9 @@ const {
 const RECENT_FEED_TITLES = new Map();
 const RECENT_TTL_MS = 24 * 60 * 60 * 1000;
 const RECENT_KEEP = 40;
-const TARGET_CANDIDATES = 60;
+const TARGET_CANDIDATES = Math.max(24, Number(process.env.FEED_TARGET_CANDIDATES) || 60);
+const FEED_EMBED_CONCURRENCY = Math.max(1, Number(process.env.FEED_EMBED_CONCURRENCY) || 6);
+const SKIP_FEED_EMBED_RERANK = /^(1|true|yes)$/i.test(String(process.env.FEED_SKIP_EMBED_RERANK || ""));
 
 function scoreBand(v) {
   const n = Number(v) || 0;
@@ -633,32 +635,35 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
 
   let cleaned = normalizeWorkCandidateRows(rawList, TARGET_CANDIDATES);
 
-  try {
-    const userProfileText = buildUserProfileText({
-      o,
-      c,
-      e,
-      a,
-      n,
-      artisticProfile: {
-        profile: artisticProfile?.profile,
-        description: artisticProfile?.description,
-      },
-      oceanFingerprint,
-    });
-    const vectorReranked = await rerankByEmbeddingSimilarity({
-      agent,
-      userProfileText,
-      candidates: cleaned,
-      maxScan: 90,
-      logger,
-      userId: String(feedEntityIdFromOceanResult(oceanResult) || ""),
-    });
-    if (Array.isArray(vectorReranked) && vectorReranked.length) {
-      cleaned = vectorReranked;
+  if (!SKIP_FEED_EMBED_RERANK) {
+    try {
+      const userProfileText = buildUserProfileText({
+        o,
+        c,
+        e,
+        a,
+        n,
+        artisticProfile: {
+          profile: artisticProfile?.profile,
+          description: artisticProfile?.description,
+        },
+        oceanFingerprint,
+      });
+      const vectorReranked = await rerankByEmbeddingSimilarity({
+        agent,
+        userProfileText,
+        candidates: cleaned,
+        maxScan: 90,
+        embedConcurrency: FEED_EMBED_CONCURRENCY,
+        logger,
+        userId: String(feedEntityIdFromOceanResult(oceanResult) || ""),
+      });
+      if (Array.isArray(vectorReranked) && vectorReranked.length) {
+        cleaned = vectorReranked;
+      }
+    } catch (_) {
+      // Fallback silencioso: si embeddings falla, se conserva flujo actual.
     }
-  } catch (_) {
-    // Fallback silencioso: si embeddings falla, se conserva flujo actual.
   }
 
   const feedEntityId = feedEntityIdFromOceanResult(oceanResult);

@@ -39,11 +39,13 @@ const sendMessage = async (req, res) => {
         aiErr?.response?.data?.error ||
         aiErr?.message ||
         'El servicio de IA no está disponible.';
-      return handleHTTPError(
-        res,
-        { message: msg },
-        aiErr.statusCode || aiErr?.response?.status || 502
-      );
+      return handleHTTPError(res, msg, aiErr.statusCode || aiErr?.response?.status || 502);
+    }
+
+    const aiResponse =
+      typeof result?.response === "string" ? result.response.trim() : "";
+    if (!aiResponse) {
+      return handleHTTPError(res, "La IA devolvió una respuesta vacía.", 502);
     }
 
     const suggestedTitle = result.suggestedTitle ?? null;
@@ -54,7 +56,7 @@ const sendMessage = async (req, res) => {
     return res.status(200).json({
       message: "Mensaje procesado correctamente",
       data: {
-        response: result.response,
+        response: aiResponse,
         toolsUsed: result.toolsUsed,
         context: result.context,
         suggestedTitle,
@@ -100,11 +102,7 @@ const getRecommendations = async (req, res) => {
         aiErr?.response?.data?.error ||
         aiErr?.message ||
         'El servicio de IA no está disponible.';
-      return handleHTTPError(
-        res,
-        { message: msg },
-        aiErr.statusCode || aiErr?.response?.status || 502
-      );
+      return handleHTTPError(res, msg, aiErr.statusCode || aiErr?.response?.status || 502);
     }
 
     return res.status(200).json({

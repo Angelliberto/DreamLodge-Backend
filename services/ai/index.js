@@ -4,7 +4,7 @@
 const { getAiAgent } = require("./dreamLodgeAiAgent");
 
 /**
- * @returns {Promise<{ response: string, toolsUsed: string[], context: object, suggestedTitle: string|null }>}
+ * @returns {Promise<{ response: string, toolsUsed: string[], context: object, suggestedTitle: null }>}
  */
 async function processChatMessage({
   message,
@@ -21,16 +21,8 @@ async function processChatMessage({
     contextItems,
   });
 
-  let suggestedTitle = null;
-  try {
-    suggestedTitle = await agent.generateConversationTitle({
-      userMessage: trimmed,
-      assistantMessage: result.response || "",
-      currentTitle: currentTitle || "",
-    });
-  } catch {
-    suggestedTitle = (currentTitle || trimmed.slice(0, 40)) || null;
-  }
+  // Se desactiva la generación automática de títulos para análisis/chat.
+  const suggestedTitle = null;
 
   return {
     response: result.response,

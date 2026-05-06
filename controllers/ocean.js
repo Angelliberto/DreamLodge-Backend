@@ -4,7 +4,6 @@ const mongoose = require("mongoose");
 const ai = require("../services/ai");
 
 const BIG_FIVE_TRAITS = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism'];
-const ARTISTIC_REFRESH_MS = 24 * 60 * 60 * 1000;
 const ARTISTIC_PROMPT_VERSION = "v4-genre-specificity";
 
 function parseArtisticDescriptionPayload(raw) {
@@ -512,29 +511,26 @@ const generateArtisticDescription = async (req, res) => {
       }
     }
 
-    // Si ya tiene descripción, reutilizarla hasta 24h (a menos que se fuerce).
+    // Un análisis por resultado de test: al guardar/rehacer el test, saveTestResults pone artisticDescription en null.
+    // Si ya hay análisis persistido, devolverlo siempre (no regenerar por tiempo ni por versión de prompt).
     if (oceanResult.artisticDescription) {
       const parsedDescription = parseArtisticDescriptionPayload(oceanResult.artisticDescription);
       if (parsedDescription) {
         const { generatedAtMs, promptVersion } = getArtisticMeta(parsedDescription);
-        const isFresh =
-          generatedAtMs != null && Date.now() - generatedAtMs < ARTISTIC_REFRESH_MS;
-        const isCurrentPromptVersion = promptVersion === ARTISTIC_PROMPT_VERSION;
         console.log(
-          "[ocean artistic-description] cache_check userId=%s isFresh=%s promptVersion=%s currentVersion=%s",
+          "[ocean artistic-description] stored_hit userId=%s generatedAt=%s promptVersion=%s",
           userId,
-          Boolean(isFresh),
-          promptVersion || "(none)",
-          ARTISTIC_PROMPT_VERSION
+          generatedAtMs ?? "(none)",
+          promptVersion || "(none)"
         );
-        if (!forceRegenerate && isFresh && isCurrentPromptVersion) {
+        if (!forceRegenerate) {
           return res.status(200).json({
-            message: "Descripción artística obtenida desde caché",
+            message: "Descripción artística obtenida desde almacenamiento",
             data: parsedDescription
           });
         }
       } else if (!forceRegenerate) {
-        // Legacy texto plano: respetar caché en lugar de recalcular en cada visita.
+        // Legacy texto plano: respetar almacenamiento en lugar de recalcular en cada visita.
         return res.status(200).json({
           message: "Descripción artística obtenida correctamente",
           data: {
@@ -615,7 +611,7 @@ const generateArtisticDescription = async (req, res) => {
       ...artisticDescription,
       _meta: {
         generatedAt: Date.now(),
-        refreshPolicy: "daily_or_on_change",
+        refreshPolicy: "once_per_test_result",
         promptVersion: ARTISTIC_PROMPT_VERSION,
       },
     };
