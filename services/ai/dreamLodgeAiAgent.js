@@ -1,58 +1,21 @@
 /**
- * Agente IA Dream Lodge: Gemini + herramientas Mongo (equivalente a ai_agent.py).
+ * Agente IA Dream Lodge: Gemini + herramientas Mongo (orquestador).
  */
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const db = require("./dbTools");
-const { buildSystemPrompt } = require("./systemPrompts");
-const {
-  normalizeWorkCandidateRows,
-  formatExceptionForClient,
-  envModels,
-  normalizeForIntent,
-  PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
-  pickVideoGameExplorationAxes,
-} = require("./agentUtils");
+const { normalizeWorkCandidateRows } = require("./agentUtils");
 const { generateArtisticDescription } = require("./artisticProfileService");
 const { curatePersonalizedFeed } = require("./feedCurationService");
-
-const logger = console;
-
-/**
- * Log legible de obras que propone la IA (una línea numerada por obra).
- * Buscar en consola / logs: [dreamlodge][ia_obras]
- *
- * @param {string} tag - p.ej. artistic_description | feed_personalized | recommend_similar
- * @param {{ id?: string, works?: Array<{ category?: string, title?: string, creator?: string }> }} opts
- */
-function logIaRecommendedWorks(tag, opts = {}) {
-  const safeId =
-    opts.id != null && String(opts.id).trim() ? String(opts.id).trim() : "(sin id)";
-  const list = Array.isArray(opts.works) ? opts.works : [];
-  if (!list.length) {
-    logger.info("[dreamlodge][ia_obras] %s id=%s count=0", tag, safeId);
-    return;
-  }
-  const lines = list.map((w, i) => {
-    if (!w || typeof w !== "object") {
-      return `  ${i + 1}. (entrada inválida)`;
-    }
-    const cat = w.category || "?";
-    const title = w.title || "(sin título)";
-    const c = w.creator ? ` — ${w.creator}` : "";
-    return `  ${i + 1}. [${cat}] ${title}${c}`;
-  });
-  logger.info(
-    "[dreamlodge][ia_obras] %s id=%s count=%s\n%s",
-    tag,
-    safeId,
-    list.length,
-    lines.join("\n")
-  );
-}
-
-// Utility functions/constants moved to ./agentUtils.
-
-// Utility functions/constants moved to ./agentUtils.
+const {
+  generateWithGemini: geminiGenerate,
+  generateWithGeminiStream: geminiGenerateStream,
+} = require("./geminiGeneration");
+const { buildChatFullPrompt } = require("./chatPromptBuilder");
+const { prepareChatTurn, buildChatProcessReturn } = require("./prepareChatTurn");
+const messageIntent = require("./messageIntent");
+const { executeTools: runAgentTools } = require("./agentTools");
+const { logIaRecommendedWorks } = require("./iaLogRecommendedWorks");
+const { recommendSimilarWorks: runRecommendSimilarWorks } = require("./recommendSimilarWorks");
+const { CHAT_GEMINI_OPTS } = require("./chatConstants");
 
 class DreamLodgeAIAgent {
   constructor() {
@@ -64,540 +27,108 @@ class DreamLodgeAIAgent {
     return Boolean(this._genAI && this.apiKey);
   }
 
-  async generateWithGemini(
-    prompt,
-    { purpose = "respuesta", timeoutMs = 40000, generationConfig = null } = {}
-  ) {
-    if (!this.configured()) {
-      throw new Error(
-        "El servicio de IA no está configurado (Gemini no disponible)."
-      );
-    }
-    const candidates = envModels();
-    if (!candidates.length) {
-      throw new Error(
-        "No hay modelos Gemini configurados. Define GEMINI_API_KEY o GEMINI_MODEL."
-      );
-    }
-
-    const tried = [];
-    let lastErr = null;
-
-    for (const modelName of candidates) {
-      tried.push(modelName);
-      const model = this._genAI.getGenerativeModel({ model: modelName });
-      try {
-        const run = async () => {
-          const request = generationConfig
-            ? {
-                contents: [{ role: "user", parts: [{ text: String(prompt || "") }] }],
-                generationConfig,
-              }
-            : prompt;
-          const result = await model.generateContent(request);
-          const response = result.response;
-          let text = "";
-          try {
-            text = (response.text && response.text()) || "";
-          } catch {
-            const parts = response.candidates?.[0]?.content?.parts || [];
-            text = parts.map((p) => p.text || "").join("");
-          }
-          return String(text || "").trim();
-        };
-
-        const text = await Promise.race([
-          run(),
-          new Promise((_, rej) =>
-            setTimeout(
-              () => rej(new Error(`Timeout generando ${purpose} con ${modelName}`)),
-              Math.max(timeoutMs, 1000)
-            )
-          ),
-        ]);
-
-        if (!text) {
-          throw new Error(`El modelo ${modelName} no generó ninguna respuesta.`);
-        }
-        return text;
-      } catch (e) {
-        lastErr = e;
-        if (this.isNotSupported(e)) continue;
-        if (this.isQuota(e)) continue;
-        if (this.isTransient(e)) continue;
-        throw e;
-      }
-    }
-
-    if (lastErr) {
-      const detail = formatExceptionForClient(lastErr);
-      const err = new Error(
-        `Gemini falló tras probar: ${tried.join(", ")}. ${detail}`
-      );
-      err.cause = lastErr;
-      throw err;
-    }
-    throw new Error(
-      `No hay modelos Gemini compatibles. Modelos probados: ${tried.join(", ")}`
-    );
+  /**
+   * @param {string} prompt
+   * @param {{ purpose?: string, timeoutMs?: number, generationConfig?: object }} [options]
+   */
+  async generateWithGemini(prompt, options = {}) {
+    return geminiGenerate(this._genAI, prompt, options);
   }
 
-  isNotSupported(err) {
-    const msg = String(err?.message || "").toLowerCase();
-    const s = err?.status || err?.statusCode;
-    return (
-      s === 404 ||
-      msg.includes("not found") ||
-      msg.includes("not_found") ||
-      msg.includes("no longer available") ||
-      msg.includes("not supported") ||
-      msg.includes("generatecontent")
-    );
-  }
-
-  isQuota(err) {
-    const msg = String(err?.message || "").toLowerCase();
-    const s = err?.status || err?.statusCode;
-    return s === 429 || msg.includes("quota") || msg.includes("rate limit") || msg.includes("429");
-  }
-
-  isTransient(err) {
-    const msg = String(err?.message || "").toLowerCase();
-    const s = err?.status || err?.statusCode;
-    return (
-      msg.includes("timeout") ||
-      msg.includes("timed out") ||
-      msg.includes("etimedout") ||
-      msg.includes("econnreset") ||
-      msg.includes("network") ||
-      msg.includes("fetch failed") ||
-      s === 500 ||
-      s === 502 ||
-      s === 503 ||
-      s === 504
-    );
+  /**
+   * @param {string} prompt
+   * @param {{ purpose?: string, timeoutMs?: number, generationConfig?: object }} [options]
+   * @param {(cumulative: string) => void} [onChunk]
+   */
+  async generateWithGeminiStream(prompt, options = {}, onChunk) {
+    return geminiGenerateStream(this._genAI, prompt, options, onChunk);
   }
 
   extractSearchParams(message) {
-    const params = {};
-    const normalized = normalizeForIntent(message);
-
-    const categoryMap = {
-      cine: [
-        "cine",
-        "pelicula",
-        "peliculas",
-        "peli",
-        "pelis",
-        "movie",
-        "film",
-        "films",
-        "cinema",
-      ],
-      música: [
-        "musica",
-        "cancion",
-        "canciones",
-        "song",
-        "songs",
-        "album",
-        "albums",
-        "disco",
-        "musical",
-      ],
-      literatura: [
-        "literatura",
-        "libro",
-        "libros",
-        "book",
-        "books",
-        "novela",
-        "novelas",
-        "leer",
-        "lectura",
-      ],
-      "arte-visual": [
-        "arte",
-        "artista",
-        "artistas",
-        "pintura",
-        "pinturas",
-        "art",
-        "visual",
-        "cuadro",
-        "cuadros",
-      ],
-      videojuegos: [
-        "videojuego",
-        "videojuegos",
-        "juego",
-        "juegos",
-        "game",
-        "games",
-        "gaming",
-      ],
-    };
-
-    for (const [cat, keywords] of Object.entries(categoryMap)) {
-      for (const kw of keywords) {
-        if (normalized.includes(kw)) {
-          params.category = cat;
-          break;
-        }
-      }
-      if (params.category) break;
-    }
-
-    const generos = {
-      drama: ["drama", "dramatico", "dramatica", "dramaticos", "dramaticas"],
-      comedia: [
-        "comedia",
-        "comico",
-        "comica",
-        "comicos",
-        "comicas",
-        "humor",
-        "gracioso",
-        "graciosa",
-      ],
-      "ciencia ficción": [
-        "ciencia ficcion",
-        "scifi",
-        "sci-fi",
-        "futurista",
-        "futuro",
-        "espacial",
-      ],
-      fantasía: [
-        "fantasia",
-        "fantasioso",
-        "fantasiosa",
-        "magia",
-        "magico",
-        "magica",
-      ],
-      terror: ["terror", "horror", "miedo", "escalofriante", "suspenso"],
-      acción: ["accion", "aventura", "aventurero", "aventurera"],
-      romance: ["romance", "romantico", "romantica", "amor", "amoroso", "amorosa"],
-      thriller: ["thriller", "suspense", "intriga", "misterio"],
-    };
-
-    for (const [genero, keywords] of Object.entries(generos)) {
-      for (const kw of keywords) {
-        if (normalized.includes(kw)) {
-          params.genre = genero;
-          break;
-        }
-      }
-      if (params.genre) break;
-    }
-
-    for (const source of ["tmdb", "spotify", "igdb", "googlebooks"]) {
-      if (normalized.includes(source)) {
-        params.source = source.toUpperCase();
-        break;
-      }
-    }
-
-    let titleMatch =
-      message.match(/"([^"]+)"/) ||
-      message.match(/título[:\s]+(.+?)(?:\.|$)/i) ||
-      message.match(/llamad[oa][:\s]+(.+?)(?:\.|$)/i) ||
-      message.match(/titulad[oa][:\s]+(.+?)(?:\.|$)/i);
-    if (titleMatch) params.title = titleMatch[1].trim();
-
-    return params;
+    return messageIntent.extractSearchParams(message);
   }
 
   extractArtworkId(message, contextItems) {
-    const items = contextItems || [];
-    if (items.length && items[0] && items[0].id) {
-      return String(items[0].id);
-    }
-    const m = message.match(/id[:\s]+([a-zA-Z0-9-_]+)/i);
-    return m ? m[1] : null;
+    return messageIntent.extractArtworkId(message, contextItems);
   }
 
   analyzeMessageAndSelectTools(userMessage, contextItems) {
-    const tools = [];
-    const sp = this.extractSearchParams(userMessage);
-    const hasStructured = Boolean(
-      sp.category || sp.genre || sp.source || sp.title
+    return messageIntent.analyzeMessageAndSelectTools(userMessage, contextItems);
+  }
+
+  async executeTools(tools, userMessage, ctx) {
+    return runAgentTools(tools, userMessage, ctx);
+  }
+
+  async generateResponse(userMessage, systemPrompt, conversationHistory, toolResults) {
+    const fullPrompt = buildChatFullPrompt(
+      userMessage,
+      systemPrompt,
+      conversationHistory,
+      toolResults
     );
-    const artworkId = this.extractArtworkId(userMessage, contextItems);
-    if (hasStructured) tools.push("search_artworks");
-    if (artworkId) tools.push("get_artwork_by_id");
-    if (contextItems && contextItems.length && !tools.includes("get_artwork_by_id")) {
-      tools.push("get_artwork_by_id");
-    }
-    return tools;
+    return this.generateWithGemini(fullPrompt, CHAT_GEMINI_OPTS);
   }
 
-  async executeTools(tools, userMessage, { userId, contextItems } = {}) {
-    const results = {};
-    const ctx = contextItems || [];
-    const uniqueTools = [...new Set(tools || [])];
-
-    const runTool = async (tool) => {
-      try {
-        if (tool === "search_artworks") {
-          const sp = this.extractSearchParams(userMessage);
-          return { key: "artworks", data: await db.searchArtworks({
-            category: sp.category,
-            source: sp.source,
-            title: sp.title,
-            genre: sp.genre,
-            limit: 20,
-            page: 1,
-          }) };
-        }
-        if (tool === "get_user_ocean_results" && userId) {
-          return { key: "oceanResults", data: await db.getUserOceanResults(userId) };
-        }
-        if (tool === "get_user_favorites" && userId) {
-          return { key: "favorites", data: await db.getUserFavorites(userId) };
-        }
-        if (tool === "get_artwork_by_id") {
-          const aid = this.extractArtworkId(userMessage, ctx);
-          if (aid) return { key: "artwork", data: await db.getArtworkById(aid) };
-        }
-      } catch (e) {
-        logger.error(`Error ejecutando herramienta ${tool}:`, e);
-      }
-      return null;
-    };
-
-    const settled = await Promise.all(uniqueTools.map((t) => runTool(t)));
-    for (const row of settled) {
-      if (row?.key && row.data !== undefined) results[row.key] = row.data;
-    }
-    return results;
-  }
-
-  async generateResponse(
+  async generateResponseStream(
     userMessage,
     systemPrompt,
     conversationHistory,
-    toolResults
+    toolResults,
+    onChunk
   ) {
-    let contextText = `${systemPrompt}\n\n`;
-    const hist = conversationHistory || [];
-    if (hist.length) {
-      contextText += "Historial de conversación:\n";
-      for (const msg of hist.slice(-5)) {
-        const role = msg.role || "";
-        const content = msg.content || "";
-        const label = role === "user" ? "Usuario" : "Asistente";
-        contextText += `- ${label}: ${content}\n`;
-      }
-      contextText += "\n";
-    }
-
-    const aw = toolResults.artworks || {};
-    if (aw.data && aw.data.length > 0) {
-      const artworks = aw.data;
-      contextText += `Obras encontradas en la base de datos de Dream Lodge (${artworks.length} resultados):\n`;
-      for (let i = 0; i < Math.min(artworks.length, 10); i += 1) {
-        const artwork = artworks[i];
-        let line = `${i + 1}. ${artwork.title} (${artwork.category})`;
-        if (artwork.creator) line += ` - Por ${artwork.creator}`;
-        if (artwork.year) line += ` (${artwork.year})`;
-        const desc = artwork.description || "";
-        if (desc) line += `\n   ${desc.slice(0, 200)}`;
-        if (artwork.rating != null) line += `\n   Calificación: ${artwork.rating}/10`;
-        contextText += `${line}\n`;
-      }
-      contextText +=
-        "\nIMPORTANTE: Estas obras están en la base de datos de Dream Lodge. Preséntalas de manera atractiva y específica, mencionando detalles relevantes.\n\n";
-    }
-
-    const one = toolResults.artwork || {};
-    if (one.data) {
-      const artwork = one.data;
-      contextText += "Información sobre la obra solicitada:\n";
-      contextText += `Título: ${artwork.title}\n`;
-      contextText += `Categoría: ${artwork.category}\n`;
-      if (artwork.creator) contextText += `Creador: ${artwork.creator}\n`;
-      if (artwork.year) contextText += `Año: ${artwork.year}\n`;
-      if (artwork.description) contextText += `Descripción: ${artwork.description}\n`;
-      if (artwork.rating != null) contextText += `Calificación: ${artwork.rating}/10\n`;
-      contextText += "\n";
-    }
-
-    const oc = toolResults.oceanResults || {};
-    if (oc.data) {
-      contextText +=
-        "El usuario ha completado su perfil de personalidad OCEAN. Puedes hacer recomendaciones personalizadas.\n\n";
-    }
-
-    const fav = toolResults.favorites || {};
-    const fd = fav.data;
-    if (fd) {
-      const flist = Array.isArray(fd) ? fd : [fd];
-      if (flist.length) {
-        contextText += `Obras favoritas del usuario (${flist.length}):\n`;
-        for (const x of flist.slice(0, 5)) {
-          contextText += `- ${x.title || x.artworkId}\n`;
-        }
-        contextText += "\n";
-      }
-    }
-
-    let fullPrompt = `${contextText}Mensaje del usuario: ${userMessage}\n\n`;
-
-    if (aw.data && aw.data.length > 0) {
-      fullPrompt += `INSTRUCCIONES IMPORTANTES:
-- Has encontrado ${aw.data.length} obra(s) en la base de datos.
-- Preséntalas de manera atractiva y específica, mencionando título, creador, año y categoría.
-- Explica brevemente por qué cada obra podría interesarle al usuario.
-`;
-      if (oc.data) {
-        fullPrompt +=
-          "- Conecta las recomendaciones con su perfil de personalidad OCEAN si es relevante.\n";
-      }
-      fullPrompt +=
-        "- Si hay muchas obras, menciona las 3-5 más relevantes y ofrece mostrar más si quiere.\n";
-      fullPrompt +=
-        "- Sé entusiasta y específico, evita listas genéricas.\n\n";
-    } else if (oc.data) {
-      fullPrompt += `INSTRUCCIONES IMPORTANTES:
-- El usuario tiene un perfil de personalidad OCEAN disponible.
-- Haz recomendaciones personalizadas basándote en sus rasgos de personalidad.
-- Sé específico: menciona géneros, estilos o tipos de contenido que se alineen con su perfil.
-- Explica brevemente por qué estas recomendaciones encajan con su personalidad.
-- Si no tienes obras específicas en la base de datos, usa tu conocimiento general para sugerir contenido conocido.
-- NUNCA digas "no tengo información" - siempre ofrece algo útil.
-
-`;
-    } else if (fd && Array.isArray(fd) && fd.length > 0) {
-      fullPrompt += `INSTRUCCIONES IMPORTANTES:
-- Conoces los gustos del usuario a través de sus ${fd.length} favorito(s).
-- Haz recomendaciones similares o complementarias basándote en sus favoritos.
-- Sé específico: menciona obras concretas, géneros o estilos relacionados.
-- Si no tienes obras específicas en la base, usa tu conocimiento para sugerir contenido conocido que sea similar.
-
-`;
-    } else {
-      fullPrompt += `INSTRUCCIONES IMPORTANTES:
-- Responde siempre con algo útil y específico.
-- NUNCA digas "no pude encontrar", "no pude satisfacer tu solicitud" o "no entendí" como mensaje principal.
-- Interpreta la intención aunque haya typos o escritura informal.
-- Si no tienes datos en la base de datos, usa tu conocimiento general para sugerir contenido conocido, géneros o estilos.
-- Sé proactivo: ofrece opciones concretas o haz preguntas útiles para refinar la búsqueda.
-- Mantén un tono amigable y entusiasta.
-
-`;
-    }
-
-    fullPrompt +=
-      "Responde de manera natural, conversacional y útil. Sé específico y evita respuestas genéricas o vagas.";
-
-    return this.generateWithGemini(fullPrompt, {
-      purpose: "respuesta de chat",
-      timeoutMs: 32000,
-      generationConfig: {
-        temperature: 0.72,
-        topP: 0.9,
-        topK: 40,
-        maxOutputTokens: 1400,
-      },
-    });
+    const fullPrompt = buildChatFullPrompt(
+      userMessage,
+      systemPrompt,
+      conversationHistory,
+      toolResults
+    );
+    return this.generateWithGeminiStream(fullPrompt, CHAT_GEMINI_OPTS, onChunk);
   }
 
-  async processMessage(
-    userMessage,
-    { userId, conversationHistory, contextItems } = {}
-  ) {
-    const hist = conversationHistory || [];
-    const ctx = contextItems || [];
-
-    let userInfo = null;
-    let oceanResults = null;
-    let favorites = [];
-
-    if (userId) {
-      const [basic, o, f] = await Promise.all([
-        db.getUserBasicInfo(userId),
-        db.getUserOceanResults(userId),
-        db.getUserFavorites(userId),
-      ]);
-      userInfo = basic;
-      if (o?.data) {
-        oceanResults = Array.isArray(o.data) ? o.data : [o.data];
-      }
-      if (f?.data) {
-        favorites = f.data;
-      }
-    }
-
-    const systemPrompt = buildSystemPrompt({
-      contextItems: ctx,
-      oceanResults: oceanResults || [],
-      favorites,
-      userInfo,
-    });
-
-    const toolsToUse = this.analyzeMessageAndSelectTools(userMessage, ctx);
-    let toolResults = await this.executeTools(toolsToUse, userMessage, {
+  async processMessage(userMessage, { userId, conversationHistory, contextItems } = {}) {
+    const prep = await prepareChatTurn(userMessage, {
       userId,
-      contextItems: ctx,
+      conversationHistory,
+      contextItems,
     });
-
-    const sp = this.extractSearchParams(userMessage);
-    const shouldSearch =
-      toolsToUse.includes("search_artworks") ||
-      toolsToUse.includes("get_artwork_by_id") ||
-      ctx.length > 0;
-
-    if (shouldSearch && Object.keys(sp).length) {
-      const art = toolResults.artworks || {};
-      if (!art.data || !art.data.length) {
-        const extra = await db.searchArtworks({
-          category: sp.category,
-          source: sp.source,
-          title: sp.title,
-          genre: sp.genre,
-          limit: 20,
-          page: 1,
-        });
-        if (extra.data && extra.data.length) {
-          toolResults = { ...toolResults, artworks: extra };
-        }
-      }
-    }
-
-    if (oceanResults && oceanResults.length) {
-      toolResults = { ...toolResults, oceanResults: { data: oceanResults } };
-    }
-    if (favorites.length) {
-      toolResults = { ...toolResults, favorites: { data: favorites } };
-    }
-
     if (!this.configured()) {
       throw new Error(
         "El servicio de IA no está configurado (Gemini no disponible). Configura GEMINI_API_KEY."
       );
     }
-
     const aiResponse = await this.generateResponse(
       userMessage,
-      systemPrompt,
-      hist,
-      toolResults
+      prep.systemPrompt,
+      prep.hist,
+      prep.toolResults
     );
+    return buildChatProcessReturn(prep, aiResponse);
+  }
 
-    return {
-      response: aiResponse,
-      toolsUsed: toolsToUse,
-      context: {
-        hasOceanResults: Boolean(oceanResults && oceanResults.length),
-        favoritesCount: favorites.length,
-        contextItemsCount: ctx.length,
-        artworksFound: (toolResults.artworks && toolResults.artworks.data
-          ? toolResults.artworks.data.length
-          : 0),
-      },
-    };
+  async processMessageStream(
+    userMessage,
+    { userId, conversationHistory, contextItems } = {},
+    onChunk
+  ) {
+    const prep = await prepareChatTurn(userMessage, {
+      userId,
+      conversationHistory,
+      contextItems,
+    });
+    if (!this.configured()) {
+      throw new Error(
+        "El servicio de IA no está configurado (Gemini no disponible). Configura GEMINI_API_KEY."
+      );
+    }
+    const aiResponse = await this.generateResponseStream(
+      userMessage,
+      prep.systemPrompt,
+      prep.hist,
+      prep.toolResults,
+      onChunk
+    );
+    return buildChatProcessReturn(prep, aiResponse);
   }
 
   async generateConversationTitle({
@@ -648,125 +179,20 @@ class DreamLodgeAIAgent {
 
   async generateArtisticDescription(oceanResult, options = {}) {
     return generateArtisticDescription(this, oceanResult, options, {
-      logger,
+      logger: console,
       logIaRecommendedWorks,
     });
   }
 
   async curatePersonalizedFeed(oceanResult, artisticProfile) {
     return curatePersonalizedFeed(this, oceanResult, artisticProfile, {
-      logger,
+      logger: console,
       logIaRecommendedWorks,
     });
   }
 
   async recommendSimilarWorks(artwork, options = {}) {
-    if (!this.configured()) {
-      return { candidates: [], reason: "no_gemini" };
-    }
-    const limit = Math.max(1, Math.min(10, Number(options.limit) || 3));
-    const requestedCategory = String(options.targetCategory || "")
-      .trim()
-      .toLowerCase();
-    const category = String(artwork?.category || "").trim().toLowerCase();
-    const allowedCategories = new Set([
-      "cine",
-      "musica",
-      "literatura",
-      "videojuegos",
-      "arte-visual",
-    ]);
-    const targetCategory = allowedCategories.has(requestedCategory)
-      ? requestedCategory
-      : category;
-    const title = String(artwork?.title || "").trim();
-    const creator = String(artwork?.creator || "").trim();
-    const description = String(artwork?.description || "")
-      .trim()
-      .slice(0, 450);
-    const mediaType = String(artwork?.metadata?.mediaType || "")
-      .trim()
-      .toLowerCase();
-    const genres = Array.isArray(artwork?.metadata?.genres)
-      ? artwork.metadata.genres.slice(0, 6).join(", ")
-      : "";
-
-    if (!title || !category) {
-      return { candidates: [], reason: "invalid_input" };
-    }
-
-    const wantedCount = Math.max(limit + 2, 4);
-    const gameExplorationAxes =
-      targetCategory === "videojuegos"
-        ? pickVideoGameExplorationAxes(`${title}|${creator}|${category}|${mediaType}`, 2)
-        : [];
-    const gameVarietyRules =
-      targetCategory === "videojuegos"
-        ? `
-- En videojuegos: prioriza la similitud real con la obra base (mecánica, tono, temática, estudio) por encima de moda o actualidad. Reparte candidatos entre distintas décadas de lanzamiento y entre distintas familias de plataforma (PC, consolas clásicas o modernas, portátiles, arcade, etc.); no concentres la lista en lanzamientos recientes ni en un solo ecosistema. Incluye títulos buscables en IGDB de cualquier época; no sesgues hacia éxitos masivos del momento.
-- Anti-plantilla: no devuelvas el mismo pack de megatítulos (Witcher 3, BOTW, GTA V, Minecraft, Fortnite, FIFA, CoD, Elden Ring, Cyberpunk 2077, RDR2, BG3, etc.) que servirías a cualquier usuario; al menos la mitad de los candidatos deben ser menos masificados pero igualmente buscables en IGDB. Evita que casi todos los títulos coincidan con el mismo subconjunto de "indies canónicos" que el modelo recuerda de listas genéricas en inglés: prioriza variedad de década, región y estudio.
-- Ejes de exploración (al menos 2 candidatos deben encajar claramente con cada eje): (1) ${gameExplorationAxes[0] || "nicho mecánico distinto"} (2) ${gameExplorationAxes[1] || "época o plataforma distinta"}.`
-        : "";
-    const cineTmdbSpainRules = targetCategory === "cine" ? `\n${PROMPT_TMDB_SPAIN_CINE_TITLE_RULE}` : "";
-    const prompt = `Eres un recomendador cultural.
-Obra base:
-- category: ${category}
-- title: ${title}
-- creator: ${creator || "(desconocido)"}
-- mediaType (solo cine): ${mediaType || "(desconocido)"}
-- genres: ${genres || "(sin géneros)"}
-- description: ${description || "(sin descripción)"}
-
-Devuelve SOLO JSON válido, sin markdown:
-{"candidates":[{"category":"cine","title":"Nombre exacto","creator":"opcional"}, ...]}
-
-Reglas:
-- category exactamente uno de: cine, musica, literatura, videojuegos, arte-visual
-- category objetivo para TODAS las recomendaciones: ${targetCategory}
-- Devuelve entre ${wantedCount} y ${wantedCount + 1} candidatos.
-- Prioriza obras muy parecidas en estilo/tema/tono a la obra base.
-- Usa también el contexto de creator y description para evitar obras con mismo título pero de otra obra distinta.
-- NO incluyas la misma obra base ni variaciones mínimas del mismo título.
-- Si category es cine y mediaType es "movie" o "series", devuelve SOLO ese mismo tipo (no mezclar película con serie).
-- Cuando sea posible, incluye creator en cine, musica y literatura para mejorar la validación.
-- En cine, si un título es ambiguo (misma palabra para película y serie u homónimos), NO lo pongas sin creator/director: o incluye creator, o elige otra obra que puedas anclar.
-- Si una sugerencia no se puede respaldar con director/creador ni con el tono/plot coherente con la descripción base, sustitúyela por otra recomendación.
-- Usa títulos reales y buscables en APIs públicas.${cineTmdbSpainRules}${gameVarietyRules}`;
-
-    let text;
-    try {
-      text = await this.generateWithGemini(prompt, {
-        purpose: "recomendaciones similares por obra",
-        timeoutMs: 35000,
-      });
-    } catch (ex) {
-      logger.error("recommend_similar: fallo Gemini", ex);
-      const detail = formatExceptionForClient(ex);
-      const err = new Error(`No se pudieron generar recomendaciones similares. ${detail}`);
-      err.statusCode = 503;
-      throw err;
-    }
-
-    const m = text && text.match(/\{[\s\S]*\}/);
-    if (!m) return { candidates: [], reason: "bad_model_json" };
-
-    let parsed;
-    try {
-      parsed = JSON.parse(m[0]);
-    } catch {
-      return { candidates: [], reason: "json_error" };
-    }
-
-    const rawList = parsed?.candidates;
-    if (!Array.isArray(rawList)) return { candidates: [], reason: "no_candidates" };
-    const cleaned = normalizeWorkCandidateRows(rawList, wantedCount + 2).filter(
-      (row) => String(row?.category || "").trim().toLowerCase() === targetCategory
-    );
-    logIaRecommendedWorks("recommend_similar", {
-      id: `${category}:${title.slice(0, 120)}`,
-      works: cleaned,
-    });
-    return { candidates: cleaned };
+    return runRecommendSimilarWorks(this, artwork, options);
   }
 }
 

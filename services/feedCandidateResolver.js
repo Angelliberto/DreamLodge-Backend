@@ -1,6 +1,6 @@
 /**
  * Resuelve candidatos { category, title, creator? } (IA / feed) contra TMDB, Spotify,
- * Google Books, IGDB y Met. Solo acepta resultados cuya ficha en API coincide con el título
+ * Open Library, IGDB y Met. Solo acepta resultados cuya ficha en API coincide con el título
  * (umbral configurable) y, si hay creador, valida autor/artista cuando aplica.
  */
 const {
@@ -19,7 +19,7 @@ const {
   adaptMet,
 } = require("./culturalItemAdapters");
 const { searchSpotifyAlbums } = require("./spotifyClient");
-const { fetchGoogleBooksVolumesMerged } = require("./googleBooksClient");
+const { fetchOpenLibraryWorksMerged } = require("./openLibraryClient");
 const { searchIgdbGames, stableStringHash32 } = require("./igdbClient");
 const { searchMetArtworkRows } = require("./metMuseumClient");
 const {
@@ -402,9 +402,9 @@ async function resolveOne(c, genreMap, ctx = {}) {
       return adaptSpotifyAlbum(albumPick.item);
     }
     case "literatura": {
-      const tasks = [`intitle:${title}`];
-      if (creator.length >= 2) tasks.push(`inauthor:${creator}`);
-      const merged = await fetchGoogleBooksVolumesMerged(tasks, {
+      const tasks = [{ type: "title", value: title }];
+      if (creator.length >= 2) tasks.push({ type: "author", value: creator });
+      const merged = await fetchOpenLibraryWorksMerged(tasks, {
         maxPerQuery: 12,
         maxTotal: 12,
         shortCircuitAfterQueryIfAtLeast: 6,
@@ -412,10 +412,10 @@ async function resolveOne(c, genreMap, ctx = {}) {
       const bookPick = pickBestTitleMatch(
         merged,
         (item) => {
-          const v = item.volumeInfo || {};
-          const parts = [v.title, v.subtitle].filter(Boolean);
+          const t = Array.isArray(item.title) ? item.title[0] : item.title;
+          const parts = [t, item.subtitle].filter(Boolean);
           const joined = parts.join(" ").trim();
-          return [v.title, joined].filter(Boolean);
+          return [t, joined].filter(Boolean);
         },
         title,
         { minScore, maxScan: 12 }
@@ -426,7 +426,7 @@ async function resolveOne(c, genreMap, ctx = {}) {
         creator,
         bookPick.score,
         (hint) => {
-          const authors = bookPick.item.volumeInfo?.authors || [];
+          const authors = bookPick.item.author_name || [];
           if (!authors.length) return true;
           return authors.some((n) => personNameSimilarity(hint, n) >= 0.32);
         }

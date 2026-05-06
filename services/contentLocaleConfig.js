@@ -1,14 +1,17 @@
 /**
- * Locale unificado para APIs de contenido (TMDB, Spotify, Google Books, IGDB).
+ * Locale unificado para APIs de contenido (TMDB, Spotify, Open Library, IGDB).
  *
  * Variables de entorno (opcionales):
  * - CONTENT_LOCALE: idioma TMDB (ej. es-ES, es-MX, en-US). Alternativa: TMDB_LANGUAGE.
  *   Si solo indicas "es", se normaliza a es-ES (España) para alinear títulos con el catálogo TMDB España.
  * - CONTENT_REGION o CONTENT_MARKET o SPOTIFY_MARKET: país ISO 3166-1 alpha-2 (ej. ES, MX, AR)
  *   para catálogo Spotify (parámetro `market`).
- * - CONTENT_LANG: idioma BCP-47 corto para Google Books `langRestrict` e IGDB `Accept-Language`
- *   (ej. es). Alternativas: GOOGLE_BOOKS_LANG_RESTRICT, IGDB_ACCEPT_LANGUAGE.
- * - GOOGLE_BOOKS_LANG_RESTRICT: valor exacto para Books (ej. es o es,en). Si es "off", no se envía langRestrict.
+ * - CONTENT_LANG: idioma BCP-47 corto para filtros tipo libros/Open Library e IGDB `Accept-Language`
+ *   (ej. es). Alternativas: IGDB_ACCEPT_LANGUAGE, OPEN_LIBRARY_LANGUAGE.
+ * - OPEN_LIBRARY_LANGUAGE: código MARC de 3 letras para `language` en búsqueda Open Library (ej. spa, eng).
+ *   Si es "off", no se envía filtro. Si falta, se infiere desde CONTENT_LANG (spa para es, etc.).
+ * - GOOGLE_BOOKS_LANG_RESTRICT: compatibilidad; si OPEN_LIBRARY_LANGUAGE no está definida, el primer código
+ *   tipo BCP se mapea a MARC antes de recurrir a CONTENT_LANG.
  */
 
 function trim(v) {
@@ -44,9 +47,47 @@ function getSpotifyMarket() {
   return "ES";
 }
 
+/** Mapa BCP‑47 corto → código idioma Open Library (`language`). */
+function mapBcpToOpenLibraryMarc(code) {
+  const raw = trim(code).split(",")[0].split("-")[0].toLowerCase();
+  if (!raw || raw === "off") return "";
+  const table = {
+    es: "spa",
+    ca: "cat",
+    en: "eng",
+    fr: "fre",
+    de: "ger",
+    it: "ita",
+    pt: "por",
+    gl: "glg",
+  };
+  return table[raw] || "";
+}
+
 /**
- * Restricción de idioma para Google Books API (`langRestrict`).
- * Vacío = no enviar parámetro (todos los idiomas).
+ * Código `language` para Open Library search (3 letras MARC: spa, eng, …).
+ * Vacío = no filtrar por idioma.
+ */
+function getOpenLibraryLanguage() {
+  const explicit = trim(process.env.OPEN_LIBRARY_LANGUAGE);
+  if (explicit.toLowerCase() === "off" || explicit === "0") return "";
+  if (explicit && explicit.length === 3) return explicit.toLowerCase();
+  if (explicit) {
+    const m = mapBcpToOpenLibraryMarc(explicit);
+    if (m) return m;
+  }
+  const gl = trim(process.env.GOOGLE_BOOKS_LANG_RESTRICT);
+  if (gl && gl.toLowerCase() !== "off" && gl !== "0") {
+    const m = mapBcpToOpenLibraryMarc(gl);
+    if (m) return m;
+  }
+  const fromContent = firstEnv("CONTENT_LANG");
+  return mapBcpToOpenLibraryMarc(fromContent || "es") || "spa";
+}
+
+/**
+ * Restricción de idioma (histórico Google Books `langRestrict`); IGDB también lee CONTENT_LANG.
+ * Vacío = no enviar restricción explícita.
  */
 function getGoogleBooksLangRestrict() {
   const explicit = trim(process.env.GOOGLE_BOOKS_LANG_RESTRICT);
@@ -67,5 +108,6 @@ module.exports = {
   normalizeTmdbLanguage,
   getSpotifyMarket,
   getGoogleBooksLangRestrict,
+  getOpenLibraryLanguage,
   getIgdbAcceptLanguage,
 };

@@ -141,7 +141,7 @@ async function generateArtisticDescription(agent, oceanResult, options = {}, dep
 Tu tarea es:
 1) Usar exactamente "Análisis IA" en "profile" (no inventes otro nombre).
 2) Inferir GÉNEROS base por ámbito cultural en "genreRecommendations" (sin nombres de obras en ese objeto).
-3) Proponer OBRAS CONCRETAS ancla en "suggestedWorks" (reales, buscables en TMDB, Spotify, Google Books, IGDB o museos), alineadas con el perfil, con "description" y con los géneros declarados en genreRecommendations.
+3) Proponer OBRAS CONCRETAS ancla en "suggestedWorks" (reales, buscables en TMDB, Spotify, Open Library, IGDB o museos), alineadas con el perfil, con "description" y con los géneros declarados en genreRecommendations.
 ${PROMPT_TMDB_SPAIN_CINE_TITLE_RULE}
 
 ${variationBlock}

@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const {
   sendMessage,
+  sendMessageStream,
   getRecommendations,
   listChatConversations,
   getChatMessages,
@@ -74,6 +75,9 @@ if (typeof authUser !== 'function') {
  *         description: Servicio de IA (MCP) no disponible o error al contactarlo
  */
 router.post("/message", authUser, sendMessage);
+
+/** Igual que POST /message pero respuesta NDJSON con chunks (texto acumulado). Requiere stream en cliente. */
+router.post("/message/stream", authUser, sendMessageStream);
 
 /** GET lista de conversaciones persistidas para el usuario */
 router.get("/conversations", authUser, listChatConversations);

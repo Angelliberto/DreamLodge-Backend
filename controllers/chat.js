@@ -234,8 +234,138 @@ const deleteChatConversation = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/chat/message/stream
+ * NDJSON: líneas { type: 'chunk', text }, luego { type: 'done', data }
+ */
+const sendMessageStream = async (req, res) => {
+  const safeWrite = (obj) => {
+    if (!res.writableEnded) {
+      res.write(`${JSON.stringify(obj)}\n`);
+    }
+  };
+
+  try {
+    const { message, conversationId, contextItems = [], currentTitle = "" } = req.body;
+    const userId = req.user?._id || null;
+
+    if (!message || !message.trim()) {
+      return handleHTTPError(res, "El mensaje es requerido", 400);
+    }
+
+    const trimmedMessage = message.trim();
+    let conversationHistory = [];
+    let serverConversation = null;
+
+    if (userId && conversationId && String(conversationId).trim()) {
+      serverConversation = await chatPersistence.upsertConversationByClientKey(
+        userId,
+        conversationId,
+        { title: currentTitle || "", contextItems: contextItems || [] }
+      );
+      if (serverConversation) {
+        conversationHistory = await chatPersistence.getRecentHistory(
+          serverConversation._id,
+          14
+        );
+      }
+    }
+
+    res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.status(200);
+    if (typeof res.flushHeaders === "function") res.flushHeaders();
+
+    let result;
+    try {
+      result = await ai.processChatMessageStream(
+        {
+          message: trimmedMessage,
+          userId: userId?.toString(),
+          conversationHistory,
+          contextItems: contextItems || [],
+          currentTitle: currentTitle || "",
+        },
+        (cumulativeText) => {
+          safeWrite({ type: "chunk", text: cumulativeText });
+        }
+      );
+    } catch (aiErr) {
+      console.error("Error IA (chat stream):", aiErr?.message || aiErr);
+      const msg =
+        aiErr?.response?.data?.error ||
+        aiErr?.message ||
+        "El servicio de IA no está disponible.";
+      safeWrite({ type: "error", message: msg });
+      return res.end();
+    }
+
+    const aiResponse =
+      typeof result?.response === "string" ? result.response.trim() : "";
+    if (!aiResponse) {
+      safeWrite({
+        type: "error",
+        message: "La IA devolvió una respuesta vacía.",
+      });
+      return res.end();
+    }
+
+    if (userId && serverConversation) {
+      try {
+        await chatPersistence.appendMessage(
+          serverConversation._id,
+          userId,
+          "user",
+          trimmedMessage
+        );
+        await chatPersistence.appendMessage(
+          serverConversation._id,
+          userId,
+          "assistant",
+          aiResponse
+        );
+      } catch (persistErr) {
+        console.error("Error persistiendo mensajes del chat (stream):", persistErr?.message || persistErr);
+      }
+    }
+
+    const suggestedTitle = result.suggestedTitle ?? null;
+
+    safeWrite({
+      type: "done",
+      data: {
+        response: aiResponse,
+        toolsUsed: result.toolsUsed,
+        context: result.context,
+        suggestedTitle,
+        serverConversationId: serverConversation
+          ? String(serverConversation._id)
+          : undefined,
+      },
+    });
+    return res.end();
+  } catch (error) {
+    console.error("Error procesando mensaje (stream):", error);
+    const messageErr =
+      error && typeof error.message === "string"
+        ? error.message
+        : "Error al procesar el mensaje";
+    if (res.headersSent) {
+      try {
+        res.write(`${JSON.stringify({ type: "error", message: messageErr })}\n`);
+      } catch (_) {
+        /* noop */
+      }
+      return res.end();
+    }
+    return handleHTTPError(res, messageErr, 500);
+  }
+};
+
 module.exports = {
   sendMessage,
+  sendMessageStream,
   getRecommendations,
   listChatConversations,
   getChatMessages,

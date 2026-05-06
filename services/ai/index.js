@@ -32,6 +32,34 @@ async function processChatMessage({
   };
 }
 
+/**
+ * Misma lógica que processChatMessage pero la respuesta final se genera con Gemini en streaming.
+ * @param {(cumulativeText: string) => void} onChunk
+ */
+async function processChatMessageStream(
+  { message, userId, conversationHistory = [], contextItems = [], currentTitle = "" },
+  onChunk
+) {
+  const agent = getAiAgent();
+  const trimmed = String(message || "").trim();
+  const result = await agent.processMessageStream(
+    trimmed,
+    {
+      userId: userId || undefined,
+      conversationHistory,
+      contextItems,
+    },
+    onChunk
+  );
+  const suggestedTitle = null;
+  return {
+    response: result.response,
+    toolsUsed: result.toolsUsed,
+    context: result.context,
+    suggestedTitle,
+  };
+}
+
 async function generateArtisticDescription(oceanResult, options) {
   return getAiAgent().generateArtisticDescription(oceanResult, options);
 }
@@ -50,6 +78,7 @@ function isGeminiConfigured() {
 
 module.exports = {
   processChatMessage,
+  processChatMessageStream,
   generateArtisticDescription,
   curatePersonalizedFeed,
   recommendSimilarWorks,
