@@ -424,7 +424,7 @@ function buildArtisticProfileExtra(artisticProfile) {
   if (!artisticProfile || typeof artisticProfile !== "object") return "";
   const prof = String(artisticProfile.profile || "").trim();
   const desc = String(artisticProfile.description || "").trim().slice(0, 500);
-  return `\nPerfil artístico existente: ${prof}\n${desc}\n`;
+  return `\nAnálisis de personalidad existente: ${prof}\n${desc}\n`;
 }
 
 function diversityPromptSalt() {

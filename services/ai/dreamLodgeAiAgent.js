@@ -336,30 +336,40 @@ class DreamLodgeAIAgent {
   async executeTools(tools, userMessage, { userId, contextItems } = {}) {
     const results = {};
     const ctx = contextItems || [];
+    const uniqueTools = [...new Set(tools || [])];
 
-    for (const tool of tools) {
+    const runTool = async (tool) => {
       try {
         if (tool === "search_artworks") {
           const sp = this.extractSearchParams(userMessage);
-          results.artworks = await db.searchArtworks({
+          return { key: "artworks", data: await db.searchArtworks({
             category: sp.category,
             source: sp.source,
             title: sp.title,
             genre: sp.genre,
             limit: 20,
             page: 1,
-          });
-        } else if (tool === "get_user_ocean_results" && userId) {
-          results.oceanResults = await db.getUserOceanResults(userId);
-        } else if (tool === "get_user_favorites" && userId) {
-          results.favorites = await db.getUserFavorites(userId);
-        } else if (tool === "get_artwork_by_id") {
+          }) };
+        }
+        if (tool === "get_user_ocean_results" && userId) {
+          return { key: "oceanResults", data: await db.getUserOceanResults(userId) };
+        }
+        if (tool === "get_user_favorites" && userId) {
+          return { key: "favorites", data: await db.getUserFavorites(userId) };
+        }
+        if (tool === "get_artwork_by_id") {
           const aid = this.extractArtworkId(userMessage, ctx);
-          if (aid) results.artwork = await db.getArtworkById(aid);
+          if (aid) return { key: "artwork", data: await db.getArtworkById(aid) };
         }
       } catch (e) {
         logger.error(`Error ejecutando herramienta ${tool}:`, e);
       }
+      return null;
+    };
+
+    const settled = await Promise.all(uniqueTools.map((t) => runTool(t)));
+    for (const row of settled) {
+      if (row?.key && row.data !== undefined) results[row.key] = row.data;
     }
     return results;
   }
@@ -484,7 +494,13 @@ class DreamLodgeAIAgent {
 
     return this.generateWithGemini(fullPrompt, {
       purpose: "respuesta de chat",
-      timeoutMs: 45000,
+      timeoutMs: 32000,
+      generationConfig: {
+        temperature: 0.72,
+        topP: 0.9,
+        topK: 40,
+        maxOutputTokens: 1400,
+      },
     });
   }
 
@@ -500,14 +516,17 @@ class DreamLodgeAIAgent {
     let favorites = [];
 
     if (userId) {
-      userInfo = await db.getUserBasicInfo(userId);
-      if (userInfo) {
-        const o = await db.getUserOceanResults(userId);
-        if (o.data) {
-          oceanResults = Array.isArray(o.data) ? o.data : [o.data];
-        }
-        const f = await db.getUserFavorites(userId);
-        if (f.data) favorites = f.data;
+      const [basic, o, f] = await Promise.all([
+        db.getUserBasicInfo(userId),
+        db.getUserOceanResults(userId),
+        db.getUserFavorites(userId),
+      ]);
+      userInfo = basic;
+      if (o?.data) {
+        oceanResults = Array.isArray(o.data) ? o.data : [o.data];
+      }
+      if (f?.data) {
+        favorites = f.data;
       }
     }
 

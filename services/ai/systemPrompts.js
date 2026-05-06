@@ -278,21 +278,23 @@ function artisticProfilePrompt(oceanResults) {
     })
     .filter(Boolean);
 
-  const profileLine = profile ? `Perfil artístico: ${profile}` : "Perfil artístico: (no especificado)";
+  const profileLine = profile
+    ? `Análisis de personalidad: ${profile}`
+    : "Análisis de personalidad: (no especificado)";
   const descriptionLine = description
-    ? `Descripción artística base: ${description}`
-    : "Descripción artística base: (no disponible)";
+    ? `Descripción base del análisis: ${description}`
+    : "Descripción base del análisis: (no disponible)";
 
   const genreBlock = genreLines.length
     ? `\nGéneros/estilos sugeridos por perfil:\n${genreLines.join("\n")}`
     : "";
   const worksBlock = worksLines.length
-    ? `\nObras semilla del perfil artístico:\n${worksLines.join("\n")}`
+    ? `\nObras semilla del análisis de personalidad:\n${worksLines.join("\n")}`
     : "";
 
   return `
 
-PERFIL ARTÍSTICO PERSISTIDO DEL USUARIO (prioritario para recomendaciones):
+ANÁLISIS DE PERSONALIDAD PERSISTIDO DEL USUARIO (prioritario para recomendaciones):
 ${profileLine}
 ${descriptionLine}${genreBlock}${worksBlock}
 

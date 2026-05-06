@@ -1,6 +1,12 @@
 const express = require("express");
 const router = express.Router();
-const { sendMessage, getRecommendations } = require("../controllers/chat");
+const {
+  sendMessage,
+  getRecommendations,
+  listChatConversations,
+  getChatMessages,
+  deleteChatConversation,
+} = require("../controllers/chat");
 const { authUser } = require("../middleware/session");
 
 // Validar que las funciones existan antes de usarlas
@@ -11,6 +17,18 @@ if (typeof sendMessage !== 'function') {
 if (typeof getRecommendations !== 'function') {
   console.error('ERROR: getRecommendations no es una función. Tipo:', typeof getRecommendations);
   throw new Error('getRecommendations debe ser una función');
+}
+if (typeof listChatConversations !== 'function') {
+  console.error('ERROR: listChatConversations no es una función.');
+  throw new Error('listChatConversations debe ser una función');
+}
+if (typeof getChatMessages !== 'function') {
+  console.error('ERROR: getChatMessages no es una función.');
+  throw new Error('getChatMessages debe ser una función');
+}
+if (typeof deleteChatConversation !== 'function') {
+  console.error('ERROR: deleteChatConversation no es una función.');
+  throw new Error('deleteChatConversation debe ser una función');
 }
 if (typeof authUser !== 'function') {
   console.error('ERROR: authUser no es una función. Tipo:', typeof authUser);
@@ -56,6 +74,15 @@ if (typeof authUser !== 'function') {
  *         description: Servicio de IA (MCP) no disponible o error al contactarlo
  */
 router.post("/message", authUser, sendMessage);
+
+/** GET lista de conversaciones persistidas para el usuario */
+router.get("/conversations", authUser, listChatConversations);
+
+/** GET mensajes; :conversationRef = Mongo _id (24 hex) o clientKey (p. ej. conv_…) */
+router.get("/conversations/:conversationRef/messages", authUser, getChatMessages);
+
+/** DELETE borrado suave */
+router.delete("/conversations/:conversationRef", authUser, deleteChatConversation);
 
 /**
  * @swagger
