@@ -8,25 +8,18 @@ const GOOGLE_BOOKS = "https://www.googleapis.com/books/v1/volumes";
  * @param {string[]} queries
  * @param {{ maxPerQuery?: number, maxTotal: number, shortCircuitAfterQueryIfAtLeast?: number }} options
  */
-async function fetchGoogleBooksVolumesMerged(queries, options = {}) {
+async function fetchGoogleBooksVolumesMerged(queries, options) {
   const maxPerQuery = options.maxPerQuery ?? 12;
   const maxTotal = options.maxTotal;
   const shortCircuit = options.shortCircuitAfterQueryIfAtLeast;
   const key = (process.env.GOOGLE_BOOKS_API_KEY || "").trim();
-  let langRestrict;
-  if (Object.prototype.hasOwnProperty.call(options, "langRestrict")) {
-    langRestrict =
-      options.langRestrict == null ? "" : String(options.langRestrict).trim();
-  } else {
-    langRestrict = getGoogleBooksLangRestrict();
-  }
+  const langRestrict = getGoogleBooksLangRestrict();
   const seen = new Set();
   const merged = [];
 
   for (const q of queries) {
-    if (!q || !String(q).trim()) continue;
     try {
-      const params = { q: String(q).trim(), maxResults: maxPerQuery };
+      const params = { q, maxResults: maxPerQuery };
       if (key) params.key = key;
       if (langRestrict) params.langRestrict = langRestrict;
       const { data } = await axios.get(GOOGLE_BOOKS, { params, timeout: 15000 });

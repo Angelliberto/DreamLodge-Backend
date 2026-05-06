@@ -64,7 +64,6 @@ async function rerankByEmbeddingSimilarity({
   candidates,
   maxScan = 90,
   maxOnTheFlyEmbeddings = 24,
-  embedConcurrency = 6,
   logger = null,
   userId = "",
 }) {
@@ -76,39 +75,25 @@ async function rerankByEmbeddingSimilarity({
   const head = list.slice(0, maxScan);
   const tail = list.slice(maxScan);
   const scored = [];
+  let onTheFlyCount = 0;
   let storedCount = 0;
-  const missingForOnTheFly = [];
-  for (let i = 0; i < head.length; i += 1) {
-    const item = head[i];
+  for (const item of head) {
     const hasStored =
       Array.isArray(item?.embedding) &&
       item.embedding.length > 0 &&
       (!item?.embeddingModel || item.embeddingModel === EMBEDDING_MODEL);
     if (hasStored) storedCount += 1;
-    const itemVec = hasStored ? item.embedding : null;
-    if (!itemVec) missingForOnTheFly.push({ i, item });
+    let itemVec = hasStored ? item.embedding : null;
+    if (!itemVec && onTheFlyCount < maxOnTheFlyEmbeddings) {
+      itemVec = await embedText(agent, buildArtworkEmbeddingText(item));
+      if (itemVec) {
+        onTheFlyCount += 1;
+        persistArtworkEmbeddingInBackground(item, itemVec);
+      }
+    }
     const sim = itemVec ? cosine(userVec, itemVec) : -1;
     scored.push({ item, sim });
   }
-
-  const scanTargets = missingForOnTheFly.slice(0, maxOnTheFlyEmbeddings);
-  const workers = Math.max(1, Number(embedConcurrency) || 1);
-  let cursor = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(workers, scanTargets.length) }, async () => {
-      while (cursor < scanTargets.length) {
-        const idx = cursor;
-        cursor += 1;
-        const row = scanTargets[idx];
-        const itemVec = await embedText(agent, buildArtworkEmbeddingText(row.item));
-        if (!itemVec) continue;
-        persistArtworkEmbeddingInBackground(row.item, itemVec);
-        scored[row.i].sim = cosine(userVec, itemVec);
-      }
-    })
-  );
-
-  const onTheFlyCount = scored.reduce((acc, row) => (row.sim >= 0 ? acc + 1 : acc), 0) - storedCount;
   scored.sort((x, y) => y.sim - x.sim);
   if (logger && typeof logger.info === "function") {
     const top = scored

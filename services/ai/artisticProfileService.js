@@ -139,7 +139,7 @@ async function generateArtisticDescription(agent, oceanResult, options = {}, dep
 
   const prompt = `Actúa como analista psicométrico-cultural de alta precisión.
 Tu tarea es:
-1) Usar exactamente "Análisis de personalidad" en "profile" (no inventes otro nombre).
+1) Usar exactamente "Análisis IA" en "profile" (no inventes otro nombre).
 2) Inferir GÉNEROS base por ámbito cultural en "genreRecommendations" (sin nombres de obras en ese objeto).
 3) Proponer OBRAS CONCRETAS ancla en "suggestedWorks" (reales, buscables en TMDB, Spotify, Google Books, IGDB o museos), alineadas con el perfil, con "description" y con los géneros declarados en genreRecommendations.
 ${PROMPT_TMDB_SPAIN_CINE_TITLE_RULE}
@@ -178,7 +178,7 @@ Campo "genreRecommendations" (obligatorio):
 
 Responde SOLO JSON válido, sin markdown:
 {
-  "profile": "Análisis de personalidad",
+  "profile": "Análisis IA",
   "description": "texto en español que cumpla estrictamente las reglas anteriores",
   "genreRecommendations": {
     "cine": ["género o estilo 1", "género o estilo 2"],
@@ -224,7 +224,7 @@ Responde SOLO JSON válido, sin markdown:
     throw err;
   }
 
-  const profile = "Análisis de personalidad";
+  const profile = "Análisis IA";
   const description = normalizeProfileDescription(parsed.description);
   if (!profile || !description) {
     const err = new Error("La respuesta del modelo está incompleta (falta profile o description).");

@@ -224,8 +224,6 @@ const saveTestResults = async (req, res) => {
       // Nuevo test: invalidar descripción IA para que se regenere con los scores actuales
       if (entityType === 'user') {
         oceanResult.artisticDescription = null;
-        oceanResult.personalizedFeedSnapshot = {};
-        oceanResult.markModified("personalizedFeedSnapshot");
       }
       if (useTransaction) {
         await oceanResult.save({ session });
@@ -508,9 +506,7 @@ const generateArtisticDescription = async (req, res) => {
       }
       if (oceanResult.artisticDescription) {
         oceanResult.artisticDescription = null;
-        oceanResult.personalizedFeedSnapshot = {};
         oceanResult.markModified("artisticDescription");
-        oceanResult.markModified("personalizedFeedSnapshot");
         await oceanResult.save();
       }
     }
@@ -626,8 +622,6 @@ const generateArtisticDescription = async (req, res) => {
       Array.isArray(artisticPayload?.suggestedWorks) ? artisticPayload.suggestedWorks.length : 0
     );
     oceanResult.artisticDescription = JSON.stringify(artisticPayload);
-    oceanResult.personalizedFeedSnapshot = {};
-    oceanResult.markModified("personalizedFeedSnapshot");
     await oceanResult.save();
 
     try {
