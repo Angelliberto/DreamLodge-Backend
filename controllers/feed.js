@@ -22,59 +22,6 @@ const REQUIRED_FEED_CATEGORIES = [
   "arte-visual",
 ];
 const MIN_ITEMS_PER_CATEGORY = 5;
-const FEED_BACKGROUND_JOBS = new Map();
-const FEED_FAST_FIRST_ITEMS = Math.max(10, Number(process.env.FEED_FAST_FIRST_ITEMS) || 24);
-const FEED_PROGRESSIVE_DEFAULT = /^(1|true|yes)$/i.test(
-  String(process.env.FEED_PROGRESSIVE_DEFAULT || "true")
-);
-
-function feedModeKey(preferFavorites) {
-  return preferFavorites ? "favorites" : "ocean";
-}
-
-function readPersistedFeedSnapshot(oceanResult, modeKey) {
-  const snapshot = oceanResult?.personalizedFeedSnapshot;
-  if (!snapshot || typeof snapshot !== "object") return null;
-  const row = snapshot[modeKey];
-  if (!row || typeof row !== "object") return null;
-  if (!Array.isArray(row.items) || !row.items.length) return null;
-  return row;
-}
-
-async function savePersistedFeedSnapshot(oceanId, modeKey, data) {
-  if (!oceanId || !modeKey || !data || typeof data !== "object") return;
-  const payload = {
-    ...data,
-    persistedAt: Date.now(),
-  };
-  await OceanModel.updateOne(
-    { _id: oceanId },
-    { $set: { [`personalizedFeedSnapshot.${modeKey}`]: payload } }
-  );
-}
-
-function queueBackgroundFeedJob(cacheKey, task) {
-  if (FEED_BACKGROUND_JOBS.has(cacheKey)) return false;
-  const job = Promise.resolve()
-    .then(task)
-    .catch((err) => {
-      console.error("[feed/personalized] background job error:", err?.message || err);
-    })
-    .finally(() => {
-      FEED_BACKGROUND_JOBS.delete(cacheKey);
-    });
-  FEED_BACKGROUND_JOBS.set(cacheKey, job);
-  return true;
-}
-
-function parseOptionalBoolean(v) {
-  if (v == null) return null;
-  if (v === true || v === false) return v;
-  const t = String(v).trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(t)) return true;
-  if (["0", "false", "no", "off"].includes(t)) return false;
-  return null;
-}
 
 function norm(v) {
   return String(v || "")
@@ -353,15 +300,6 @@ const getPersonalizedFeedCurated = async (req, res) => {
       req.query.preferFavorites === "1" ||
       req.query.preferFavorites === "true" ||
       (req.body && req.body.preferFavorites === true);
-    const reqProgressive = parseOptionalBoolean(req.query.progressive);
-    const bodyProgressive = parseOptionalBoolean(req.body && req.body.progressive);
-    const progressive =
-      reqProgressive != null
-        ? reqProgressive
-        : bodyProgressive != null
-          ? bodyProgressive
-          : FEED_PROGRESSIVE_DEFAULT;
-    const modeKey = feedModeKey(preferFavorites);
     const key = `${String(userId)}:fav_${preferFavorites ? 1 : 0}`;
     const oceanResult = await OceanModel.findOne({
       entityType: "user",
@@ -441,21 +379,6 @@ const getPersonalizedFeedCurated = async (req, res) => {
       });
     }
 
-    if (!force) {
-      const persisted = readPersistedFeedSnapshot(oceanResult, modeKey);
-      if (persisted) {
-        FEED_CACHE.set(key, {
-          ts: Date.now(),
-          data: persisted,
-          oceanUpdatedAt,
-        });
-        return res.status(200).json({
-          message: "ok",
-          data: { ...persisted, cached: true, source: "persisted" },
-        });
-      }
-    }
-
     const oceanPlain = JSON.parse(JSON.stringify(oceanResult));
 
     const suggestedWorksRaw = extractSuggestedWorksFromArtisticJson(
@@ -490,225 +413,201 @@ const getPersonalizedFeedCurated = async (req, res) => {
       artisticProfile,
     };
 
-    const computeFullFeed = async () => {
-      let data;
-      try {
+    let data;
+    try {
         data = await ai.curatePersonalizedFeed(payload);
-        console.log(
-          "[feed/personalized] ai_curate userId=%s candidates=%s reason=%s webSearchUsed=%s",
-          key,
-          Array.isArray(data?.candidates) ? data.candidates.length : 0,
-          data?.reason || "ok",
-          Boolean(data?.webSearchUsed)
-        );
-      } catch (curateErr) {
-        console.error("[feed/personalized] curación IA falló:", curateErr?.message || curateErr);
-        const resolvedAnchorsFallback = await resolveCuratedFeedCandidates(suggestedWorksRaw, {
-          diversitySeed: String(userId),
-        });
-        return {
-          items: resolvedAnchorsFallback.slice(0, 200),
-          oceanItems: resolvedAnchorsFallback.slice(0, 80),
-          recommendationMode: "ocean",
-          webSearchUsed: false,
-          reason: "ai_unavailable_anchors_only",
-          cached: false,
-        };
-      }
-
-      const curated = data.candidates || [];
-      const aiCandidateCounts = countByCategory(curated, REQUIRED_FEED_CATEGORIES);
       console.log(
-        "[feed/personalized] ai_candidates_by_category userId=%s cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s",
+        "[feed/personalized] ai_curate userId=%s candidates=%s reason=%s webSearchUsed=%s",
         key,
-        aiCandidateCounts.cine || 0,
-        aiCandidateCounts.musica || 0,
-        aiCandidateCounts.literatura || 0,
-        aiCandidateCounts.videojuegos || 0,
-        aiCandidateCounts["arte-visual"] || 0
+        Array.isArray(data?.candidates) ? data.candidates.length : 0,
+        data?.reason || "ok",
+        Boolean(data?.webSearchUsed)
       );
-      const [resolvedAnchors, resolvedCurated, userWithSignals] = await Promise.all([
-        resolveCuratedFeedCandidates(suggestedWorksRaw, { diversitySeed: String(userId) }),
-        resolveCuratedFeedCandidates(curated, { diversitySeed: String(userId) }),
-        UserModel.findById(userId)
-          .populate("favoriteArtworks")
-          .populate("pendingArtworks")
-          .populate("notInterestedArtworks")
-          .populate("dislikedArtworks")
-          .populate("seenArtworks"),
-      ]);
-      const resolvedCuratedCounts = countByCategory(resolvedCurated, REQUIRED_FEED_CATEGORIES);
-      const resolvedAnchorCounts = countByCategory(resolvedAnchors, REQUIRED_FEED_CATEGORIES);
-      console.log(
-        "[feed/personalized] resolved_by_category userId=%s curated(cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s) anchors(cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s)",
-        key,
-        resolvedCuratedCounts.cine || 0,
-        resolvedCuratedCounts.musica || 0,
-        resolvedCuratedCounts.literatura || 0,
-        resolvedCuratedCounts.videojuegos || 0,
-        resolvedCuratedCounts["arte-visual"] || 0,
-        resolvedAnchorCounts.cine || 0,
-        resolvedAnchorCounts.musica || 0,
-        resolvedAnchorCounts.literatura || 0,
-        resolvedAnchorCounts.videojuegos || 0,
-        resolvedAnchorCounts["arte-visual"] || 0
-      );
-      const signals = buildUserInteractionSignals(userWithSignals);
-      const recentUserTitles = getRecentUserTitles(key);
-      const favoriteTitles = signals.favorite;
-      const resolvedCuratedEffective = resolvedCurated;
-      const resolvedAnchorsEffective = resolvedAnchors;
-
-      const rerankedCurated = [...resolvedCuratedEffective]
-        .filter((item) => !favoriteTitles.has(norm(item?.title)))
-        .map((item) => {
-          const userScore = scoreByUserSignals(item, signals);
-          const canPenalizeRecent = hasCategorySurplus(
-            item,
-            resolvedCuratedCounts,
-            MIN_ITEMS_PER_CATEGORY
-          );
-          const recentPenalty =
-            force && canPenalizeRecent && recentUserTitles.has(norm(item?.title))
-              ? 1.0
-              : 0;
-          const globalPen = getGlobalRepeatPenalty(item);
-          const gamePopPen = getVideoGamePopularityPenalty(item);
-          return {
-            item,
-            s: userScore - recentPenalty - globalPen - gamePopPen,
-            userScore,
-            recentPenalty,
-          };
-        })
-        .filter((row) => row.s > -4.5)
-        .sort((a, b) => b.s - a.s)
-        .map((row) => row.item)
-        .slice(0, 120);
-      const rerankedCounts = countByCategory(rerankedCurated, REQUIRED_FEED_CATEGORIES);
-      console.log(
-        "[feed/personalized] reranked_by_category userId=%s cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s force=%s recentPenaltyPool=%s",
-        key,
-        rerankedCounts.cine || 0,
-        rerankedCounts.musica || 0,
-        rerankedCounts.literatura || 0,
-        rerankedCounts.videojuegos || 0,
-        rerankedCounts["arte-visual"] || 0,
-        Boolean(force),
-        recentUserTitles.size
-      );
-
-      const categoryPool = mergeCulturalFeedDedupe(
-        rerankedCurated,
-        mergeCulturalFeedDedupe(resolvedAnchorsEffective, resolvedCuratedEffective)
-      );
-      const categoryPoolFiltered = categoryPool.filter(
-        (item) => !favoriteTitles.has(norm(item?.title))
-      );
-      let items = buildBalancedCategoryFeed(
-        rerankedCurated,
-        categoryPoolFiltered,
-        REQUIRED_FEED_CATEGORIES,
-        MIN_ITEMS_PER_CATEGORY,
-        200
-      );
-      let recommendationMode = "ocean";
-      let oceanItems = buildBalancedCategoryFeed(
-        rerankedCurated,
-        categoryPoolFiltered,
-        REQUIRED_FEED_CATEGORIES,
-        2,
-        80
-      );
-
-      const notInterestedBlocklist = buildNotInterestedBlocklist(userWithSignals);
-      if (preferFavorites) {
-        const favoritesDriven = await buildFavoritesDrivenRecommendations(
-          userWithSignals,
-          favoriteTitles
-        );
-        recommendationMode = "favorites";
-        if (favoritesDriven.items.length > 0) {
-          items = mergeCulturalFeedDedupe(
-            filterOutNotInterestedItems(favoritesDriven.items, notInterestedBlocklist),
-            []
-          );
-        } else {
-          items = [];
-        }
-      }
-      const finalCounts = countByCategory(items, REQUIRED_FEED_CATEGORIES);
-      const missingCategories = REQUIRED_FEED_CATEGORIES.filter(
-        (cat) => (finalCounts[cat] || 0) < MIN_ITEMS_PER_CATEGORY
-      );
-      console.log(
-        "[feed/personalized] merge userId=%s anchors=%s curated=%s reranked=%s minPerCategory=%s final=%s finalByCategory(cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s) missingMin=%s",
-        key,
-        resolvedAnchors.length,
-        resolvedCurated.length,
-        rerankedCurated.length,
-        MIN_ITEMS_PER_CATEGORY,
-        items.length,
-        finalCounts.cine || 0,
-        finalCounts.musica || 0,
-        finalCounts.literatura || 0,
-        finalCounts.videojuegos || 0,
-        finalCounts["arte-visual"] || 0,
-        missingCategories.length ? missingCategories.join(",") : "none"
-      );
-      items = filterOutNotInterestedItems(items, notInterestedBlocklist);
-      oceanItems = filterOutNotInterestedItems(oceanItems, notInterestedBlocklist);
-
-      registerGlobalTitles(items);
-      registerRecentUserTitles(key, items);
-
-      return {
-        items,
-        oceanItems,
-        recommendationMode,
-        webSearchUsed: Boolean(data.webSearchUsed),
-        reason:
-          data.reason ||
-          (preferFavorites && !items.length ? "favorites_mode_no_resolved_items" : undefined),
-        cached: false,
-      };
-    };
-
-    if (progressive && !force) {
-      const fastAnchors = await resolveCuratedFeedCandidates(suggestedWorksRaw, {
+    } catch (curateErr) {
+      console.error("[feed/personalized] curación IA falló:", curateErr?.message || curateErr);
+      const resolvedAnchors = await resolveCuratedFeedCandidates(suggestedWorksRaw, {
         diversitySeed: String(userId),
       });
-      const fastData = {
-        items: fastAnchors.slice(0, FEED_FAST_FIRST_ITEMS),
-        oceanItems: fastAnchors.slice(0, Math.max(20, FEED_FAST_FIRST_ITEMS)),
-        recommendationMode: preferFavorites ? "favorites" : "ocean",
+      const fallback = {
+        items: resolvedAnchors.slice(0, 200),
         webSearchUsed: false,
-        reason: fastAnchors.length ? "partial_warming_background" : "no_resolved_works",
-        partial: true,
-        refreshing: true,
+        reason: "ai_unavailable_anchors_only",
         cached: false,
       };
-      FEED_CACHE.set(key, { ts: Date.now(), data: fastData, oceanUpdatedAt });
-
-      queueBackgroundFeedJob(key, async () => {
-        const fullData = await computeFullFeed();
-        FEED_CACHE.set(key, { ts: Date.now(), data: fullData, oceanUpdatedAt });
-        await savePersistedFeedSnapshot(oceanResult._id, modeKey, fullData);
+      FEED_CACHE.set(key, {
+        ts: Date.now(),
+        data: fallback,
+        oceanUpdatedAt,
       });
-
       return res.status(200).json({
         message: "ok",
-        data: fastData,
+        data: fallback,
       });
     }
 
-    const responseData = await computeFullFeed();
+    const curated = data.candidates || [];
+    const aiCandidateCounts = countByCategory(curated, REQUIRED_FEED_CATEGORIES);
+    console.log(
+      "[feed/personalized] ai_candidates_by_category userId=%s cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s",
+      key,
+      aiCandidateCounts.cine || 0,
+      aiCandidateCounts.musica || 0,
+      aiCandidateCounts.literatura || 0,
+      aiCandidateCounts.videojuegos || 0,
+      aiCandidateCounts["arte-visual"] || 0
+    );
+    const [resolvedAnchors, resolvedCurated, userWithSignals] = await Promise.all([
+      resolveCuratedFeedCandidates(suggestedWorksRaw, { diversitySeed: String(userId) }),
+      resolveCuratedFeedCandidates(curated, { diversitySeed: String(userId) }),
+      UserModel.findById(userId)
+        .populate("favoriteArtworks")
+        .populate("pendingArtworks")
+        .populate("notInterestedArtworks")
+        .populate("dislikedArtworks")
+        .populate("seenArtworks"),
+    ]);
+    const resolvedCuratedCounts = countByCategory(resolvedCurated, REQUIRED_FEED_CATEGORIES);
+    const resolvedAnchorCounts = countByCategory(resolvedAnchors, REQUIRED_FEED_CATEGORIES);
+    console.log(
+      "[feed/personalized] resolved_by_category userId=%s curated(cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s) anchors(cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s)",
+      key,
+      resolvedCuratedCounts.cine || 0,
+      resolvedCuratedCounts.musica || 0,
+      resolvedCuratedCounts.literatura || 0,
+      resolvedCuratedCounts.videojuegos || 0,
+      resolvedCuratedCounts["arte-visual"] || 0,
+      resolvedAnchorCounts.cine || 0,
+      resolvedAnchorCounts.musica || 0,
+      resolvedAnchorCounts.literatura || 0,
+      resolvedAnchorCounts.videojuegos || 0,
+      resolvedAnchorCounts["arte-visual"] || 0
+    );
+    const signals = buildUserInteractionSignals(userWithSignals);
+    const recentUserTitles = getRecentUserTitles(key);
+    const favoriteTitles = signals.favorite;
+    const resolvedCuratedEffective = resolvedCurated;
+    const resolvedAnchorsEffective = resolvedAnchors;
+
+    const rerankedCurated = [...resolvedCuratedEffective]
+      .filter((item) => !favoriteTitles.has(norm(item?.title)))
+      .map((item) => {
+        const userScore = scoreByUserSignals(item, signals);
+        const canPenalizeRecent = hasCategorySurplus(
+          item,
+          resolvedCuratedCounts,
+          MIN_ITEMS_PER_CATEGORY
+        );
+        const recentPenalty =
+          force && canPenalizeRecent && recentUserTitles.has(norm(item?.title))
+            ? 1.0
+            : 0;
+        const globalPen = getGlobalRepeatPenalty(item);
+        const gamePopPen = getVideoGamePopularityPenalty(item);
+        return {
+          item,
+          s: userScore - recentPenalty - globalPen - gamePopPen,
+          userScore,
+          recentPenalty,
+        };
+      })
+      .filter((row) => row.s > -4.5)
+      .sort((a, b) => b.s - a.s)
+      .map((row) => row.item)
+      .slice(0, 120);
+    const rerankedCounts = countByCategory(rerankedCurated, REQUIRED_FEED_CATEGORIES);
+    console.log(
+      "[feed/personalized] reranked_by_category userId=%s cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s force=%s recentPenaltyPool=%s",
+      key,
+      rerankedCounts.cine || 0,
+      rerankedCounts.musica || 0,
+      rerankedCounts.literatura || 0,
+      rerankedCounts.videojuegos || 0,
+      rerankedCounts["arte-visual"] || 0,
+      Boolean(force),
+      recentUserTitles.size
+    );
+
+    const categoryPool = mergeCulturalFeedDedupe(
+      rerankedCurated,
+      mergeCulturalFeedDedupe(resolvedAnchorsEffective, resolvedCuratedEffective)
+    );
+    const categoryPoolFiltered = categoryPool.filter(
+      (item) => !favoriteTitles.has(norm(item?.title))
+    );
+    let items = buildBalancedCategoryFeed(
+      rerankedCurated,
+      categoryPoolFiltered,
+      REQUIRED_FEED_CATEGORIES
+      ,
+      MIN_ITEMS_PER_CATEGORY,
+      200
+    );
+    let recommendationMode = "ocean";
+    let oceanItems = buildBalancedCategoryFeed(
+      rerankedCurated,
+      categoryPoolFiltered,
+      REQUIRED_FEED_CATEGORIES,
+      2,
+      80
+    );
+
+    const notInterestedBlocklist = buildNotInterestedBlocklist(userWithSignals);
+    if (preferFavorites) {
+      const favoritesDriven = await buildFavoritesDrivenRecommendations(
+        userWithSignals,
+        favoriteTitles
+      );
+      recommendationMode = "favorites";
+      if (favoritesDriven.items.length > 0) {
+        // En modo favoritos, las principales deben venir de similitud con favoritos.
+        items = mergeCulturalFeedDedupe(
+          filterOutNotInterestedItems(favoritesDriven.items, notInterestedBlocklist),
+          []
+        );
+      } else {
+        // Sin fallback a OCEAN en principales cuando el modo favoritos está activo.
+        items = [];
+      }
+    }
+    const finalCounts = countByCategory(items, REQUIRED_FEED_CATEGORIES);
+    const missingCategories = REQUIRED_FEED_CATEGORIES.filter(
+      (cat) => (finalCounts[cat] || 0) < MIN_ITEMS_PER_CATEGORY
+    );
+    console.log(
+      "[feed/personalized] merge userId=%s anchors=%s curated=%s reranked=%s minPerCategory=%s final=%s finalByCategory(cine=%s musica=%s literatura=%s videojuegos=%s arte_visual=%s) missingMin=%s",
+      key,
+      resolvedAnchors.length,
+      resolvedCurated.length,
+      rerankedCurated.length,
+      MIN_ITEMS_PER_CATEGORY,
+      items.length,
+      finalCounts.cine || 0,
+      finalCounts.musica || 0,
+      finalCounts.literatura || 0,
+      finalCounts.videojuegos || 0,
+      finalCounts["arte-visual"] || 0,
+      missingCategories.length ? missingCategories.join(",") : "none"
+    );
+    items = filterOutNotInterestedItems(items, notInterestedBlocklist);
+    oceanItems = filterOutNotInterestedItems(oceanItems, notInterestedBlocklist);
+
+    registerGlobalTitles(items);
+    registerRecentUserTitles(key, items);
+
+    const responseData = {
+      items,
+      oceanItems,
+      recommendationMode,
+      webSearchUsed: Boolean(data.webSearchUsed),
+      reason: data.reason || (preferFavorites && !items.length ? "favorites_mode_no_resolved_items" : undefined),
+      cached: false,
+    };
+
     FEED_CACHE.set(key, {
       ts: Date.now(),
       data: responseData,
       oceanUpdatedAt,
     });
-    await savePersistedFeedSnapshot(oceanResult._id, modeKey, responseData);
     return res.status(200).json({
       message: "ok",
       data: responseData,
@@ -730,11 +629,6 @@ function clearPersonalizedFeedCacheForUser(userId) {
   for (const key of FEED_CACHE.keys()) {
     if (String(key).startsWith(keyPrefix)) {
       FEED_CACHE.delete(key);
-    }
-  }
-  for (const key of FEED_BACKGROUND_JOBS.keys()) {
-    if (String(key).startsWith(keyPrefix)) {
-      FEED_BACKGROUND_JOBS.delete(key);
     }
   }
 }

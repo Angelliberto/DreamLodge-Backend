@@ -38,12 +38,6 @@ const oceanSchema = new mongoose.Schema({
     default: null
   },
 
-  // Snapshot de feed personalizado por modo para servir respuestas rápidas.
-  personalizedFeedSnapshot: {
-    type: mongoose.Schema.Types.Mixed,
-    default: {}
-  },
-
   // Soft delete
   deleted: { type: Boolean, default: false }
 }, { timestamps: true });
