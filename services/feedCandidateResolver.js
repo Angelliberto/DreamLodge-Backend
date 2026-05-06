@@ -52,6 +52,13 @@ function normalizeCandidate(row) {
     album: "musica",
     libro: "literatura",
     libros: "literatura",
+    lectura: "literatura",
+    novela: "literatura",
+    novelas: "literatura",
+    poesía: "literatura",
+    poesia: "literatura",
+    ensayo: "literatura",
+    ensayos: "literatura",
     book: "literatura",
     juego: "videojuegos",
     juegos: "videojuegos",
@@ -236,7 +243,9 @@ async function adaptTmdbCineOrNull(entity, kind, genreMap, preloadedPeople) {
 function passesCreatorGate(category, creator, titleScore, checkCreatorFn) {
   const hint = (creator || "").trim();
   if (hint.length < 2) return true;
-  if (titleScore >= 0.88) return true;
+  const bypassByTitle =
+    category === "literatura" || category === "arte-visual" ? 0.84 : 0.88;
+  if (titleScore >= bypassByTitle) return true;
   return checkCreatorFn(hint);
 }
 
@@ -402,14 +411,23 @@ async function resolveOne(c, genreMap, ctx = {}) {
       return adaptSpotifyAlbum(albumPick.item);
     }
     case "literatura": {
-      const tasks = [`intitle:${title}`];
-      if (creator.length >= 2) tasks.push(`inauthor:${creator}`);
-      const merged = await fetchGoogleBooksVolumesMerged(tasks, {
-        maxPerQuery: 12,
-        maxTotal: 12,
-        shortCircuitAfterQueryIfAtLeast: 6,
-      });
-      const bookPick = pickBestTitleMatch(
+      const queriesPrimary = [`intitle:${title}`];
+      if (creator.length >= 2) {
+        queriesPrimary.push(`${title}+inauthor:${creator}`);
+        queriesPrimary.push(`inauthor:${creator}+intitle:${title}`);
+      }
+      queriesPrimary.push(title);
+
+      const fetchBooks = (queries, langRestrictOpts) =>
+        fetchGoogleBooksVolumesMerged(queries, {
+          maxPerQuery: 14,
+          maxTotal: 24,
+          shortCircuitAfterQueryIfAtLeast: 6,
+          ...langRestrictOpts,
+        });
+
+      let merged = await fetchBooks(queriesPrimary, {});
+      let bookPick = pickBestTitleMatch(
         merged,
         (item) => {
           const v = item.volumeInfo || {};
@@ -418,20 +436,45 @@ async function resolveOne(c, genreMap, ctx = {}) {
           return [v.title, joined].filter(Boolean);
         },
         title,
-        { minScore, maxScan: 12 }
+        { minScore, maxScan: 18 }
       );
+
+      if (!bookPick || merged.length < 3) {
+        const looseQueries = [
+          `intitle:${title}`,
+          title,
+          ...(creator.length >= 2 ? [`${title} ${creator}`, `inauthor:${creator}`] : []),
+        ];
+        const looseMerged = await fetchBooks(looseQueries, { langRestrict: "" });
+        const seenIds = new Set((merged || []).map((it) => it.id).filter(Boolean));
+        const extra = (looseMerged || []).filter((it) => it.id && !seenIds.has(it.id));
+        merged = [...merged, ...extra];
+
+        bookPick = pickBestTitleMatch(
+          merged,
+          (item) => {
+            const v = item.volumeInfo || {};
+            const parts = [v.title, v.subtitle].filter(Boolean);
+            const joined = parts.join(" ").trim();
+            return [v.title, joined].filter(Boolean);
+          },
+          title,
+          { minScore: Math.min(minScore, 0.62), maxScan: 24 }
+        );
+      }
+
       if (!bookPick) return null;
+      const authors = bookPick.item.volumeInfo?.authors || [];
       const okCreator = passesCreatorGate(
         "literatura",
         creator,
         bookPick.score,
         (hint) => {
-          const authors = bookPick.item.volumeInfo?.authors || [];
           if (!authors.length) return true;
-          return authors.some((n) => personNameSimilarity(hint, n) >= 0.32);
+          return authors.some((n) => personNameSimilarity(hint, n) >= 0.26);
         }
       );
-      if (!okCreator) return null;
+      if (!okCreator && bookPick.score < 0.9) return null;
       return adaptBook(bookPick.item);
     }
     case "videojuegos": {
