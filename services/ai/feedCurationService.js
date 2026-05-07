@@ -18,7 +18,9 @@ const {
 const RECENT_FEED_TITLES = new Map();
 const RECENT_TTL_MS = 24 * 60 * 60 * 1000;
 const RECENT_KEEP = 40;
-const TARGET_CANDIDATES = 60;
+const TARGET_CANDIDATES = Math.max(24, Number(process.env.FEED_TARGET_CANDIDATES) || 60);
+const FEED_EMBED_CONCURRENCY = Math.max(1, Number(process.env.FEED_EMBED_CONCURRENCY) || 6);
+const SKIP_FEED_EMBED_RERANK = /^(1|true|yes)$/i.test(String(process.env.FEED_SKIP_EMBED_RERANK || ""));
 
 function scoreBand(v) {
   const n = Number(v) || 0;
@@ -180,6 +182,79 @@ const FACET_VIDEOGAME_EXAMPLES = {
   },
 };
 
+const FACET_MUSIC_EXAMPLES = {
+  apertura: {
+    "muy-baja":
+      "The Beatles — Let It Be (tradición melódica clara); ABBA — Dancing Queen (estructura pop legible); Adele — Easy On Me (balada clásica).",
+    baja:
+      "Coldplay — Viva la Vida (accesible con color tímbrico); Phoebe Bridgers — Motion Sickness (indie directo); The Killers — Mr. Brightside (himno de forma familiar).",
+    "media-baja":
+      "Tame Impala — The Less I Know The Better (psicodelia pop accesible); Mitski — Nobody (alternativo emotivo legible); Arcade Fire — Wake Up (épica indie con ancla melódica).",
+    "media-alta":
+      "FKA twigs — cellophane (textura y riesgo controlado); Bjork — Hyperballad (experimental emotivo entendible); James Blake — Retrograde (minimalismo híbrido).",
+    alta:
+      "Arca — Piel (diseño sonoro arriesgado); SOPHIE — Immaterial (deconstrucción pop); Autechre — Rae (abstracción electrónica).",
+    "muy-alta":
+      "Scott Walker — The Escape (ruptura formal extrema); Tim Hecker — Virginal II (ambient abstracto radical); Merzbow — Pulse Demon (límite de ruido estructurado).",
+  },
+  responsabilidad: {
+    "muy-baja":
+      "The Stooges — I Wanna Be Your Dog (crudeza directa); Nirvana — Territorial Pissings (impulso bruto); Death Grips — Punk Weight (caos intencional).",
+    baja:
+      "The White Stripes — Seven Nation Army (energía sencilla); IDLES — Never Fight a Man with a Perm (ataque frontal); The Libertines — Time for Heroes (desorden controlado).",
+    "media-baja":
+      "Arctic Monkeys — Do I Wanna Know? (groove firme con flexibilidad); Gorillaz — Feel Good Inc. (producción híbrida sin rigidez); Rosalía — BAGDAD (pop mutante legible).",
+    "media-alta":
+      "Kendrick Lamar — DNA. (arquitectura compleja con impulso); Radiohead — 15 Step (detalle y libertad); St. Vincent — Digital Witness (estructura sofisticada).",
+    alta:
+      "Steely Dan — Aja (meticulosidad de arreglo); Snarky Puppy — Lingus (precisión de ensemble); Tool — Schism (diseño rítmico exigente).",
+    "muy-alta":
+      "Johann Sebastian Bach — The Art of Fugue (lógica compositiva extrema); Meshuggah — Bleed (métrica milimétrica); Igor Stravinsky — The Rite of Spring (arquitectura avanzada).",
+  },
+  extraversion: {
+    "muy-baja":
+      "Nick Drake — Pink Moon (intimidad máxima); Sufjan Stevens — Fourth of July (confesional); Agnes Obel — Riverside (recogimiento contemplativo).",
+    baja:
+      "Bon Iver — Holocene (escala contenida); Daughter — Youth (energía baja sensible); Cigarettes After Sex — Apocalypse (atmósfera reservada).",
+    "media-baja":
+      "The National — Bloodbuzz Ohio (tensión social moderada); Lorde — Liability (interior con alcance pop); Beach House — Space Song (sueño compartible sin estridencia).",
+    "media-alta":
+      "Florence + The Machine — Dog Days Are Over (catarsis con introspección); LCD Soundsystem — All My Friends (social e íntimo); Billie Eilish — bad guy (performativo con control).",
+    alta:
+      "Dua Lipa — Levitating (energía de pista); Daft Punk — One More Time (celebración colectiva); The Weeknd — Blinding Lights (pulso social alto).",
+    "muy-alta":
+      "Beyonce — BREAK MY SOUL (máxima performance social); Charli xcx — Vroom Vroom (impulso hiperexpresivo); BTS — Dynamite (himno de interacción masiva).",
+  },
+  amabilidad: {
+    "muy-baja":
+      "Nine Inch Nails — Closer (fricción agresiva); Eminem — The Way I Am (confrontación directa); Swans — Screen Shot (intensidad áspera).",
+    baja:
+      "Pulp — Common People (ironía social afilada); Kanye West — Black Skinhead (tensión frontal); PJ Harvey — Rid of Me (aspereza emocional).",
+    "media-baja":
+      "Lana Del Rey — A&W (ambivalencia afectiva); The Smiths — Heaven Knows I'm Miserable Now (cinismo melódico); Interpol — Obstacle 1 (distancia emocional).",
+    "media-alta":
+      "Frank Ocean — Ivy (empatía con herida); Lord Huron — The Night We Met (calidez triste); Silvana Estrada — Te Guardo (ternura con tensión).",
+    alta:
+      "Bill Withers — Lean On Me (cuidado directo); Hozier — Cherry Wine (humanidad íntima); Natalia Lafourcade — Hasta la Raíz (afecto reparador).",
+    "muy-alta":
+      "The Beatles — All You Need Is Love (unión explícita); Coldplay — Fix You (consuelo prosocial); Louis Armstrong — What a Wonderful World (reconciliación afectiva).",
+  },
+  neuroticismo: {
+    "muy-baja":
+      "Brian Eno — An Ending (Ascent) (regulación serena); Khruangbin — Friday Morning (calma estable); Tycho — Awake (equilibrio emocional).",
+    baja:
+      "Norah Jones — Don't Know Why (suavidad reguladora); Jack Johnson — Better Together (reposo afectivo); Men I Trust — Show Me How (melancolía ligera).",
+    "media-baja":
+      "The xx — Intro (tensión suave); Phoebe Bridgers — Kyoto (fragilidad controlada); Vetusta Morla — Copenhague (carga emocional media).",
+    "media-alta":
+      "Radiohead — How to Disappear Completely (ansiedad elegíaca); Bjork — Jóga (intensidad vulnerable); Portishead — Roads (drama contenido).",
+    alta:
+      "Jeff Buckley — Grace (catarsis poderosa); Fiona Apple — Paper Bag (vulnerabilidad explícita); Lingua Ignota — PENNSYLVANIA FURNACE (descarga emocional).",
+    "muy-alta":
+      "Mount Eerie — Real Death (duelo extremo); Xiu Xiu — I Luv the Valley OH! (quiebre afectivo); Diamanda Galás — Let My People Go (intensidad límite).",
+  },
+};
+
 const MUSIC_RULES = {
   apertura:
     "Apertura: baja=estructura tradicional y melodía clara; media-baja=alternativo accesible; media-alta=híbridos y texturas menos obvias; alta/muy-alta=experimental, avant-pop o ambient abstracto.",
@@ -275,11 +350,30 @@ function formatVideoGameFacetExamplesBlock(dimensions) {
   );
 }
 
+function formatMusicFacetExamplesBlock(dimensions) {
+  const lines = dimensions.map(([key, value]) => {
+    const detail = scoreDetailBand(value);
+    const ex =
+      FACET_MUSIC_EXAMPLES[key]?.[detail] || FACET_MUSIC_EXAMPLES[key]?.["media-baja"] || "";
+    const label = FACET_DETAIL_LABELS[detail] || detail;
+    return `  - ${key} (${label}): ${ex}`;
+  });
+  return (
+    `- MÚSICA — analogías de matiz OCEAN por faceta/banda (solo calibran el tipo de encaje; **no** son menú de recomendación ni semilla obligatoria para similares).\n` +
+    `  PROHIBIDO: saturar el feed con estos nombres/temas, ni usarlos como única base ni “expandir” solo con variaciones de los mismos.\n` +
+    `  OBLIGATORIO: proponer **otra** música real (artistas/obras) que exprese el mismo matiz, con diversidad de escena, época y región cuando sea posible.\n` +
+    `${lines.join("\n")}`
+  );
+}
+
 function formatCategoryRuleSections(dimensions) {
   const dimKeys = dimensions.map(([key]) => key);
   return CATEGORY_RULE_BLOCKS.map(({ heading, rules }) => {
     if (heading === "VIDEOJUEGOS") {
       return formatVideoGameFacetExamplesBlock(dimensions);
+    }
+    if (heading === "MÚSICA") {
+      return formatMusicFacetExamplesBlock(dimensions);
     }
     return `- Reglas para ${heading} (aplican según nivel actual por faceta):\n${dimKeys
       .map((k) => `  - ${rules[k]}`)
@@ -478,6 +572,9 @@ ${artExtra}
    - VIDEOJUEGOS (ANTI-CLON ENTRE USUARIOS): la huella **${oceanFingerprint}** es tu semilla de diversidad. Al menos **6** candidatos con category "videojuegos" deben encajar de forma explícita con **ambos** ejes siguientes (menciónalos en oceanFitReason o genreHint): (1) ${gameAxisA} (2) ${gameAxisB}. Otros videojuegos pueden ser libres pero no deben repetir la misma tanda genérica que servirías a cualquier perfil.
    - VIDEOJUEGOS Y OCEAN: los cinco números OCEAN y las subfacetas del bloque son el **único** ancla psicométrica; no basta con decir que un juego "encaja con apertura". En oceanFitReason de **cada** candidato videojuegos, vincula con **al menos un valor numérico** del bloque OCEAN (p. ej. O:${o.toFixed(2)}) o con una subfaceta nombrada arriba, y explica por qué **ese** título y no otro con el mismo tono general.
    - VIDEOJUEGOS (EJEMPLOS EN EL BLOQUE DE FACETA): los nombres que aparecen como ilustración por banda **no** son candidatos preferidos ni punto de partida para recomendar el resto; no completes el feed con ellos ni con “similares” que sean solo vecinos de esa lista. Propón otras obras reales que mantengan el matiz OCEAN.
+   - MÚSICA (ANTI-CLON ENTRE USUARIOS): usa la misma huella **${oceanFingerprint}** para diferenciar selección musical. Al menos **6** candidatos con category "musica" deben justificar explícitamente su encaje con rasgos/subfacetas del perfil (en oceanFitReason o genreHint), evitando la tanda pop genérica repetida entre usuarios.
+   - MÚSICA Y OCEAN: en oceanFitReason de **cada** candidato musica, vincula con **al menos un valor numérico** del bloque OCEAN (p. ej. O:${o.toFixed(2)}) o con una subfaceta nombrada arriba, explicando por qué ese artista/obra encaja mejor que alternativas obvias.
+   - MÚSICA (EJEMPLOS EN EL BLOQUE DE FACETA): las referencias del bloque de facetas son solo calibración de matiz, no repertorio para poblar candidatos ni fuente de "similares" automáticos.
    - ${gameOpennessRule}
 2) SUBFACETAS: no uses solo el rasgo global; cruza decisiones con estas subfacetas:
 ${subfacetBlock}
@@ -633,32 +730,35 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
 
   let cleaned = normalizeWorkCandidateRows(rawList, TARGET_CANDIDATES);
 
-  try {
-    const userProfileText = buildUserProfileText({
-      o,
-      c,
-      e,
-      a,
-      n,
-      artisticProfile: {
-        profile: artisticProfile?.profile,
-        description: artisticProfile?.description,
-      },
-      oceanFingerprint,
-    });
-    const vectorReranked = await rerankByEmbeddingSimilarity({
-      agent,
-      userProfileText,
-      candidates: cleaned,
-      maxScan: 90,
-      logger,
-      userId: String(feedEntityIdFromOceanResult(oceanResult) || ""),
-    });
-    if (Array.isArray(vectorReranked) && vectorReranked.length) {
-      cleaned = vectorReranked;
+  if (!SKIP_FEED_EMBED_RERANK) {
+    try {
+      const userProfileText = buildUserProfileText({
+        o,
+        c,
+        e,
+        a,
+        n,
+        artisticProfile: {
+          profile: artisticProfile?.profile,
+          description: artisticProfile?.description,
+        },
+        oceanFingerprint,
+      });
+      const vectorReranked = await rerankByEmbeddingSimilarity({
+        agent,
+        userProfileText,
+        candidates: cleaned,
+        maxScan: 90,
+        embedConcurrency: FEED_EMBED_CONCURRENCY,
+        logger,
+        userId: String(feedEntityIdFromOceanResult(oceanResult) || ""),
+      });
+      if (Array.isArray(vectorReranked) && vectorReranked.length) {
+        cleaned = vectorReranked;
+      }
+    } catch (_) {
+      // Fallback silencioso: si embeddings falla, se conserva flujo actual.
     }
-  } catch (_) {
-    // Fallback silencioso: si embeddings falla, se conserva flujo actual.
   }
 
   const feedEntityId = feedEntityIdFromOceanResult(oceanResult);
