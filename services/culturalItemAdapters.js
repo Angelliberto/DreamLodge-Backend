@@ -147,51 +147,38 @@ function adaptSpotifyAlbum(album) {
   };
 }
 
-function adaptBook(doc) {
-  const workKey = doc.key && String(doc.key).startsWith("/works/") ? doc.key : "";
-  const editionId = doc.edition_key?.[0];
-  const originalId = workKey.replace(/^\/works\//, "") || editionId || "unknown";
-  const titleRaw = Array.isArray(doc.title) ? doc.title[0] : doc.title;
-  const authors = (doc.author_name || []).join(", ") || "Autor Desconocido";
-  const coverId = doc.cover_i;
-  const imageUrl = coverId
-    ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`
+function adaptBook(volumeItem) {
+  const vol = volumeItem.volumeInfo || {};
+  const id = volumeItem.id;
+  const authors = (vol.authors || []).join(", ") || "Autor Desconocido";
+  const imageUrl = vol.imageLinks?.thumbnail
+    ? vol.imageLinks.thumbnail.replace("http:", "https:")
     : "https://via.placeholder.com/150";
-  const genres = [...(doc.subject || []).slice(0, 12)];
+  const genres = [...(vol.categories || [])];
   const tags = [];
   const platforms = [];
   const other = [];
-  const pub0 = Array.isArray(doc.publisher) ? doc.publisher[0] : doc.publisher;
-  if (pub0) platforms.push(pub0);
-  const langList = doc.language || [];
-  if (Array.isArray(langList) && langList.length) {
-    const primary = langList[0];
-    if (primary && String(primary).toLowerCase() !== "eng") other.push(String(primary).toUpperCase());
-  }
+  if (vol.language && vol.language !== "en") other.push(vol.language.toUpperCase());
+  if (vol.publisher) platforms.push(vol.publisher);
+  if (vol.printType) tags.push(formatTag(vol.printType));
   const allForFeed = [...genres, ...tags, ...platforms, ...other];
-  const descFromSubjects = genres.slice(0, 4).join(" · ");
   return {
-    id: `book-${originalId}`,
-    originalId,
-    source: "OpenLibrary",
+    id: `book-${id}`,
+    originalId: id,
+    source: "GoogleBooks",
     category: "literatura",
-    title: titleRaw || "Libro",
+    title: vol.title || "Libro",
     imageUrl,
     creator: authors,
-    year:
-      doc.first_publish_year != null ? String(doc.first_publish_year) : undefined,
-    description: descFromSubjects || "Toca para ver detalles",
+    year: vol.publishedDate ? vol.publishedDate.split("-")[0] : undefined,
+    description: vol.description || "Toca para ver detalles",
     metadata: {
       genres: formatTags(allForFeed),
       tags: formatTags(tags),
       platforms: formatTags(platforms),
       other: formatTags(other),
-      label: "Open Library",
-      contextLink: workKey
-        ? `https://openlibrary.org${workKey}`
-        : editionId
-          ? `https://openlibrary.org/books/${editionId}`
-          : "https://openlibrary.org/",
+      label: "Google Books",
+      contextLink: vol.infoLink || `https://books.google.com/books?id=${id}`,
     },
   };
 }

@@ -1,5 +1,5 @@
 /**
- * Búsqueda global unificada (TMDB cine+TV, IGDB, Spotify, Open Library, Met/CMA).
+ * Búsqueda global unificada (TMDB cine+TV, IGDB, Spotify, Google Books, Met/CMA).
  * Adicionalmente soporta filtros comunes para todas las fuentes en una sola API.
  */
 const {
@@ -19,16 +19,13 @@ const {
 } = require("./culturalItemAdapters");
 const { searchSpotifyAlbums } = require("./spotifyClient");
 const { searchIgdbGames, stableStringHash32 } = require("./igdbClient");
-const { fetchOpenLibraryWorksMerged } = require("./openLibraryClient");
+const { fetchGoogleBooksVolumesMerged } = require("./googleBooksClient");
 const { searchMetArtworkRows } = require("./metMuseumClient");
 const { fetchCmaRandomArtworkRows } = require("./cmaArtClient");
 
 async function searchBooksMerged(titleQuery) {
-  const raw = await fetchOpenLibraryWorksMerged(
-    [
-      { type: "title", value: titleQuery },
-      { type: "author", value: titleQuery },
-    ],
+  const raw = await fetchGoogleBooksVolumesMerged(
+    [`intitle:${titleQuery}`, `inauthor:${titleQuery}`],
     { maxPerQuery: 12, maxTotal: 20 }
   );
   return raw.map(adaptBook);

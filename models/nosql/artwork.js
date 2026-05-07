@@ -7,7 +7,7 @@ const artworkSchema = new mongoose.Schema({
   originalId: { type: mongoose.Schema.Types.Mixed, required: true }, // ID en la API original (puede ser string o number)
   source: {
     type: String,
-    enum: ['IGDB', 'TMDB', 'GoogleBooks', 'OpenLibrary', 'MetMuseum', 'ChicagoArt', 'Spotify'],
+    enum: ['IGDB', 'TMDB', 'GoogleBooks', 'MetMuseum', 'ChicagoArt', 'Spotify'],
     required: true
   },
   

@@ -284,7 +284,7 @@ async function buildFavoritesDrivenRecommendations(userDoc, favoriteTitleSet) {
  * GET|POST /api/feed/personalized
  * Query: force=1, anchorsOnly=1 (solo obras del perfil artístico, sin curación Gemini)
  *
- * Devuelve `items` ya resueltos (TMDB, Spotify, Open Library, IGDB, Met).
+ * Devuelve `items` ya resueltos (TMDB, Spotify, Books, IGDB, Met).
  */
 const getPersonalizedFeedCurated = async (req, res) => {
   try {

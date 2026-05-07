@@ -117,16 +117,9 @@ function extractSearchParams(message) {
     if (params.genre) break;
   }
 
-  const sourceKeywords = [
-    ["tmdb", "TMDB"],
-    ["spotify", "Spotify"],
-    ["igdb", "IGDB"],
-    ["openlibrary", "OpenLibrary"],
-    ["googlebooks", "OpenLibrary"],
-  ];
-  for (const [kw, canonical] of sourceKeywords) {
-    if (normalized.includes(kw)) {
-      params.source = canonical;
+  for (const source of ["tmdb", "spotify", "igdb", "googlebooks"]) {
+    if (normalized.includes(source)) {
+      params.source = source.toUpperCase();
       break;
     }
   }

@@ -205,7 +205,6 @@ async function getStatistics() {
       "IGDB",
       "TMDB",
       "GoogleBooks",
-      "OpenLibrary",
       "MetMuseum",
       "ChicagoArt",
       "Spotify",
