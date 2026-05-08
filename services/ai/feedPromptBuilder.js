@@ -460,12 +460,28 @@ function topFacetKeys(dimensions, count = 2) {
     .map(([key]) => key);
 }
 
+function stablePickOneExample(rawExamples, seed) {
+  const options = String(rawExamples || "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!options.length) return "";
+  let hash = 0;
+  const s = String(seed || "");
+  for (let i = 0; i < s.length; i += 1) {
+    hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  }
+  return options[hash % options.length];
+}
+
 function formatFacetExamplesBlock(dimensions, examplesByFacet, heading, targetLabel) {
   const selected = topFacetKeys(dimensions, 2);
   const lines = selected.map((key) => {
     const value = dimensions.find(([k]) => k === key)?.[1] ?? 0;
     const detail = scoreDetailBand(value);
-    const ex = examplesByFacet[key]?.[detail] || examplesByFacet[key]?.["media-baja"] || "";
+    const rawExamples =
+      examplesByFacet[key]?.[detail] || examplesByFacet[key]?.["media-baja"] || "";
+    const ex = stablePickOneExample(rawExamples, `${heading}|${key}|${detail}`);
     const label = FACET_DETAIL_LABELS[detail] || detail;
     return `  - ${key} (${label}): ${ex}`;
   });
@@ -713,6 +729,9 @@ function buildPersonalizedFeedCuratorPrompt({
   const gameAxes = pickVideoGameExplorationAxes(oceanFingerprint, 2);
   const gameAxisA = gameAxes[0] || "(eje no disponible)";
   const gameAxisB = gameAxes[1] || "(eje no disponible)";
+  const oceanCombinationLine = `Combinación global OCEAN prioritaria: O:${o.toFixed(2)} + C:${c.toFixed(
+    2
+  )} + E:${e.toFixed(2)} + A:${a.toFixed(2)} + N:${n.toFixed(2)}.`;
   const gameOpennessRule =
     o >= 3.2
       ? "Apertura O ≥ 3.2: en videojuegos, cero títulos de la lista de megablocks globalizados (Witcher 3, BOTW, GTA V, Minecraft, Fortnite, FIFA, Call of Duty, Elden Ring, Cyberpunk 2077, RDR2, BG3, Mario Odyssey, Among Us, Apex, LoL, TLoU, Horizon FW, Starfield, Valorant, Genshin, WoW, Hogwarts Legacy, Diablo IV, RE4 remake, CS2, PUBG salvo nombres parciales en títulos distintos); elige alternativas de mecánica parecida pero menos masificadas."
@@ -736,7 +755,7 @@ function buildPersonalizedFeedCuratorPrompt({
       "1) Evita listas obvias y convergencia entre usuarios; prioriza long-tail verificable.",
       `2) Videojuegos: al menos 6 candidatos alineados con ambos ejes: (1) ${gameAxisA} (2) ${gameAxisB}. ${gameOpennessRule}`,
       "3) Música: al menos 6 candidatos con justificación explícita y no genérica para este perfil.",
-      "4) En videojuegos y música, cada oceanFitReason debe citar al menos un valor OCEAN numérico o subfaceta.",
+      "4) En videojuegos y música, cada oceanFitReason debe explicar encaje por combinación de rasgos (interacción entre al menos 2 dimensiones OCEAN) y no por un rasgo aislado.",
       "5) Subfacetas disponibles:",
       subfacetBlock,
       `6) Genera exactamente ${targetCandidates} candidatos en cinco categorías (cine, musica, literatura, videojuegos, arte-visual), balanceadas cuando sea posible.`,
@@ -745,6 +764,8 @@ function buildPersonalizedFeedCuratorPrompt({
       `   - ${nEntropyRisk} "apuestas de riesgo" (desafían al usuario pero encajan en apertura o neuroticismo del perfil).`,
       "7) Lógica mecánica (no solo estética):",
       mechanicalLines.map((x) => `   - ${x}`).join("\n"),
+      "8) Prohibido puntuar solo por rasgo individual: decide cada recomendación por patrón total del perfil (trade-offs entre O, C, E, A, N).",
+      `9) ${oceanCombinationLine}`,
     ].join("\n"),
     adaptiveRules.length
       ? `### AJUSTE DINÁMICO POR TEST OCEAN\n${adaptiveRules.map((x) => `- ${x}`).join("\n")}`
@@ -759,7 +780,7 @@ function buildPersonalizedFeedCuratorPrompt({
     ].join("\n"),
     `### FORMATO DE SALIDA (JSON ESTRICTO)
 Devuelve solo este objeto JSON:
-{"candidates":[{"category":"cine|musica|literatura|videojuegos|arte-visual","title":"Título en español de España (TMDB es-ES) u original si no hay traducción","creator":"Autor/Director/Estudio","genreHint":"Subgénero hiper-específico (ej. post-punk báltico, slow cinema distópico)","oceanFitReason":"Breve vínculo con un rasgo o subfaceta concreta del usuario"}]}`,
+{"candidates":[{"category":"cine|musica|literatura|videojuegos|arte-visual","title":"Título en español de España (TMDB es-ES) u original si no hay traducción","creator":"Autor/Director/Estudio","genreHint":"Subgénero hiper-específico (ej. post-punk báltico, slow cinema distópico)","oceanFitReason":"Justificación breve basada en combinación global OCEAN (al menos 2 rasgos interactuando)"}]}`,
     `Random seed de diversidad: ${diversitySalt}`,
   ];
 

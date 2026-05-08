@@ -10,12 +10,14 @@ async function executeTools(tools, userMessage, { userId, contextItems } = {}) {
   const results = {};
   const ctx = contextItems || [];
   const uniqueTools = [...new Set(tools || [])];
+  const taskTimings = [];
 
   const runTool = async (tool) => {
+    const startedAt = Date.now();
     try {
       if (tool === "search_artworks") {
         const sp = extractSearchParams(userMessage);
-        return {
+        const output = {
           key: "artworks",
           data: await db.searchArtworks({
             category: sp.category,
@@ -26,26 +28,46 @@ async function executeTools(tools, userMessage, { userId, contextItems } = {}) {
             page: 1,
           }),
         };
+        taskTimings.push({ tool, ms: Date.now() - startedAt, ok: true });
+        return output;
       }
       if (tool === "get_user_ocean_results" && userId) {
-        return { key: "oceanResults", data: await db.getUserOceanResults(userId) };
+        const output = { key: "oceanResults", data: await db.getUserOceanResults(userId) };
+        taskTimings.push({ tool, ms: Date.now() - startedAt, ok: true });
+        return output;
       }
       if (tool === "get_user_favorites" && userId) {
-        return { key: "favorites", data: await db.getUserFavorites(userId) };
+        const output = { key: "favorites", data: await db.getUserFavorites(userId) };
+        taskTimings.push({ tool, ms: Date.now() - startedAt, ok: true });
+        return output;
       }
       if (tool === "get_artwork_by_id") {
         const aid = extractArtworkId(userMessage, ctx);
-        if (aid) return { key: "artwork", data: await db.getArtworkById(aid) };
+        if (aid) {
+          const output = { key: "artwork", data: await db.getArtworkById(aid) };
+          taskTimings.push({ tool, ms: Date.now() - startedAt, ok: true });
+          return output;
+        }
       }
     } catch (e) {
+      taskTimings.push({ tool, ms: Date.now() - startedAt, ok: false });
       logger.error(`Error ejecutando herramienta ${tool}:`, e);
     }
+    taskTimings.push({ tool, ms: Date.now() - startedAt, ok: true, skipped: true });
     return null;
   };
 
   const settled = await Promise.all(uniqueTools.map((t) => runTool(t)));
   for (const row of settled) {
     if (row?.key && row.data !== undefined) results[row.key] = row.data;
+  }
+  if (taskTimings.length) {
+    const sorted = [...taskTimings].sort((a, b) => b.ms - a.ms);
+    const slowest = sorted[0];
+    logger.log(
+      `[AI_TASK_TIMING] slowest=${slowest.tool} ${slowest.ms}ms totalTasks=${taskTimings.length}`
+    );
+    logger.log(`[AI_TASK_TIMING] breakdown=${JSON.stringify(sorted)}`);
   }
   return results;
 }
