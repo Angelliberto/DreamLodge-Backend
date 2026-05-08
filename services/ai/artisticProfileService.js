@@ -124,20 +124,25 @@ async function generateArtisticDescription(agent, oceanResult, options = {}, dep
 - Extensión objetivo: 170 a 260 palabras.
 - Debe conectar rasgos OCEAN con preferencias culturales probables.
 - Debe incluir matices sobre ritmo, tono, complejidad, tipo de narrativa y forma de descubrimiento cultural.
+- Estructura obligatoria dentro del párrafo: primero explica cómo es la personalidad; después conecta esa explicación con lo que le puede gustar.
+- Usa una transición causal natural tipo: "por eso", "por lo que", "esto hace que te encaje".
 - No repetir puntuaciones numéricas ni listas largas.
 - No usar subtítulos, viñetas ni markdown.
-- No mencionar "test", "evaluación", "resultado" ni diagnósticos clínicos.`;
+- No mencionar "test", "evaluación", "resultado" ni diagnósticos clínicos.
+- Enfoca la redacción como una orientación personal (posibilidades y tendencias), no como una verdad cerrada.`;
 
   const toneAndLanguageRules = `Lenguaje y estilo (OBLIGATORIO):
 - Español natural, contemporáneo, sin tecnicismos innecesarios.
 - Evita adjetivos vacíos y frases grandilocuentes.
-- Debe sonar útil para recomendar cultura, no como informe académico.`;
+- Debe sonar útil para recomendar cultura, no como informe académico.
+- Usa lenguaje cotidiano: frases simples, cercanas y fáciles de entender.
+- Evita tono tajante o absoluto (por ejemplo, evita "eres", "siempre", "nunca"); prefiere "podrías", "sueles", "te puede encajar".`;
 
   const variationBlock = regenerationSeed
     ? `- Semilla de regeneración: ${regenerationSeed}. Elige una combinación distinta de obras ancla (suggestedWorks) respecto a otras ejecuciones con la misma huella; prioriza títulos distintos siempre que sigan siendo coherentes con el perfil y con genreRecommendations.`
     : "- Primera generación o sin semilla: elige obras ancla variadas, menos obvias y coherentes con el perfil.";
 
-  const prompt = `Actúa como analista psicométrico-cultural de alta precisión.
+  const prompt = `Actúa como guía psicométrico-cultural orientado a recomendación.
 Tu tarea es:
 1) Usar exactamente "Análisis IA" en "profile" (no inventes otro nombre).
 2) Inferir GÉNEROS base por ámbito cultural en "genreRecommendations" (sin nombres de obras en ese objeto).
@@ -166,6 +171,8 @@ Objetivo de escritura de la descripción:
 - Entregar una síntesis extensa y útil para descubrir cultura.
 - Prioriza claridad y aplicabilidad, con mayor riqueza de contexto.
 - Conecta la personalidad con posibles intereses en tipos de obras, géneros, atmósferas y formatos.
+- Mantén un tono acompañante: orienta, sugiere y propone caminos de exploración.
+- Patrón recomendado de redacción: "tiendes a ser X en Y, por lo que te puede gustar Z".
 
 Campo "genreRecommendations" (obligatorio):
 - Debe incluir EXACTAMENTE estas claves: "cine", "musica", "literatura", "videojuegos", "arte-visual".
