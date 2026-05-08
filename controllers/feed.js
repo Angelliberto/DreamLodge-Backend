@@ -10,6 +10,7 @@ const {
 /** Caché en memoria por usuario (TTL corto; el cliente puede forzar refresh). */
 const FEED_CACHE = new Map();
 const FEED_TTL_MS = 2 * 60 * 60 * 1000;
+const FEED_BUILD_STATE = new Map();
 const GLOBAL_RECENT_TITLE_COUNTS = new Map();
 const GLOBAL_RECENT_TTL_MS = 6 * 60 * 60 * 1000;
 const USER_RECENT_FEED_TITLES = new Map();
@@ -22,6 +23,30 @@ const REQUIRED_FEED_CATEGORIES = [
   "arte-visual",
 ];
 const MIN_ITEMS_PER_CATEGORY = 5;
+
+function createBuildId(userKey) {
+  return `${String(userKey)}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getBuildState(key) {
+  const row = FEED_BUILD_STATE.get(String(key));
+  if (!row) return null;
+  return row;
+}
+
+function setBuildState(key, next) {
+  FEED_BUILD_STATE.set(String(key), next);
+}
+
+function toPublicBuildStatus(key) {
+  const row = getBuildState(key);
+  if (!row) return { buildStatus: "ready", buildId: null };
+  return {
+    buildStatus: row.status === "running" ? "building" : row.status,
+    buildId: row.buildId || null,
+    buildVersion: row.version || 0,
+  };
+}
 
 function norm(v) {
   return String(v || "")
@@ -280,6 +305,108 @@ async function buildFavoritesDrivenRecommendations(userDoc, favoriteTitleSet) {
   return { items: filtered, reason: filtered.length ? "ok" : "favorites_mode_no_resolved_items" };
 }
 
+async function runBackgroundFeedBuild({
+  key,
+  userId,
+  oceanPlain,
+  artisticProfile,
+  suggestedWorksRaw,
+  oceanUpdatedAt,
+  preferFavorites,
+}) {
+  const startedAt = Date.now();
+  const current = getBuildState(key);
+  const buildId = current?.buildId || createBuildId(key);
+  const nextVersion = Number(current?.version || 0) + 1;
+  setBuildState(key, {
+    buildId,
+    status: "running",
+    startedAt,
+    finishedAt: null,
+    error: null,
+    version: nextVersion,
+  });
+  try {
+    const payload = { oceanResult: oceanPlain, artisticProfile };
+    const data = await ai.curatePersonalizedFeed(payload);
+    const curated = Array.isArray(data?.candidates) ? data.candidates : [];
+    const [resolvedAnchors, resolvedCurated, userWithSignals] = await Promise.all([
+      resolveCuratedFeedCandidates(suggestedWorksRaw, { diversitySeed: String(userId) }),
+      resolveCuratedFeedCandidates(curated, { diversitySeed: String(userId) }),
+      UserModel.findById(userId)
+        .populate("favoriteArtworks")
+        .populate("pendingArtworks")
+        .populate("notInterestedArtworks")
+        .populate("dislikedArtworks")
+        .populate("seenArtworks"),
+    ]);
+    const signals = buildUserInteractionSignals(userWithSignals);
+    const favoriteTitles = signals.favorite;
+    const merged = mergeCulturalFeedDedupe(resolvedCurated, resolvedAnchors).filter(
+      (item) => !favoriteTitles.has(norm(item?.title))
+    );
+    const balanced = buildBalancedCategoryFeed(
+      merged,
+      mergeCulturalFeedDedupe(resolvedAnchors, merged),
+      REQUIRED_FEED_CATEGORIES,
+      2,
+      200
+    );
+    const notInterestedBlocklist = buildNotInterestedBlocklist(userWithSignals);
+    let items = filterOutNotInterestedItems(balanced, notInterestedBlocklist);
+    let recommendationMode = "ocean";
+    if (preferFavorites) {
+      const favoritesDriven = await buildFavoritesDrivenRecommendations(userWithSignals, favoriteTitles);
+      recommendationMode = "favorites";
+      if (favoritesDriven.items.length > 0) {
+        items = filterOutNotInterestedItems(favoritesDriven.items, notInterestedBlocklist);
+      }
+    }
+    const responseData = {
+      items,
+      oceanItems: items.slice(0, 80),
+      recommendationMode,
+      webSearchUsed: Boolean(data?.webSearchUsed),
+      reason: data?.reason || "ok",
+      cached: false,
+      buildStatus: "ready",
+      buildId,
+      buildVersion: nextVersion,
+      generatedAt: Date.now(),
+    };
+    FEED_CACHE.set(key, {
+      ts: Date.now(),
+      data: responseData,
+      oceanUpdatedAt,
+    });
+    setBuildState(key, {
+      buildId,
+      status: "ready",
+      startedAt,
+      finishedAt: Date.now(),
+      error: null,
+      version: nextVersion,
+    });
+    console.log(
+      "[feed/personalized][async_build] done userId=%s buildId=%s elapsedMs=%s items=%s",
+      key,
+      buildId,
+      Date.now() - startedAt,
+      items.length
+    );
+  } catch (error) {
+    setBuildState(key, {
+      buildId,
+      status: "failed",
+      startedAt,
+      finishedAt: Date.now(),
+      error: String(error?.message || error || "build_failed"),
+      version: nextVersion,
+    });
+    console.error("[feed/personalized][async_build] failed userId=%s buildId=%s", key, buildId, error);
+  }
+}
+
 /**
  * GET|POST /api/feed/personalized
  * Query: force=1, anchorsOnly=1 (solo obras del perfil artístico, sin curación Gemini)
@@ -301,6 +428,10 @@ const getPersonalizedFeedCurated = async (req, res) => {
       req.query.preferFavorites === "1" ||
       req.query.preferFavorites === "true" ||
       (req.body && req.body.preferFavorites === true);
+    const asyncFast =
+      req.query.async === "1" ||
+      req.query.async === "true" ||
+      (req.body && req.body.async === true);
     const key = `${String(userId)}:fav_${preferFavorites ? 1 : 0}`;
     const oceanResult = await OceanModel.findOne({
       entityType: "user",
@@ -361,7 +492,7 @@ const getPersonalizedFeedCurated = async (req, res) => {
           );
           return res.status(200).json({
             message: "ok",
-            data: { ...hit.data, cached: true },
+            data: { ...hit.data, cached: true, ...toPublicBuildStatus(key) },
           });
         }
         FEED_CACHE.delete(key);
@@ -414,6 +545,68 @@ const getPersonalizedFeedCurated = async (req, res) => {
       artisticProfile,
     };
 
+    if (asyncFast) {
+      const hit = FEED_CACHE.get(key);
+      const buildState = getBuildState(key);
+      const hasFreshCache =
+        hit && Date.now() - hit.ts < FEED_TTL_MS && Array.isArray(hit.data?.items);
+
+      const shouldStartBuild = force || !buildState || buildState.status !== "running";
+      if (shouldStartBuild) {
+        const runningState = buildState && buildState.status === "running"
+          ? buildState
+          : {
+              buildId: createBuildId(key),
+              status: "running",
+              startedAt: Date.now(),
+              finishedAt: null,
+              error: null,
+              version: Number(buildState?.version || 0) + 1,
+            };
+        setBuildState(key, runningState);
+        setImmediate(() => {
+          runBackgroundFeedBuild({
+            key,
+            userId,
+            oceanPlain,
+            artisticProfile,
+            suggestedWorksRaw,
+            oceanUpdatedAt,
+            preferFavorites,
+          });
+        });
+      }
+
+      if (hasFreshCache && !force) {
+        return res.status(200).json({
+          message: "ok",
+          data: {
+            ...hit.data,
+            cached: true,
+            ...toPublicBuildStatus(key),
+          },
+        });
+      }
+
+      const resolvedAnchors = await resolveCuratedFeedCandidates(suggestedWorksRaw, {
+        diversitySeed: String(userId),
+      });
+      const quickItems = resolvedAnchors.slice(0, 40);
+      return res.status(200).json({
+        message: "ok",
+        data: {
+          items: quickItems,
+          oceanItems: quickItems.slice(0, 20),
+          recommendationMode: preferFavorites ? "favorites" : "ocean",
+          webSearchUsed: false,
+          reason: quickItems.length ? "stale_fast_path" : "building",
+          cached: false,
+          ...toPublicBuildStatus(key),
+          generatedAt: Date.now(),
+        },
+      });
+    }
+
     let data;
     let aiCurateMs = 0;
     try {
@@ -437,6 +630,7 @@ const getPersonalizedFeedCurated = async (req, res) => {
         webSearchUsed: false,
         reason: "ai_unavailable_anchors_only",
         cached: false,
+        ...toPublicBuildStatus(key),
       };
       FEED_CACHE.set(key, {
         ts: Date.now(),
@@ -607,6 +801,10 @@ const getPersonalizedFeedCurated = async (req, res) => {
       webSearchUsed: Boolean(data.webSearchUsed),
       reason: data.reason || (preferFavorites && !items.length ? "favorites_mode_no_resolved_items" : undefined),
       cached: false,
+      buildStatus: "ready",
+      buildId: getBuildState(key)?.buildId || null,
+      buildVersion: Number(getBuildState(key)?.version || 0),
+      generatedAt: Date.now(),
     };
     const totalRequestMs = Date.now() - requestStartedAt;
     const promptGenerationMs =
@@ -647,6 +845,119 @@ const getPersonalizedFeedCurated = async (req, res) => {
   }
 };
 
+const getPersonalizedFeedBuildStatus = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const preferFavorites =
+      req.query.preferFavorites === "1" ||
+      req.query.preferFavorites === "true" ||
+      (req.body && req.body.preferFavorites === true);
+    const key = `${String(userId)}:fav_${preferFavorites ? 1 : 0}`;
+    const row = getBuildState(key);
+    return res.status(200).json({
+      message: "ok",
+      data: row
+        ? {
+            buildId: row.buildId,
+            status: row.status,
+            version: row.version || 0,
+            startedAt: row.startedAt || null,
+            finishedAt: row.finishedAt || null,
+            error: row.error || null,
+          }
+        : {
+            buildId: null,
+            status: "ready",
+            version: 0,
+            startedAt: null,
+            finishedAt: null,
+            error: null,
+          },
+    });
+  } catch (error) {
+    return handleHTTPError(res, error.message || "No se pudo consultar el estado del feed", 500);
+  }
+};
+
+const rebuildPersonalizedFeed = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const preferFavorites =
+      req.query.preferFavorites === "1" ||
+      req.query.preferFavorites === "true" ||
+      (req.body && req.body.preferFavorites === true);
+    const key = `${String(userId)}:fav_${preferFavorites ? 1 : 0}`;
+    const oceanResult = await OceanModel.findOne({
+      entityType: "user",
+      entityId: userId,
+      deleted: false,
+    })
+      .sort({ updatedAt: -1 })
+      .lean();
+    if (!oceanResult) {
+      return res.status(200).json({
+        message: "ok",
+        data: { ...toPublicBuildStatus(key), status: "ready", reason: "no_ocean" },
+      });
+    }
+    const oceanUpdatedAt = oceanResult?.updatedAt
+      ? new Date(oceanResult.updatedAt).getTime()
+      : null;
+    const oceanPlain = JSON.parse(JSON.stringify(oceanResult));
+    const suggestedWorksRaw = extractSuggestedWorksFromArtisticJson(
+      oceanResult.artisticDescription || ""
+    );
+    let artisticProfile = null;
+    if (oceanResult.artisticDescription) {
+      try {
+        const parsed = JSON.parse(oceanResult.artisticDescription);
+        if (parsed && typeof parsed === "object") {
+          artisticProfile = {
+            profile: parsed.profile,
+            description: parsed.description,
+            recommendations: parsed.recommendations,
+            genreRecommendations:
+              parsed.genreRecommendations && typeof parsed.genreRecommendations === "object"
+                ? parsed.genreRecommendations
+                : undefined,
+            suggestedWorks: Array.isArray(parsed.suggestedWorks)
+              ? parsed.suggestedWorks
+              : [],
+          };
+        }
+      } catch (_) {
+        artisticProfile = null;
+      }
+    }
+    FEED_CACHE.delete(key);
+    setBuildState(key, {
+      buildId: createBuildId(key),
+      status: "running",
+      startedAt: Date.now(),
+      finishedAt: null,
+      error: null,
+      version: Number(getBuildState(key)?.version || 0) + 1,
+    });
+    setImmediate(() => {
+      runBackgroundFeedBuild({
+        key,
+        userId,
+        oceanPlain,
+        artisticProfile,
+        suggestedWorksRaw,
+        oceanUpdatedAt,
+        preferFavorites,
+      });
+    });
+    return res.status(202).json({
+      message: "accepted",
+      data: { ...toPublicBuildStatus(key) },
+    });
+  } catch (error) {
+    return handleHTTPError(res, error.message || "No se pudo iniciar rebuild del feed", 500);
+  }
+};
+
 function clearPersonalizedFeedCacheForUser(userId) {
   if (userId == null) return;
   const keyPrefix = `${String(userId)}:`;
@@ -659,5 +970,7 @@ function clearPersonalizedFeedCacheForUser(userId) {
 
 module.exports = {
   getPersonalizedFeedCurated,
+  getPersonalizedFeedBuildStatus,
+  rebuildPersonalizedFeed,
   clearPersonalizedFeedCacheForUser,
 };
