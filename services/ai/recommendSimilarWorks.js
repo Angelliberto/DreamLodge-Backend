@@ -10,24 +10,57 @@ const {
 const { logIaRecommendedWorks } = require("./iaLogRecommendedWorks");
 
 const logger = console;
+const allowedCategories = new Set([
+  "cine",
+  "musica",
+  "literatura",
+  "videojuegos",
+  "arte-visual",
+]);
+
+function normalizeCategory(raw) {
+  const key = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "")
+    .replace(/_/g, "-");
+  const alias = {
+    pelicula: "cine",
+    peliculas: "cine",
+    series: "cine",
+    serie: "cine",
+    tv: "cine",
+    film: "cine",
+    movie: "cine",
+    musica: "musica",
+    music: "musica",
+    album: "musica",
+    libro: "literatura",
+    libros: "literatura",
+    book: "literatura",
+    juego: "videojuegos",
+    juegos: "videojuegos",
+    game: "videojuegos",
+    games: "videojuegos",
+    arte: "arte-visual",
+    art: "arte-visual",
+    artevisual: "arte-visual",
+    "arte-visual": "arte-visual",
+  };
+  const normalized = alias[key] || key;
+  return allowedCategories.has(normalized) ? normalized : "";
+}
 
 async function recommendSimilarWorks(agent, artwork, options = {}) {
   if (!agent.configured()) {
     return { candidates: [], reason: "no_gemini" };
   }
   const limit = Math.max(1, Math.min(10, Number(options.limit) || 3));
-  const requestedCategory = String(options.targetCategory || "")
-    .trim()
-    .toLowerCase();
-  const category = String(artwork?.category || "").trim().toLowerCase();
-  const allowedCategories = new Set([
-    "cine",
-    "musica",
-    "literatura",
-    "videojuegos",
-    "arte-visual",
-  ]);
-  const targetCategory = allowedCategories.has(requestedCategory)
+  const requestedCategory = normalizeCategory(options.targetCategory);
+  const category = normalizeCategory(artwork?.category);
+  const targetCategory = requestedCategory
     ? requestedCategory
     : category;
   const title = String(artwork?.title || "").trim();
@@ -42,7 +75,7 @@ async function recommendSimilarWorks(agent, artwork, options = {}) {
     ? artwork.metadata.genres.slice(0, 6).join(", ")
     : "";
 
-  if (!title || !category) {
+  if (!title || !category || !targetCategory) {
     return { candidates: [], reason: "invalid_input" };
   }
 

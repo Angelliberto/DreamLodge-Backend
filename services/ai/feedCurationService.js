@@ -25,6 +25,7 @@ const TARGET_CANDIDATES = Math.max(24, Number(process.env.FEED_TARGET_CANDIDATES
 async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps = {}) {
   const logger = deps.logger || console;
   const logIaRecommendedWorks = deps.logIaRecommendedWorks || (() => {});
+  const aiStartAt = Date.now();
 
   const scores = oceanResult.scores;
   if (!scores || typeof scores !== "object") {
@@ -51,6 +52,7 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
 
   const webUsed = false;
   const artExtra = buildArtisticProfileExtra(artisticProfile);
+  const promptBuildStartAt = Date.now();
   const prompt = buildPersonalizedFeedCuratorPrompt({
     o,
     c,
@@ -64,8 +66,10 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
     keySubfacets,
     targetCandidates: TARGET_CANDIDATES,
   });
+  const promptBuildMs = Date.now() - promptBuildStartAt;
 
   let text;
+  const modelStartAt = Date.now();
   try {
     text = await agent.generateWithGemini(prompt, {
       purpose: "curación feed personalizado",
@@ -79,6 +83,7 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
     err.statusCode = 503;
     throw err;
   }
+  const modelGenerateMs = Date.now() - modelStartAt;
 
   const m = text && text.match(/\{[\s\S]*\}/);
   if (!m) return { candidates: [], webSearchUsed: webUsed, reason: "bad_model_json" };
@@ -93,6 +98,7 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
   const rawList = parsed.candidates;
   if (!Array.isArray(rawList)) return { candidates: [], webSearchUsed: webUsed, reason: "no_candidates" };
 
+  const postProcessStartAt = Date.now();
   let cleaned = normalizeWorkCandidateRows(rawList, TARGET_CANDIDATES);
   const feedEntityId = feedEntityIdFromOceanResult(oceanResult);
   cleaned = await maybeRerankFeedCandidates({
@@ -133,7 +139,25 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
     works: cleaned,
   });
   saveRecentTitlesForUser(feedEntityId, cleaned);
-  return { candidates: cleaned, webSearchUsed: webUsed };
+  const postProcessMs = Date.now() - postProcessStartAt;
+  const totalAiMs = Date.now() - aiStartAt;
+  logger.info(
+    "[feed/personalized][ai_timing] prompt_build_ms=%s model_generate_ms=%s post_process_ms=%s total_ai_ms=%s",
+    promptBuildMs,
+    modelGenerateMs,
+    postProcessMs,
+    totalAiMs
+  );
+  return {
+    candidates: cleaned,
+    webSearchUsed: webUsed,
+    timing: {
+      promptBuildMs,
+      modelGenerateMs,
+      postProcessMs,
+      totalAiMs,
+    },
+  };
 }
 
 module.exports = { curatePersonalizedFeed };

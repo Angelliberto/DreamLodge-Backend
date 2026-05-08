@@ -288,6 +288,7 @@ async function buildFavoritesDrivenRecommendations(userDoc, favoriteTitleSet) {
  */
 const getPersonalizedFeedCurated = async (req, res) => {
   try {
+    const requestStartedAt = Date.now();
     const userId = req.user._id;
     const force =
       req.query.force === "1" ||
@@ -414,8 +415,11 @@ const getPersonalizedFeedCurated = async (req, res) => {
     };
 
     let data;
+    let aiCurateMs = 0;
     try {
+      const aiCurateStartAt = Date.now();
         data = await ai.curatePersonalizedFeed(payload);
+      aiCurateMs = Date.now() - aiCurateStartAt;
       console.log(
         "[feed/personalized] ai_curate userId=%s candidates=%s reason=%s webSearchUsed=%s",
         key,
@@ -456,6 +460,7 @@ const getPersonalizedFeedCurated = async (req, res) => {
       aiCandidateCounts.videojuegos || 0,
       aiCandidateCounts["arte-visual"] || 0
     );
+    const resolveAndSignalsStartAt = Date.now();
     const [resolvedAnchors, resolvedCurated, userWithSignals] = await Promise.all([
       resolveCuratedFeedCandidates(suggestedWorksRaw, { diversitySeed: String(userId) }),
       resolveCuratedFeedCandidates(curated, { diversitySeed: String(userId) }),
@@ -466,6 +471,7 @@ const getPersonalizedFeedCurated = async (req, res) => {
         .populate("dislikedArtworks")
         .populate("seenArtworks"),
     ]);
+    const apiResultsMs = Date.now() - resolveAndSignalsStartAt;
     const resolvedCuratedCounts = countByCategory(resolvedCurated, REQUIRED_FEED_CATEGORIES);
     const resolvedAnchorCounts = countByCategory(resolvedAnchors, REQUIRED_FEED_CATEGORIES);
     console.log(
@@ -602,6 +608,24 @@ const getPersonalizedFeedCurated = async (req, res) => {
       reason: data.reason || (preferFavorites && !items.length ? "favorites_mode_no_resolved_items" : undefined),
       cached: false,
     };
+    const totalRequestMs = Date.now() - requestStartedAt;
+    const promptGenerationMs =
+      Number(data?.timing?.modelGenerateMs || 0) + Number(data?.timing?.promptBuildMs || 0);
+    const apiResultsToFrontMs = apiResultsMs + Math.max(0, totalRequestMs - aiCurateMs - apiResultsMs);
+    const segments = [
+      { name: "prompt_generation", ms: promptGenerationMs },
+      { name: "api_results_to_front", ms: apiResultsToFrontMs },
+    ].sort((a, b) => b.ms - a.ms);
+    const slowest = segments[0];
+    console.log(
+      "[feed/personalized][timing_compare] userId=%s prompt_generation_ms=%s api_results_to_front_ms=%s total_request_ms=%s slowest_segment=%s slowest_ms=%s",
+      key,
+      promptGenerationMs,
+      apiResultsToFrontMs,
+      totalRequestMs,
+      slowest.name,
+      slowest.ms
+    );
 
     FEED_CACHE.set(key, {
       ts: Date.now(),
