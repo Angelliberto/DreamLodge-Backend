@@ -199,7 +199,7 @@ async function runGlobalSearch(query, rawFilters = {}) {
   if (qt.length > 1) {
     promises.push(
       searchIgdbGames(qt, 18, { offset: stableStringHash32(qt) % 22 })
-        .then((games) => games.map(adaptIGDB))
+        .then((games) => games.map(adaptIGDB).filter(Boolean))
         .catch(() => [])
     );
     promises.push(
@@ -226,7 +226,7 @@ async function runGlobalSearch(query, rawFilters = {}) {
   const allResults = await Promise.all(promises);
   const flat = [];
   allResults.forEach((group) => {
-    if (Array.isArray(group)) flat.push(...group);
+    if (Array.isArray(group)) flat.push(...group.filter(Boolean));
   });
 
   const shuffled = shuffleSeeded(flat, qt);

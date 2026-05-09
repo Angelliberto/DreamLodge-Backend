@@ -59,7 +59,18 @@ function getGoogleBooksLangRestrict() {
 
 /** Cabecera Accept-Language para IGDB (textos localizados cuando existan). */
 function getIgdbAcceptLanguage() {
-  return firstEnv("IGDB_ACCEPT_LANGUAGE", "CONTENT_LANG") || "es";
+  const raw = firstEnv("IGDB_ACCEPT_LANGUAGE", "CONTENT_LANG");
+  const normalized = String(raw || "")
+    .trim()
+    .replace(/_/g, "-")
+    .toLowerCase();
+  if (!normalized) return "es-ES,es;q=0.9,en;q=0.5";
+  // Si el usuario pasa una cabecera completa, respetarla tal cual.
+  if (normalized.includes(",")) return raw;
+  if (normalized === "es" || normalized === "es-es" || normalized === "es-mx") {
+    return "es-ES,es;q=0.9,en;q=0.5";
+  }
+  return raw;
 }
 
 module.exports = {

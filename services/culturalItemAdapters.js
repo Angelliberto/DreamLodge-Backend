@@ -18,6 +18,8 @@ function formatTags(tags) {
 }
 
 function adaptIGDB(game) {
+  const developerName = String(game.involved_companies?.[0]?.company?.name || "").trim();
+  if (!developerName) return null;
   const year = game.first_release_date
     ? new Date(game.first_release_date * 1000).getFullYear().toString()
     : undefined;
@@ -42,7 +44,7 @@ function adaptIGDB(game) {
     category: "videojuegos",
     title: game.name,
     imageUrl: cover,
-    creator: game.involved_companies?.[0]?.company?.name || "Desarrollador Desconocido",
+    creator: developerName,
     year,
     rating: game.rating ? Math.round(game.rating / 10) : undefined,
     description: game.summary,
