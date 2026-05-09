@@ -41,14 +41,19 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
   const a = traitTotal(scores, "agreeableness");
   const n = traitTotal(scores, "neuroticism");
   const oceanFingerprint = buildOceanFingerprint(scores);
+  const promptExampleSalt = `${oceanFingerprint}|${Math.random().toString(36).slice(2, 10)}`;
   const profileDrivenRules = buildProfileDrivenCurationRules({ o, c, e, a, n, fingerprint: oceanFingerprint });
-  const { compactRules: facetInterpretation, keySubfacets } = buildOceanFacetInterpretation(scores, {
-    o,
-    c,
-    e,
-    a,
-    n,
-  });
+  const { compactRules: facetInterpretation, keySubfacets } = buildOceanFacetInterpretation(
+    scores,
+    {
+      o,
+      c,
+      e,
+      a,
+      n,
+    },
+    promptExampleSalt
+  );
 
   const webUsed = false;
   const artExtra = buildArtisticProfileExtra(artisticProfile);

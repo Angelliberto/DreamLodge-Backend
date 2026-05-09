@@ -453,7 +453,7 @@ function dominantFacetFromDimensions(dimensions) {
   return { key, value };
 }
 
-function topFacetKeys(dimensions, count = 2) {
+function topFacetKeys(dimensions, count = 1) {
   return [...(dimensions || [])]
     .sort((a, b) => (Number(b?.[1]) || 0) - (Number(a?.[1]) || 0))
     .slice(0, Math.max(1, count))
@@ -474,36 +474,44 @@ function stablePickOneExample(rawExamples, seed) {
   return options[hash % options.length];
 }
 
-function formatFacetExamplesBlock(dimensions, examplesByFacet, heading, targetLabel) {
-  const selected = topFacetKeys(dimensions, 2);
+function formatFacetExamplesBlock(dimensions, examplesByFacet, heading, targetLabel, seedSalt = "") {
+  const selected = topFacetKeys(dimensions, 1);
   const lines = selected.map((key) => {
     const value = dimensions.find(([k]) => k === key)?.[1] ?? 0;
     const detail = scoreDetailBand(value);
     const rawExamples =
       examplesByFacet[key]?.[detail] || examplesByFacet[key]?.["media-baja"] || "";
-    const ex = stablePickOneExample(rawExamples, `${heading}|${key}|${detail}`);
+    const ex = stablePickOneExample(rawExamples, `${seedSalt}|${heading}|${key}|${detail}`);
     const label = FACET_DETAIL_LABELS[detail] || detail;
     return `  - ${key} (${label}): ${ex}`;
   });
   return (
     `- ${heading} (facetas dominantes): ejemplos de matiz, NO repertorio.\n` +
     `  Usa estos ejemplos como calibración y prioriza ${targetLabel} alternativos con encaje OCEAN.\n` +
+    `  No repitas estos ejemplos por defecto; úsalos solo para entender la vibra.\n` +
     `${lines.join("\n")}`
   );
 }
 
-function formatCategoryRuleSections(dimensions) {
+function formatCategoryRuleSections(dimensions, seedSalt = "") {
   const dimKeys = dimensions.map(([key]) => key);
   return CATEGORY_RULE_BLOCKS.map(({ heading, rules }) => {
     if (heading === "VIDEOJUEGOS") {
-      return formatFacetExamplesBlock(dimensions, FACET_VIDEOGAME_EXAMPLES, "VIDEOJUEGOS", "títulos");
+      return formatFacetExamplesBlock(
+        dimensions,
+        FACET_VIDEOGAME_EXAMPLES,
+        "VIDEOJUEGOS",
+        "títulos",
+        seedSalt
+      );
     }
     if (heading === "MÚSICA") {
       return formatFacetExamplesBlock(
         dimensions,
         FACET_MUSIC_EXAMPLES,
         "MÚSICA",
-        "artistas/obras"
+        "artistas/obras",
+        seedSalt
       );
     }
     if (heading === "CINE") {
@@ -511,7 +519,8 @@ function formatCategoryRuleSections(dimensions) {
         dimensions,
         FACET_CINEMA_EXAMPLES,
         "CINE",
-        "películas/directores"
+        "películas/directores",
+        seedSalt
       );
     }
     if (heading === "LITERATURA") {
@@ -519,7 +528,8 @@ function formatCategoryRuleSections(dimensions) {
         dimensions,
         FACET_LITERATURE_EXAMPLES,
         "LITERATURA",
-        "autores/obras"
+        "autores/obras",
+        seedSalt
       );
     }
     return `- Reglas para ${heading} (aplican según nivel actual por faceta):\n${dimKeys
@@ -528,7 +538,7 @@ function formatCategoryRuleSections(dimensions) {
   }).join("\n");
 }
 
-function buildCompactFacetPrompt(dimensions, dominantFacet) {
+function buildCompactFacetPrompt(dimensions, dominantFacet, seedSalt = "") {
   const dimLines = dimensions.map(([key, value]) => {
     const detail = scoreDetailBand(value);
     const current = Number(value || 0).toFixed(2);
@@ -539,7 +549,7 @@ function buildCompactFacetPrompt(dimensions, dominantFacet) {
   return `TRADUCCIÓN OCEAN (compacta, obligatoria):
 ${dimLines.join("\n")}
 - Faceta dominante prioritaria: ${dominantFacet?.key || "no_disponible"} (${(dominantFacet?.value || 0).toFixed(2)}).
-${formatCategoryRuleSections(dimensions)}
+${formatCategoryRuleSections(dimensions, seedSalt)}
 - Usa esta lógica en mecánicas/ritmo/tono, no solo estética.
 - Distingue media-baja de media-alta y evita recomendaciones clónicas.`;
 }
@@ -559,11 +569,11 @@ function collectKeySubfacetLines(scores) {
   ).filter(Boolean);
 }
 
-function buildOceanFacetInterpretation(scores, totals) {
+function buildOceanFacetInterpretation(scores, totals, seedSalt = "") {
   const dimensions = spanishOceanDimensionsFromTotals(totals);
   const dominantFacet = dominantFacetFromDimensions(dimensions);
   const keySubfacets = collectKeySubfacetLines(scores);
-  const compactRules = buildCompactFacetPrompt(dimensions, dominantFacet);
+  const compactRules = buildCompactFacetPrompt(dimensions, dominantFacet, seedSalt);
   return { compactRules, keySubfacets };
 }
 
@@ -758,6 +768,8 @@ function buildPersonalizedFeedCuratorPrompt({
       "4) En videojuegos y música, cada oceanFitReason debe explicar encaje por combinación de rasgos (interacción entre al menos 2 dimensiones OCEAN) y no por un rasgo aislado.",
       "5) Subfacetas disponibles:",
       subfacetBlock,
+      "5.1) Los ejemplos incluidos en este prompt son solo calibración de vibra, NO repertorio objetivo.",
+      "5.2) Evita copiar títulos de ejemplo; como máximo 1 candidato total puede coincidir literalmente con esos ejemplos.",
       `6) Genera exactamente ${targetCandidates} candidatos en cinco categorías (cine, musica, literatura, videojuegos, arte-visual), balanceadas cuando sea posible.`,
       `   - ${nEntropySafe} obras "seguras" (alto encaje OCEAN, popularidad media).`,
       `   - ${nEntropyNiche} obras de nicho (alto encaje, baja popularidad / indie / autor).`,
