@@ -3,7 +3,6 @@ const {
   traitTotal,
   buildDeepSubfacetsBlock,
   buildProfileDrivenCurationRules,
-  buildOceanFingerprint,
   normalizeProfileDescription,
   normalizeWorkCandidateRows,
   countDefaultCanonOverlap,
@@ -65,7 +64,6 @@ async function generateArtisticDescription(agent, oceanResult, options = {}, dep
   const e = traitTotal(scores, "extraversion");
   const a = traitTotal(scores, "agreeableness");
   const n = traitTotal(scores, "neuroticism");
-  const oceanFingerprint = buildOceanFingerprint(scores);
   const testType = oceanResult.testType;
   const profileDrivenRules = buildProfileDrivenCurationRules({
     o,
@@ -73,7 +71,6 @@ async function generateArtisticDescription(agent, oceanResult, options = {}, dep
     e,
     a,
     n,
-    fingerprint: oceanFingerprint,
   });
   const detailedOceanGuidance = buildCompactOceanGuidance({ o, c, e, a, n });
 
@@ -107,7 +104,7 @@ async function generateArtisticDescription(agent, oceanResult, options = {}, dep
 - Evita tono tajante o absoluto (por ejemplo, evita "eres", "siempre", "nunca"); prefiere "podrías", "sueles", "te puede encajar".`;
 
   const variationBlock = regenerationSeed
-    ? `- Semilla de regeneración: ${regenerationSeed}. Elige una combinación distinta de obras ancla (suggestedWorks) respecto a otras ejecuciones con la misma huella; prioriza títulos distintos siempre que sigan siendo coherentes con el perfil y con la descripción.`
+    ? `- Semilla de regeneración: ${regenerationSeed}. Elige una combinación distinta de obras ancla (suggestedWorks) respecto a otras ejecuciones con esa misma semilla; prioriza títulos distintos siempre que sigan siendo coherentes con el perfil y con la descripción.`
     : "- Primera generación o sin semilla: elige obras ancla variadas, menos obvias y coherentes con el perfil.";
 
   const prompt = `Actúa como guía psicométrico-cultural orientado a recomendación.
@@ -157,7 +154,7 @@ Responde SOLO JSON válido, sin markdown:
 }`;
 
   console.log(
-    `[dreamlodge] PROMPT DESCRIPCIÓN ARTÍSTICA (test OCEAN) → IA | user=${userId || "anon"} | fp=${oceanFingerprint} | ${prompt.length} chars\n${prompt}`
+    `[dreamlodge] PROMPT DESCRIPCIÓN ARTÍSTICA (test OCEAN) → IA | user=${userId || "anon"} | ${prompt.length} chars\n${prompt}`
   );
 
   let text;
@@ -215,9 +212,8 @@ Responde SOLO JSON válido, sin markdown:
   const defaultCanonOverlap = countDefaultCanonOverlap(parsed.suggestedWorks, profileDrivenRules.avoidTitles);
   const globalCanonOverlap = countGlobalCanonOverlap(parsed.suggestedWorks);
   logger.info(
-    "[dreamlodge][ia_profile] overlap_checks userId=%s fingerprint=%s avoidOverlap=%s globalOverlap=%s works=%s",
+    "[dreamlodge][ia_profile] overlap_checks userId=%s avoidOverlap=%s globalOverlap=%s works=%s",
     userId || "(anon)",
-    oceanFingerprint,
     defaultCanonOverlap,
     globalCanonOverlap,
     parsed.suggestedWorks.length
@@ -225,9 +221,8 @@ Responde SOLO JSON válido, sin markdown:
 
   logIaRecommendedWorks("artistic_description", { id: userId || undefined, works: parsed.suggestedWorks });
   logger.info(
-    "[dreamlodge][ia_obras] artistic_description_meta userId=%s fingerprint=%s testType=%s seed=%s",
+    "[dreamlodge][ia_obras] artistic_description_meta userId=%s testType=%s seed=%s",
     userId || "(anon)",
-    oceanFingerprint,
     testType || "?",
     regenerationSeed || "-"
   );

@@ -530,7 +530,6 @@ function buildPersonalizedFeedCuratorPrompt({
   e,
   a,
   n,
-  oceanFingerprint,
   rulesText,
   facetInterpretation,
   keySubfacets,
@@ -548,7 +547,6 @@ function buildPersonalizedFeedCuratorPrompt({
     [
       "### PERFIL",
       `- OCEAN (medias Likert 1–5 por rasgo, ítems recodificados estilo IPIP): ${oceanMeansInline}`,
-      `- Huella: ${oceanFingerprint}`,
       `- Diferenciación obligatoria: ${rulesText}`,
     ]
       .filter(Boolean)
@@ -559,7 +557,6 @@ function buildPersonalizedFeedCuratorPrompt({
       "2) Subfacetas disponibles:",
       subfacetBlock,
       '2.1) Cualquier bloque más abajo con títulos concretos (solo cine/literatura ya) es tonalidad/plantilla mental, NO algo que el usuario \"deba recibir\". Máximo 1 coincidencia literal entre TODOS los candidatos si repites ese título de ejemplo.',
-      "2.2) Música y videojuegos: el prompt usa solo rasgos dimensionales abstractos ahí — no tienes lista de obra de calibración; evita repetir la misma nómina habitual que recomendaría un modelo genérico ante OCEAN parecido; obliga dispersión década/región/formato/indie dentro de ese par de categorías.",
       "3) Lógica mecánica (no solo estética):",
       mechanicalLines.map((x) => `   - ${x}`).join("\n"),
       "4) Prohibido puntuar solo por rasgo individual: decide cada recomendación por patrón total del perfil (trade-offs entre O, C, E, A, N).",

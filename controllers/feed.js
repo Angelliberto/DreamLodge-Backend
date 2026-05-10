@@ -309,7 +309,6 @@ async function runBackgroundFeedBuild({
   key,
   userId,
   oceanPlain,
-  artisticProfile,
   suggestedWorksRaw,
   oceanUpdatedAt,
   preferFavorites,
@@ -327,7 +326,7 @@ async function runBackgroundFeedBuild({
     version: nextVersion,
   });
   try {
-    const payload = { oceanResult: oceanPlain, artisticProfile };
+    const payload = { oceanResult: oceanPlain };
     const data = await ai.curatePersonalizedFeed(payload);
     const curated = Array.isArray(data?.candidates) ? data.candidates : [];
     const [resolvedAnchors, resolvedCurated, userWithSignals] = await Promise.all([
@@ -517,28 +516,8 @@ const getPersonalizedFeedCurated = async (req, res) => {
       oceanResult.artisticDescription || ""
     );
 
-    let artisticProfile = null;
-    if (oceanResult.artisticDescription) {
-      try {
-        const parsed = JSON.parse(oceanResult.artisticDescription);
-        if (parsed && typeof parsed === "object") {
-          artisticProfile = {
-            profile: parsed.profile,
-            description: parsed.description,
-            recommendations: parsed.recommendations,
-            suggestedWorks: Array.isArray(parsed.suggestedWorks)
-              ? parsed.suggestedWorks
-              : [],
-          };
-        }
-      } catch (_) {
-        artisticProfile = null;
-      }
-    }
-
     const payload = {
       oceanResult: oceanPlain,
-      artisticProfile,
     };
 
     if (asyncFast) {
@@ -565,7 +544,6 @@ const getPersonalizedFeedCurated = async (req, res) => {
             key,
             userId,
             oceanPlain,
-            artisticProfile,
             suggestedWorksRaw,
             oceanUpdatedAt,
             preferFavorites,
@@ -903,24 +881,6 @@ const rebuildPersonalizedFeed = async (req, res) => {
     const suggestedWorksRaw = extractSuggestedWorksFromArtisticJson(
       oceanResult.artisticDescription || ""
     );
-    let artisticProfile = null;
-    if (oceanResult.artisticDescription) {
-      try {
-        const parsed = JSON.parse(oceanResult.artisticDescription);
-        if (parsed && typeof parsed === "object") {
-          artisticProfile = {
-            profile: parsed.profile,
-            description: parsed.description,
-            recommendations: parsed.recommendations,
-            suggestedWorks: Array.isArray(parsed.suggestedWorks)
-              ? parsed.suggestedWorks
-              : [],
-          };
-        }
-      } catch (_) {
-        artisticProfile = null;
-      }
-    }
     FEED_CACHE.delete(key);
     setBuildState(key, {
       buildId: createBuildId(key),
@@ -935,7 +895,6 @@ const rebuildPersonalizedFeed = async (req, res) => {
         key,
         userId,
         oceanPlain,
-        artisticProfile,
         suggestedWorksRaw,
         oceanUpdatedAt,
         preferFavorites,

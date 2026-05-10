@@ -7,8 +7,6 @@ async function maybeRerankFeedCandidates({
   agent,
   candidates,
   ocean,
-  artisticProfile,
-  oceanFingerprint,
   feedEntityId,
   logger,
 }) {
@@ -21,11 +19,6 @@ async function maybeRerankFeedCandidates({
       e: ocean.e,
       a: ocean.a,
       n: ocean.n,
-      artisticProfile: {
-        profile: artisticProfile?.profile,
-        description: artisticProfile?.description,
-      },
-      oceanFingerprint,
     });
     const vectorReranked = await rerankByEmbeddingSimilarity({
       agent,

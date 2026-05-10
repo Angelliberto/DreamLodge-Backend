@@ -64,8 +64,8 @@ async function generateArtisticDescription(oceanResult, options) {
   return getAiAgent().generateArtisticDescription(oceanResult, options);
 }
 
-async function curatePersonalizedFeed({ oceanResult, artisticProfile }) {
-  return getAiAgent().curatePersonalizedFeed(oceanResult, artisticProfile);
+async function curatePersonalizedFeed({ oceanResult }) {
+  return getAiAgent().curatePersonalizedFeed(oceanResult);
 }
 
 async function recommendSimilarWorks(artwork, options = {}) {

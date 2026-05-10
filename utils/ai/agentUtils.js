@@ -239,7 +239,7 @@ function buildDeepSubfacetsBlock(scores) {
   return `Subfacetas detalladas (deben considerarse todas):\n${parts.join("\n")}\n`;
 }
 
-function buildProfileDrivenCurationRules({ o, c, e, a, n, fingerprint }) {
+function buildProfileDrivenCurationRules({ o, c, e, a, n }) {
   const ob = oceanLikertTraitBand(o);
   const cb = oceanLikertTraitBand(c);
   const eb = oceanLikertTraitBand(e);
@@ -262,39 +262,9 @@ function buildProfileDrivenCurationRules({ o, c, e, a, n, fingerprint }) {
       : ob === "baja"
       ? "Incluye claridad narrativa y formatos más accesibles."
       : "Mezcla innovación moderada con formatos familiares.",
-    `Usa la huella ${String(fingerprint || "na")} para que la selección sea única del perfil y no clónica frente a otros usuarios.`,
     "Prioriza subgéneros concretos y menos obvios cuando encajen con el perfil, sin bloquear obras por lista fija.",
-    "Videojuegos: evita que tu lista sea intercambiable con la de otro usuario con OCEAN distinto; varía década, plataforma, región del estudio y subgénero mecánico.",
-    "Música: igual criterio de diferenciación; no repitas el mismo bouquet de grandes hits/actuales que servirían a cualquier perfil medio; menciona obra o disco concreto, no solo género vaporoso.",
   ];
   return { rulesText: rules.join("\n- "), avoidTitles: [] };
-}
-
-function buildOceanFingerprint(scores) {
-  if (!scores || typeof scores !== "object") return "na";
-  const dims = [
-    "openness",
-    "conscientiousness",
-    "extraversion",
-    "agreeableness",
-    "neuroticism",
-  ];
-  const parts = [];
-  for (const d of dims) {
-    const row = scores[d];
-    if (!row || typeof row !== "object") continue;
-    const keys = Object.keys(row)
-      .filter((k) => k !== "__proto__")
-      .sort();
-    const seg = keys.map((k) => `${k}:${row[k]}`).join(",");
-    parts.push(`${d}{${seg}}`);
-  }
-  const s = parts.join("|");
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i += 1) {
-    h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  }
-  return (h >>> 0).toString(16).slice(0, 12);
 }
 
 function normalizeTitleForCompare(raw) {
@@ -336,7 +306,7 @@ function hashString32(input) {
   return h >>> 0;
 }
 
-/** Elige ejes distintos por huella / semilla para des-correlacionar listas entre usuarios. */
+/** Elige ejes distintos por semilla derivada del contexto para des-correlacionar listas. */
 function pickVideoGameExplorationAxes(seed, count = 2) {
   const pool = [...VIDEOGAME_FEED_EXPLORATION_AXES];
   const out = [];
@@ -452,7 +422,6 @@ module.exports = {
   oceanScoresToCanonicalLikert,
   buildDeepSubfacetsBlock,
   buildProfileDrivenCurationRules,
-  buildOceanFingerprint,
   normalizeTitleForCompare,
   normalizeProfileDescription,
   countDefaultCanonOverlap,

@@ -2,7 +2,6 @@ const {
   formatExceptionForClient,
   traitTotal,
   buildProfileDrivenCurationRules,
-  buildOceanFingerprint,
   normalizeWorkCandidateRows,
   countDefaultCanonOverlap,
   countGlobalCanonOverlap,
@@ -23,7 +22,7 @@ const { maybeRerankFeedCandidates } = require("./feedReranker");
 
 const TARGET_CANDIDATES = Math.max(24, Number(process.env.FEED_TARGET_CANDIDATES) || 60);
 
-async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps = {}) {
+async function curatePersonalizedFeed(agent, oceanResult, deps = {}) {
   const logger = deps.logger || console;
   const logIaRecommendedWorks = deps.logIaRecommendedWorks || (() => {});
   const aiStartAt = Date.now();
@@ -47,9 +46,8 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
   const e = traitTotal(scores, "extraversion");
   const a = traitTotal(scores, "agreeableness");
   const n = traitTotal(scores, "neuroticism");
-  const oceanFingerprint = buildOceanFingerprint(scores);
-  const promptExampleSalt = `${oceanFingerprint}|${Math.random().toString(36).slice(2, 10)}`;
-  const profileDrivenRules = buildProfileDrivenCurationRules({ o, c, e, a, n, fingerprint: oceanFingerprint });
+  const promptExampleSalt = Math.random().toString(36).slice(2, 10);
+  const profileDrivenRules = buildProfileDrivenCurationRules({ o, c, e, a, n });
   const { compactRules: facetInterpretation, keySubfacets } = buildOceanFacetInterpretation(
     scores,
     {
@@ -70,7 +68,6 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
     e,
     a,
     n,
-    oceanFingerprint,
     rulesText: profileDrivenRules.rulesText,
     facetInterpretation,
     keySubfacets,
@@ -78,7 +75,7 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
   const promptBuildMs = Date.now() - promptBuildStartAt;
 
   console.log(
-    `[dreamlodge] PROMPT FEED PERSONALIZADO (OCEAN) → IA | fingerprint=${oceanFingerprint} | ${prompt.length} chars | ts=${new Date().toISOString()}\n${prompt}`
+    `[dreamlodge] PROMPT FEED PERSONALIZADO (OCEAN) → IA | ${prompt.length} chars | ts=${new Date().toISOString()}\n${prompt}`
   );
 
   let text;
@@ -118,8 +115,6 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
     agent,
     candidates: cleaned,
     ocean: { o, c, e, a, n },
-    artisticProfile,
-    oceanFingerprint,
     feedEntityId,
     logger,
   });
@@ -128,8 +123,7 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
   const reordered = reorderByNovelty(cleaned, recentTitles);
   if (recentTitles.size) {
     logger.info(
-      "[dreamlodge][feed] novelty_reorder fingerprint=%s before=%s after=%s recent=%s",
-      oceanFingerprint,
+      "[dreamlodge][feed] novelty_reorder before=%s after=%s recent=%s",
       cleaned.length,
       reordered.length,
       recentTitles.size
@@ -140,8 +134,7 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
   const overlapAvoid = countDefaultCanonOverlap(cleaned, profileDrivenRules.avoidTitles);
   const overlapGlobal = countGlobalCanonOverlap(cleaned);
   logger.info(
-    "[dreamlodge][feed] overlap_checks fingerprint=%s avoidOverlap=%s globalOverlap=%s candidates=%s",
-    oceanFingerprint,
+    "[dreamlodge][feed] overlap_checks avoidOverlap=%s globalOverlap=%s candidates=%s",
     overlapAvoid,
     overlapGlobal,
     cleaned.length

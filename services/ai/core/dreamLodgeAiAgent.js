@@ -190,8 +190,8 @@ class DreamLodgeAIAgent {
     });
   }
 
-  async curatePersonalizedFeed(oceanResult, artisticProfile) {
-    return curatePersonalizedFeed(this, oceanResult, artisticProfile, {
+  async curatePersonalizedFeed(oceanResult) {
+    return curatePersonalizedFeed(this, oceanResult, {
       logger: console,
       logIaRecommendedWorks,
     });
