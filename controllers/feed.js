@@ -584,28 +584,18 @@ const getPersonalizedFeedCurated = async (req, res) => {
         });
       }
 
-      const resolvedAnchors = await resolveCuratedFeedCandidates(suggestedWorksRaw, {
-        diversitySeed: String(userId),
-      });
-      // Ruta rápida: solo el feed OCEAN puede mostrar anclas del perfil mientras cura la IA.
-      // Modo favoritos nunca debe usar anclas como “preview”: no son similares a favoritos y confunden al usuario.
-      let quickItems = preferFavorites ? [] : resolvedAnchors.slice(0, 40);
-      const partialPreview = !preferFavorites && quickItems.length > 0;
-      const quickReason = partialPreview
-        ? "stale_fast_path"
-        : preferFavorites
-          ? "building_favorites"
-          : "building";
+      // Sin anclas del perfil como vista previa: no son salida IA ni favoritos (confunden como placeholder).
+      const quickReason = preferFavorites ? "building_favorites" : "building";
       return res.status(200).json({
         message: "ok",
         data: {
-          items: quickItems,
-          oceanItems: quickItems.slice(0, 20),
+          items: [],
+          oceanItems: [],
           recommendationMode: preferFavorites ? "favorites" : "ocean",
           webSearchUsed: false,
           reason: quickReason,
           cached: false,
-          partial: partialPreview,
+          partial: false,
           ...toPublicBuildStatus(key),
           generatedAt: Date.now(),
         },
