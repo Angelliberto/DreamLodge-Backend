@@ -331,6 +331,12 @@ async function runBackgroundFeedBuild({
     version: nextVersion,
   });
   try {
+    clearPersonalizedFeedCacheForUser(userId);
+    console.log(
+      "[feed/personalized][cache] cleared server FEED_CACHE before Gemini curate (async job) userId=%s key=%s",
+      userId,
+      key
+    );
     const payload = { oceanResult: oceanPlain };
     const data = await ai.curatePersonalizedFeed(payload);
     const curated = Array.isArray(data?.candidates) ? data.candidates : [];
@@ -528,23 +534,29 @@ const getPersonalizedFeedCurated = async (req, res) => {
     };
 
     if (asyncFast) {
-      const hit = FEED_CACHE.get(key);
       const buildState = getBuildState(key);
-      const hasFreshCache =
-        hit && Date.now() - hit.ts < FEED_TTL_MS && Array.isArray(hit.data?.items);
-
       const shouldStartBuild = force || !buildState || buildState.status !== "running";
+
+      let hit = FEED_CACHE.get(key);
       if (shouldStartBuild) {
-        const runningState = buildState && buildState.status === "running"
-          ? buildState
-          : {
-              buildId: createBuildId(key),
-              status: "running",
-              startedAt: Date.now(),
-              finishedAt: null,
-              error: null,
-              version: Number(buildState?.version || 0) + 1,
-            };
+        clearPersonalizedFeedCacheForUser(userId);
+        hit = FEED_CACHE.get(key);
+        console.log(
+          "[feed/personalized][cache] cleared server snapshots before new async Gemini build userId=%s key=%s",
+          userId,
+          key
+        );
+        const runningState =
+          buildState && buildState.status === "running"
+            ? buildState
+            : {
+                buildId: createBuildId(key),
+                status: "running",
+                startedAt: Date.now(),
+                finishedAt: null,
+                error: null,
+                version: Number(buildState?.version || 0) + 1,
+              };
         setBuildState(key, runningState);
         setImmediate(() => {
           runBackgroundFeedBuild({
@@ -557,6 +569,9 @@ const getPersonalizedFeedCurated = async (req, res) => {
           });
         });
       }
+
+      const hasFreshCache =
+        hit && Date.now() - hit.ts < FEED_TTL_MS && Array.isArray(hit.data?.items);
 
       if (hasFreshCache && !force) {
         return res.status(200).json({
@@ -600,8 +615,14 @@ const getPersonalizedFeedCurated = async (req, res) => {
     let data;
     let aiCurateMs = 0;
     try {
+      clearPersonalizedFeedCacheForUser(userId);
+      console.log(
+        "[feed/personalized][cache] cleared server FEED_CACHE before Gemini curate (sync async=0) userId=%s key=%s",
+        userId,
+        key
+      );
       const aiCurateStartAt = Date.now();
-        data = await ai.curatePersonalizedFeed(payload);
+      data = await ai.curatePersonalizedFeed(payload);
       aiCurateMs = Date.now() - aiCurateStartAt;
       console.log(
         "[feed/personalized] ai_curate userId=%s candidates=%s reason=%s webSearchUsed=%s",
