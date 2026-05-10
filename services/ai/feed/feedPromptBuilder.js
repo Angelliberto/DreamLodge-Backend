@@ -666,10 +666,6 @@ function formatSubfacetBlockForPrompt(keySubfacets) {
   return keySubfacets.map((line) => `   ${line}`).join("\n");
 }
 
-function diversityPromptSalt() {
-  return Math.random().toString(36).substring(2, 10);
-}
-
 function feedEntityIdFromOceanResult(oceanResult) {
   if (!oceanResult || typeof oceanResult !== "object") return undefined;
   return oceanResult.entityId != null ? oceanResult.entityId : oceanResult.entity_id;
@@ -681,7 +677,6 @@ function buildPersonalizedFeedCuratorPrompt({
   keySubfacets,
 }) {
   const subfacetBlock = formatSubfacetBlockForPrompt(keySubfacets);
-  const diversitySalt = diversityPromptSalt();
 
   const sections = [
     "Rol: Curador cultural. Objetivo: discovery personalizado inclusivo (desde repertorio más conocido hasta nicho verificable), sin sesgar solo a underground ni solo a mainstream; diversidad y encaje OCEAN; no inventes obras.",
@@ -704,7 +699,6 @@ function buildPersonalizedFeedCuratorPrompt({
     `### FORMATO DE SALIDA (JSON ESTRICTO)
 Devuelve solo este objeto JSON:
 {"candidates":[{"category":"cine|musica|literatura|videojuegos|arte-visual","title":"Título en español de España (TMDB es-ES) u original si no hay traducción","creator":"Autor/Director/Estudio","genreHint":"Subgénero hiper-específico (ej. post-punk báltico, slow cinema distópico)"}]}`,
-    `Random seed de diversidad: ${diversitySalt}`,
   ];
 
   return sections.filter(Boolean).join("\n\n");

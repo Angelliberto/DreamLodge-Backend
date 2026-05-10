@@ -23,6 +23,9 @@ const REQUIRED_FEED_CATEGORIES = [
   "arte-visual",
 ];
 const MIN_ITEMS_PER_CATEGORY = 5;
+/** Modo favoritos: hasta N semillas × M similares cada una (sin mezclar con curación OCEAN). */
+const FAVORITES_FEED_MAX_SEEDS = 5;
+const FAVORITES_SIMILAR_PER_SEED = 3;
 
 function createBuildId(userKey) {
   return `${String(userKey)}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
@@ -259,9 +262,12 @@ async function buildFavoritesDrivenRecommendations(userDoc, favoriteTitleSet) {
     return { items: [], reason: "no_favorites" };
   }
 
-  const seeds = favorites.slice(0, 4);
-  const batches = await Promise.all(
-    seeds.map(async (fav) => {
+  const seeds = favorites.slice(0, FAVORITES_FEED_MAX_SEEDS);
+  const userKey = String(userDoc?._id || "anon");
+
+  const resolvedBatches = await Promise.all(
+    seeds.map(async (fav, index) => {
+      const seedKey = String(fav?._id || fav?.id || index);
       try {
         const result = await ai.recommendSimilarWorks(
           {
@@ -272,37 +278,36 @@ async function buildFavoritesDrivenRecommendations(userDoc, favoriteTitleSet) {
             description: fav.description,
             metadata: fav.metadata || {},
           },
-          { limit: 10 }
+          { limit: FAVORITES_SIMILAR_PER_SEED }
         );
-        return Array.isArray(result?.candidates) ? result.candidates : [];
+        const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
+        if (!candidates.length) return [];
+        const resolved = await resolveCuratedFeedCandidates(candidates, {
+          diversitySeed: `${userKey}|fav|${seedKey}`,
+        });
+        const filtered = resolved.filter((item) => !favoriteTitleSet.has(norm(item?.title)));
+        return filtered.slice(0, FAVORITES_SIMILAR_PER_SEED);
       } catch (_) {
         return [];
       }
     })
   );
 
-  const mergedCandidates = [];
+  const merged = [];
   const seenCandidateKey = new Set();
-  for (const batch of batches) {
-    for (const row of batch || []) {
-      const key = `${String(row?.category || "").trim().toLowerCase()}|${norm(row?.title)}`;
+  for (const batch of resolvedBatches) {
+    for (const item of batch || []) {
+      const key = `${String(item?.category || "").trim().toLowerCase()}|${norm(item?.title)}`;
       if (!key || seenCandidateKey.has(key)) continue;
       seenCandidateKey.add(key);
-      mergedCandidates.push(row);
-      if (mergedCandidates.length >= 80) break;
+      merged.push(item);
     }
-    if (mergedCandidates.length >= 80) break;
   }
 
-  if (!mergedCandidates.length) {
+  if (!merged.length) {
     return { items: [], reason: "favorites_mode_empty_candidates" };
   }
-
-  const resolved = await resolveCuratedFeedCandidates(mergedCandidates, {
-    diversitySeed: String(userDoc?._id || ""),
-  });
-  const filtered = resolved.filter((item) => !favoriteTitleSet.has(norm(item?.title)));
-  return { items: filtered, reason: filtered.length ? "ok" : "favorites_mode_no_resolved_items" };
+  return { items: merged, reason: merged.length ? "ok" : "favorites_mode_no_resolved_items" };
 }
 
 async function runBackgroundFeedBuild({
@@ -359,6 +364,8 @@ async function runBackgroundFeedBuild({
       recommendationMode = "favorites";
       if (favoritesDriven.items.length > 0) {
         items = filterOutNotInterestedItems(favoritesDriven.items, notInterestedBlocklist);
+      } else {
+        items = [];
       }
     }
     const responseData = {
@@ -565,7 +572,15 @@ const getPersonalizedFeedCurated = async (req, res) => {
       const resolvedAnchors = await resolveCuratedFeedCandidates(suggestedWorksRaw, {
         diversitySeed: String(userId),
       });
-      const quickItems = resolvedAnchors.slice(0, 40);
+      // Ruta rápida: solo el feed OCEAN puede mostrar anclas del perfil mientras cura la IA.
+      // Modo favoritos nunca debe usar anclas como “preview”: no son similares a favoritos y confunden al usuario.
+      let quickItems = preferFavorites ? [] : resolvedAnchors.slice(0, 40);
+      const partialPreview = !preferFavorites && quickItems.length > 0;
+      const quickReason = partialPreview
+        ? "stale_fast_path"
+        : preferFavorites
+          ? "building_favorites"
+          : "building";
       return res.status(200).json({
         message: "ok",
         data: {
@@ -573,8 +588,9 @@ const getPersonalizedFeedCurated = async (req, res) => {
           oceanItems: quickItems.slice(0, 20),
           recommendationMode: preferFavorites ? "favorites" : "ocean",
           webSearchUsed: false,
-          reason: quickItems.length ? "stale_fast_path" : "building",
+          reason: quickReason,
           cached: false,
+          partial: partialPreview,
           ...toPublicBuildStatus(key),
           generatedAt: Date.now(),
         },
@@ -733,14 +749,14 @@ const getPersonalizedFeedCurated = async (req, res) => {
       );
       recommendationMode = "favorites";
       if (favoritesDriven.items.length > 0) {
-        // En modo favoritos, las principales deben venir de similitud con favoritos.
         items = mergeCulturalFeedDedupe(
           filterOutNotInterestedItems(favoritesDriven.items, notInterestedBlocklist),
           []
         );
+        oceanItems = items.slice(0, 80);
       } else {
-        // Sin fallback a OCEAN en principales cuando el modo favoritos está activo.
         items = [];
+        oceanItems = [];
       }
     }
     const finalCounts = countByCategory(items, REQUIRED_FEED_CATEGORIES);
