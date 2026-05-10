@@ -24,7 +24,7 @@ async function maybeRerankFeedCandidates({
       agent,
       userProfileText,
       candidates,
-      maxScan: 90,
+      maxScan: 110,
       embedConcurrency: FEED_EMBED_CONCURRENCY,
       logger,
       userId: String(feedEntityId || ""),

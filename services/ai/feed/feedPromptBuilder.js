@@ -696,6 +696,16 @@ function buildPersonalizedFeedCuratorPrompt({
       "Títulos/creadores reales y buscables.",
       PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
     ].join("\n"),
+    [
+      "### CUPOS POR CATEGORÍA (obligatorio)",
+      "El array JSON `candidates` debe cumplir como **mínimo** estos cupos según el campo `category` (obras distintas; no repetir el mismo título dentro de la misma categoría):",
+      "- **15** entradas con category `cine`",
+      "- **15** con `musica`",
+      "- **15** con `literatura`",
+      "- **15** con `videojuegos`",
+      "- **8** con `arte-visual` (menos volumen que las demás: catálogo museístico más acotado)",
+      "Total **mínimo 68** objetos en `candidates`. Si falta algún cupo, añade obras reales verificables hasta cumplir antes de cerrar el JSON.",
+    ].join("\n"),
     `### FORMATO DE SALIDA (JSON ESTRICTO)
 Devuelve solo este objeto JSON:
 {"candidates":[{"category":"cine|musica|literatura|videojuegos|arte-visual","title":"Título en español de España (TMDB es-ES) u original si no hay traducción","creator":"Autor/Director/Estudio","genreHint":"Subgénero hiper-específico (ej. post-punk báltico, slow cinema distópico)"}]}`,

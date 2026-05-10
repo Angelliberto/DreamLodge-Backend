@@ -20,7 +20,12 @@ const {
 } = require("./feedPostProcessing");
 const { maybeRerankFeedCandidates } = require("./feedReranker");
 
-const TARGET_CANDIDATES = Math.max(24, Number(process.env.FEED_TARGET_CANDIDATES) || 60);
+/** Cupos prompt: 15×cine/música/libros/juegos + 8 arte-visual = 68; margen ligero por si el modelo acorta. */
+const FEED_MODEL_TARGET_DEFAULT = 72;
+const TARGET_CANDIDATES = Math.max(
+  68,
+  Number(process.env.FEED_TARGET_CANDIDATES) || FEED_MODEL_TARGET_DEFAULT
+);
 
 async function curatePersonalizedFeed(agent, oceanResult, deps = {}) {
   const logger = deps.logger || console;

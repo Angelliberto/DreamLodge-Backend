@@ -58,6 +58,8 @@ async function recommendSimilarWorks(agent, artwork, options = {}) {
     return { candidates: [], reason: "no_gemini" };
   }
   const limit = Math.max(1, Math.min(10, Number(options.limit) || 3));
+  /** Pide al modelo `limit` resultados finales; pequeño colchón para descartes al filtrar. */
+  const normalizeCap = limit + 2;
   const requestedCategory = normalizeCategory(options.targetCategory);
   const category = normalizeCategory(artwork?.category);
   const targetCategory = requestedCategory
@@ -79,7 +81,6 @@ async function recommendSimilarWorks(agent, artwork, options = {}) {
     return { candidates: [], reason: "invalid_input" };
   }
 
-  const wantedCount = Math.max(limit + 2, 4);
   const gameExplorationAxes =
     targetCategory === "videojuegos"
       ? pickVideoGameExplorationAxes(`${title}|${creator}|${category}|${mediaType}`, 2)
@@ -107,7 +108,7 @@ Devuelve SOLO JSON válido, sin markdown:
 Reglas:
 - category exactamente uno de: cine, musica, literatura, videojuegos, arte-visual
 - category objetivo para TODAS las recomendaciones: ${targetCategory}
-- Devuelve entre ${wantedCount} y ${wantedCount + 1} candidatos.
+- Devuelve exactamente ${limit} candidatos (no más: el cliente solo usará ${limit}).
 - Prioriza obras muy parecidas en estilo/tema/tono a la obra base.
 - Usa también el contexto de creator y description para evitar obras con mismo título pero de otra obra distinta.
 - NO incluyas la misma obra base ni variaciones mínimas del mismo título.
@@ -143,9 +144,9 @@ Reglas:
 
   const rawList = parsed?.candidates;
   if (!Array.isArray(rawList)) return { candidates: [], reason: "no_candidates" };
-  const cleaned = normalizeWorkCandidateRows(rawList, wantedCount + 2).filter(
-    (row) => String(row?.category || "").trim().toLowerCase() === targetCategory
-  );
+  const cleaned = normalizeWorkCandidateRows(rawList, normalizeCap)
+    .filter((row) => String(row?.category || "").trim().toLowerCase() === targetCategory)
+    .slice(0, limit);
   logIaRecommendedWorks("recommend_similar", {
     id: `${category}:${title.slice(0, 120)}`,
     works: cleaned,
