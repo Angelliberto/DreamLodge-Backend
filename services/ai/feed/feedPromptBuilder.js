@@ -1,8 +1,6 @@
 const {
   PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
   oceanLikertTraitBand,
-  IPIP_LIKERT_BAND_HIGH_GE,
-  IPIP_LIKERT_BAND_LOW_LT,
 } = require("../../../utils/ai/agentUtils");
 
 /** Misma banda alta/media/baja que buildProfileDrivenCurationRules (agentUtils). */
@@ -18,10 +16,6 @@ function scoreDetailBand(v) {
   return "muy-alta";
 }
 
-function oceanMeansLikertParts(o, c, e, a, n) {
-  return [o, c, e, a, n].map((x) => Number(x || 0).toFixed(2));
-}
-
 function facetValue(scores, traitKey, facetKey) {
   const trait = scores?.[traitKey];
   if (!trait || typeof trait !== "object") return null;
@@ -34,7 +28,7 @@ function facetValue(scores, traitKey, facetKey) {
 function formatFacetLine(scores, traitKey, facetKey, label) {
   const v = facetValue(scores, traitKey, facetKey);
   if (v == null) return null;
-  return `${label}: ${v.toFixed(2)} (${scoreBand(v)})`;
+  return `${label}: matiz ${scoreDetailBand(v)}`;
 }
 
 const FACET_PROMPT_RULES = {
@@ -359,9 +353,8 @@ function formatFacetExamplesBlock(dimensions, examplesByFacet, heading, targetLa
     return `  - ${key} (${detail}): ${ex}`;
   });
   return (
-    `- ${heading} (facetas más marcadas en este perfil): ejemplos concretos solo para calibrar matiz, NO catálogo de salida.\n` +
-    `  NO recomiendes al usuario esos títulos salvo como mucho uno en toda la respuesta si encaja sin alternativa mejor.\n` +
-    `  Prioriza ${targetLabel} distintos pero con la misma vibra dimensional y perfil Big Five numérico global.\n` +
+    `- ${heading} — referencias de tono (ejemplos alineados con las facetas más marcadas de este perfil):\n` +
+    `  Úsalos como **brújula**: propón **otras obras reales** que transmitan la misma sensibilidad (atmósfera, tensión, forma); prioriza ${targetLabel} distintos y verificables, variando títulos sin traicionar el matiz.\n` +
     `${lines.join("\n")}`
   );
 }
@@ -380,7 +373,7 @@ function formatCategoryRuleSections(dimensions, seedSalt = "") {
       );
     }
     return (
-      `- Reglas para ${heading} (solo dimensiones abstractas; sin nombres de obras en esta subsección — evita sesgo de “copiar ejemplo”):\n` +
+      `- Reglas para ${heading} (solo dimensiones abstractas; sin títulos de obras en esta subsección — traduce cada rasgo a criterios de descubrimiento):\n` +
       dimKeys.map((k) => `  - ${rules[k]}`).join("\n")
     );
   }).join("\n");
@@ -392,24 +385,24 @@ function distinctiveSpanishTraitLine(dimensions) {
   );
   const top = sorted.slice(0, 2);
   if (!top.length) return "no_disponible";
-  return top.map(([k, v]) => `${k}=${Number(v).toFixed(2)}`).join(" | ");
+  return top.map(([k, v]) => `${k} (${scoreDetailBand(v)})`).join(" | ");
 }
 
 function buildCompactFacetPrompt(dimensions, dominantFacet, seedSalt = "") {
   const dimLines = dimensions.map(([key, value]) => {
     const detail = scoreDetailBand(value);
-    const current = Number(value || 0).toFixed(2);
     const rule = FACET_PROMPT_RULES[key]?.[detail] || "";
-    return `- ${key}: ${current} (${detail}) => ${rule}`;
+    return `- ${key} (${detail}) — qué buscar en las recomendaciones: ${rule}`;
   });
+  const domDetail = scoreDetailBand(dominantFacet?.value ?? 0);
 
   return `TRADUCCIÓN OCEAN (compacta, obligatoria):
 ${dimLines.join("\n")}
-- Faceta dominante prioritaria: ${dominantFacet?.key || "no_disponible"} (${(dominantFacet?.value || 0).toFixed(2)}).
-- Rasgos más distintivos (mayor alejamiento del punto medio 3): ${distinctiveSpanishTraitLine(dimensions)} — prioriza diferenciación ahí sin ignorar interacciones con los demás.
+- Faceta dominante prioritaria: ${dominantFacet?.key || "no_disponible"} (${domDetail}).
+- Rasgos más distintivos (mayor alejamiento del equilibrio típico): ${distinctiveSpanishTraitLine(dimensions)} — prioriza diferenciación ahí sin ignorar interacciones con los demás.
 ${formatCategoryRuleSections(dimensions, seedSalt)}
-- Usa esta lógica en mecánicas/ritmo/tono, no solo estética.
-- Distingue media-baja de media-alta y evita recomendaciones clónicas.`;
+- Aplica esta lógica en mecánica, ritmo y tono (no solo etiqueta superficial).
+- Mantén variedad dentro del mismo perfil: equivalencias frescas mejor que repetir el mismo tipo de obra sin matices.`;
 }
 
 const KEY_SUBFACET_SPECS = [
@@ -442,14 +435,14 @@ const MECHANICAL_LINE_BY_BAND = {
     baja:
       "Responsabilidad BAJA: prioriza energía cruda, improvisación y ruptura de reglas sin forzar rigidez formal.",
     media:
-      "Responsabilidad MEDIA: alterna orden y libertad; evita solo obras hiperclásicas o solo caos extremo.",
+      "Responsabilidad MEDIA: alterna orden y libertad; equilibra clásicos controlados con propuestas más libres.",
   },
   n: {
     alta:
       'Neuroticismo ALTO: prioriza alta resolución emocional y catarsis (vulnerabilidad, tensión psicológica), no solo "obras tristes" genéricas.',
     baja: "Neuroticismo BAJO: puedes incluir obras serenas y reguladoras sin forzar melodrama constante.",
     media:
-      "Neuroticismo MEDIO: mezcla tensión afectiva moderada con respiros; evita un solo registro emocional.",
+      "Neuroticismo MEDIO: alterna tensión afectiva moderada con respiros; busca contraste emocional sin monotonía.",
   },
 };
 
@@ -461,58 +454,9 @@ function mechanicalCurationLines(c, n) {
 
 function formatSubfacetBlockForPrompt(keySubfacets) {
   if (!keySubfacets.length) {
-    return "   (sin subfacetas numéricas; infiere con cuidado desde los totales OCEAN.)";
+    return "   (sin subfacetas detalladas; infiere con cuidado desde la traducción OCEAN del bloque siguiente.)";
   }
   return keySubfacets.map((line) => `   ${line}`).join("\n");
-}
-
-const IPIP_ADAPTIVE_SPECS = [
-  {
-    label: "Apertura",
-    high:
-      "más riesgo formal con sustancia (no etiqueta hueca «experimental»); evita lista demasiado obvia.",
-    low: "privilegia accesibilidad y anclas claras; el riesgo formal minoritario.",
-  },
-  {
-    label: "Responsabilidad",
-    high: "prioriza estructura, método y progresión interna legibles.",
-    low: "hueco para energía cruda e improvisación sin rigidez constante.",
-  },
-  {
-    label: "Extraversión",
-    high: "no concentres la lista solo en lo íntimo/lento; añade pulso social donde encaje.",
-    low: "evita saturar con piezas solo hiper-sociales o solo performativas.",
-  },
-  {
-    label: "Amabilidad",
-    high: "calidez, cooperación y reparación sin moralina obligatoria.",
-    low: "admite aspereza y fricción ética; menos sentimentalismo forzado.",
-  },
-  {
-    label: "Neuroticismo",
-    high: "catarsis y vulnerabilidad pueden entrar fuerte sin listar solo cosas «zen».",
-    low: "más regulación y equilibrio; evita martilleo solo con angustia extrema.",
-  },
-];
-
-/** Ajustes de curación según bandas IPIP (mismos umbrales que `scoreBand`). */
-function buildAdaptiveRulesFromTest(o, c, e, a, n) {
-  const hi = IPIP_LIKERT_BAND_HIGH_GE;
-  const loLt = IPIP_LIKERT_BAND_LOW_LT;
-  const values = [o, c, e, a, n];
-  const rules = [];
-  for (let i = 0; i < IPIP_ADAPTIVE_SPECS.length; i += 1) {
-    const v = values[i];
-    const { label, high, low } = IPIP_ADAPTIVE_SPECS[i];
-    if (v >= hi) {
-      rules.push(
-        `${label} en rango alto (media Likert ≥${IPIP_LIKERT_BAND_HIGH_GE}, IPIP): ${high}`
-      );
-    } else if (v < loLt) {
-      rules.push(`${label} en rango bajo (media Likert <${IPIP_LIKERT_BAND_LOW_LT}, IPIP): ${low}`);
-    }
-  }
-  return rules;
 }
 
 function diversityPromptSalt() {
@@ -535,36 +479,23 @@ function buildPersonalizedFeedCuratorPrompt({
   keySubfacets,
 }) {
   const subfacetBlock = formatSubfacetBlockForPrompt(keySubfacets);
-  const adaptiveRules = buildAdaptiveRulesFromTest(o, c, e, a, n);
   const mechanicalLines = mechanicalCurationLines(c, n);
   const diversitySalt = diversityPromptSalt();
-  const [oS, cS, eS, aS, nS] = oceanMeansLikertParts(o, c, e, a, n);
-  const oceanMeansInline = `O:${oS}, C:${cS}, E:${eS}, A:${aS}, N:${nS}`;
-  const oceanCombinationLine = `Combinación global OCEAN prioritaria: ${oceanMeansInline.replace(/, /g, " + ")}.`;
 
   const sections = [
     "Rol: Curador cultural. Objetivo: discovery personalizado inclusivo (desde repertorio más conocido hasta nicho verificable), sin sesgar solo a underground ni solo a mainstream; diversidad y encaje OCEAN; no inventes obras.",
     [
-      "### PERFIL",
-      `- OCEAN (medias Likert 1–5 por rasgo, ítems recodificados estilo IPIP): ${oceanMeansInline}`,
-      `- Diferenciación obligatoria: ${rulesText}`,
-    ]
-      .filter(Boolean)
-      .join("\n"),
-    [
       "### REGLAS NÚCLEO",
+      `Interpretación cualitativa del test (sin cifras); cura según este patrón:\n${rulesText}`,
       "1) Evita listas obvias y convergencia entre usuarios; prioriza long-tail verificable.",
       "2) Subfacetas disponibles:",
       subfacetBlock,
-      '2.1) Cualquier bloque más abajo con títulos concretos (solo cine/literatura ya) es tonalidad/plantilla mental, NO algo que el usuario \"deba recibir\". Máximo 1 coincidencia literal entre TODOS los candidatos si repites ese título de ejemplo.',
+      "2.1) Si en facetas aparecen títulos de ejemplo (p. ej. cine o literatura), son **guías de matiz**: tu lista debe **proponer obras reales equivalentes** en espíritu (misma línea afectiva y formal), no copiar mecánicamente el mismo título salvo que sea la mejor opción.",
       "3) Lógica mecánica (no solo estética):",
       mechanicalLines.map((x) => `   - ${x}`).join("\n"),
-      "4) Prohibido puntuar solo por rasgo individual: decide cada recomendación por patrón total del perfil (trade-offs entre O, C, E, A, N).",
-      `5) ${oceanCombinationLine}`,
+      "4) Prohibido optimizar solo un rasgo aislado: cada recomendación debe encajar en el patrón conjunto (trade-offs entre apertura, responsabilidad, extraversión, amabilidad y neuroticismo).",
+      "5) No cites ni inventes cifras del test; trabaja solo con el significado de las bandas y reglas anteriores.",
     ].join("\n"),
-    adaptiveRules.length
-      ? `### AJUSTE DINÁMICO POR TEST OCEAN\n${adaptiveRules.map((x) => `- ${x}`).join("\n")}`
-      : "",
     `### REGLAS POR FACETA/CATEGORÍA\n${facetInterpretation}`,
     [
       "### CONTEXTO",

@@ -246,7 +246,7 @@ function buildProfileDrivenCurationRules({ o, c, e, a, n }) {
   const ab = oceanLikertTraitBand(a);
   const nb = oceanLikertTraitBand(n);
   const rules = [
-    `Apertura ${ob}, Responsabilidad ${cb}, Extraversión ${eb}, Amabilidad ${ab}, Neuroticismo ${nb} (cortes IPIP: ≥${IPIP_LIKERT_BAND_HIGH_GE} alta, <${IPIP_LIKERT_BAND_LOW_LT} baja, resto media).`,
+    `Apertura ${ob}, Responsabilidad ${cb}, Extraversión ${eb}, Amabilidad ${ab}, Neuroticismo ${nb} (clasificación alta/media/baja por rasgo; no uses puntuaciones del cuestionario).`,
     eb === "alta"
       ? "Prioriza propuestas con energía social y dinamismo."
       : eb === "baja"
