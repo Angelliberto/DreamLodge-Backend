@@ -1,10 +1,6 @@
 const {
   PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
-  oceanLikertTraitBand,
 } = require("../../../utils/ai/agentUtils");
-
-/** Misma banda alta/media/baja que buildProfileDrivenCurationRules (agentUtils). */
-const scoreBand = oceanLikertTraitBand;
 
 function scoreDetailBand(v) {
   const n = Number(v) || 0;
@@ -221,6 +217,153 @@ const FACET_LITERATURE_EXAMPLES = {
   },
 };
 
+/** Referencias con título (ej. obra / disco / juego): misma forma que cine/literatura; el prompt muestra todas las anclas del matiz del rasgo. */
+const FACET_GAME_EXAMPLES = {
+  apertura: {
+    "muy-baja":
+      "Mario Kart 8 — reglas triviales claras; The Sims 4 (modo casual) — metas lineales obvias; FIFA (partido rápido) — formato cerrado reconocible.",
+    baja:
+      "Spiritfarer — tutorial cálido con temas serios contenidos; Stardew Valley — progresión accesible; Abzû — navegación simple y contemplativa.",
+    "media-baja":
+      "The Legend of Zelda: Breath of the Wild — mundo abierto con curva suave; Assassin's Creed Odyssey — exploración monumental accesible; Subnautica — descubrimiento guiado pero amplio.",
+    "media-alta":
+      "Disco Elysium — texto y sistema raros cohesionados; Hollow Knight — mapa implícito y diseño densos; Outer Wilds — bucle temporal y física lateral.",
+    alta:
+      "The Stanley Parable — metatexto jugable; Pony Island — ruptura formal con intención; Return of the Obra Dinn — deducción radical y austera.",
+    "muy-alta":
+      "The Witness — rejilla de puzzles casi filosofía; Frog Fractions — sátira de tutorial; Baba Is You — reescritura de reglas cada pantalla.",
+  },
+  responsabilidad: {
+    "muy-baja":
+      "Goat Simulator — física gag; Garry's Mod — caos sandbox sin objetivo impuesto;",
+    baja:
+      "Just Cause seríes — física exuberante improvisada; Teardown — demolition sandbox; Riders Republic — freestyle caótico.",
+    "media-baja":
+      "Hades — run con claridad pero variación alta; Rogue Legacy 2 — progres entre runs fluido; Vampire Survivors — reglas triviales ritmo alto.",
+    "media-alta":
+      "Monster Hunter Rise — combos aprendibles; Factorio — progres técnico legible; Civilization VI — tecnologías formales secuenciadas.",
+    alta:
+      "Into the Breach — puzzle táctico estrictísimo; Opus Magnum — optimización alambicada; Infinifactory — cadenas de producción micrométricas.",
+    "muy-alta":
+      "Kerbal Space Program — sim física y planificación brutal; Shenzhen I/O — programación assembler de rompecabezas industrial; Dominion (digital táctico muy metódico) — motor de combo numérico si el modelo lo tiene presente.",
+  },
+  extraversion: {
+    "muy-baja":
+      "Journey — encuentros mínimos; Firewatch — aislamiento en parque; The Long Dark — sobrevivencia solitaria larga.",
+    baja:
+      "What Remains of Edith Finch — narrativa cerrada íntima; Kentucky Route Zero — encuentros esporádicos; GRIS — plataforma emocional en silencio.",
+    "media-baja":
+      "It Takes Two — co-op no hostil cuando se desea cercanía contenida; Portal 2 (co-op) — puzles pareja sin estrés social; Untitled Goose Game — juguete social comedido.",
+    "media-alta":
+      "Destiny 2 — mix instancia/cooperación abierta; Sea of Thieves — tripulación opcional alta interacción; Deep Rock Galactic — squad compacto comunicativo.",
+    alta:
+      "Overwatch 2 — ritmo equipo competitivo; Rocket League — partidas cortas alta energía social; Fortnite (modos squad) — multitud performativa rápida.",
+    "muy-alta":
+      "Among Us — debate performativo alto; Fall Guys — party masivo frenético; Jackbox Party Pack — performance grupal cara al grupo.",
+  },
+  amabilidad: {
+    "muy-baja":
+      "Spec Ops: The Line — violencia con veredicto moral; Papers, Please — burocracia cruel; This War of Mine — sobrevivencia brutal.",
+    baja:
+      "The Last of Us Part II — conflicto vísceral gris; Bioshock — dilemas objeto de poder; Bioshock Infinite — patriotismo sangriento irónico.",
+    "media-baja":
+      "Heavy Rain — consecuencias familiares severas; Telltale The Walking Dead (temporada uno) — cuidado bajo crueldad mundo; NieR Automata — compasión bajo dystopía hierro.",
+    "media-alta":
+      "Unpacking — cuidado memoria objeto; Chicory: A Colorful Tale — arte como apoyo ajeno; A Short Hike — calidez paisaje pequeño.",
+    alta:
+      "Animal Crossing: New Horizons — cooperación hogar lentitud; Monument Valley II — vínculos madre-hijo en puzles; Cozy Grove — visitas rutina regenerativa.",
+    "muy-alta":
+      "TOEM — foto bondad urbana corta; Wandersong — bard cantar resolución pacífica; Kind Words (lo-fi chill beats) — epistolario sólo texto amable.",
+  },
+  neuroticismo: {
+    "muy-baja":
+      "A Short Hike (tramo final sereno) — baja pulsación tensión; Alba: A Wildlife Adventure — calma naturaleza; Monument Valley — puzles meditativos sin amenaza cronológica urgente.",
+    baja:
+      "Unpacking segunda pasada — melancolía suave contenida; Stardew Valley noches piano — ciclo día-noche reposado.; Coffee Talk — café charla regulación emocional mínimo conflicto físico.",
+    "media-baja":
+      "Life is Strange (episodio tonal melancólico) — tensión adolescente contenida.; Oxenfree — radios y amistad spooky leve.; Night in the Woods — depresión ciudad pequeña sin saltos scare.",
+    "media-alta":
+      "Silent Hill 2 — incomodidad psicológica sostenida.; Inside — hostilidad ambiente lateral.; SOMA — identidad corpórea angustiosa.",
+    alta:
+      "Hellblade: Senua's Sacrifice — psicosis auditiva visceral.; The Evil Within — terror acción pulsos altos narrativamente.; Layers of Fear (primero) — casa memoria trauma.",
+    "muy-alta":
+      "Visage — pacing terror doméstico extremo.; Detention — folklore y culpa colonial opresivos.; Eternal Darkness — inestabilidad narrativa perturbadora prolongada.; Not for everyone: Anatomy (video ensayo jugable indie) — incomodidad metatextual densa si modelo lo puede nombrar fielmente.",
+  },
+};
+
+const FACET_MUSIC_EXAMPLES = {
+  apertura: {
+    "muy-baja":
+      "Mozart — Réquiem fragmentos melodía cerrada conocida mundialmente; Óperas grabaciones clásicas mainstream (Bizet Carmen suite) — melodía frontal.",
+    baja:
+      "Norah Jones Come Away With Me — canciones pop-jazz línea clara.; Ed Sheeran + — estribillo directo reproducible guitarrístico mainstream.",
+    "media-baja":
+      "Alt-J An Awesome Wave — riff raros melodía navegable.; Florence + The Machine ceremonia quasi epica melodía alta legible.",
+    "media-alta":
+      "Radiohead Kid A — híbridos glitch melódicos ambiguos legibles tras escucha.; Björk Homogenic — electrónico orquestal lírica destilada pero no pop simple.",
+    alta:
+      "Aphex Twin Selected Ambient Works 85-92 — paisajes sin estribillo obvio cohesionados tonalmente.; Kraftwerk Computer World — repetición robótica autoral.",
+    "muy-alta":
+      "Autechre elseq 1-5 (extracto cualquier track largo aleatorio cohesion estética glitch) — disolución melodía habitual.; Merzbow — ruidismo extremo (referencia muy arriesgada; solo para muy alta radical).",
+  },
+  responsabilidad: {
+    "muy-baja":
+      "Patti Smith Horses improvisación punk declamatorio crudo vivo.; Velvet Underground Loaded tomas crudas batería laxa;",
+    baja:
+      "Arctic Mon Whatever People Say crudeza garage pulso humano;",
+    "media-baja":
+      "D'Angelo Voodoo grooves largos improvisación contenida soul;",
+    "media-alta":
+      "Fleetwood Mac Rumours pulido emocional y producción láser año 70;",
+    alta:
+      "Steely Dan Aja — jazz rock de estudio en capas obsesivamente pulidas;",
+    "muy-alta":
+      "Jacob Collier crazed harmony live loops capas virtuosísticas microtonal;",
+  },
+  extraversion: {
+    "muy-baja":
+      "Nick Drake Pink Moon guitarrero una sola voz;",
+    baja:
+      "Bon Iver For Emma acoustíco cuarto bedroom;",
+    "media-baja":
+      "Tame Impala Currents medio electropop medio psicodelia interiorizada;",
+    "media-alta":
+      "Talking Heads Speaking in Tongues funk conversacional sala grande;",
+    alta:
+      "Beyoncé Renaissance club energía alta performance disco;",
+    "muy-alta":
+      "Arca KiCk series maximalismo queer sonido y escena club hiper;",
+  },
+  amabilidad: {
+    "muy-baja":
+      "Eminem relapse letras filosas ironía brutal;",
+    baja:
+      "Bob Dylan Highway 61 letras mordientes narrativas;",
+    "media-baja":
+      "Father John Misty Pure Comedy ironía sentimentalismo crítico;",
+    "media-alta":
+      "Sufjan Stevens Carrie & Lowell ternura dolor matrimonio duelo;",
+    alta:
+      "The Beach Boys Pet Sounds armonías consuelo melodía alta;",
+    "muy-alta":
+      "Mister Rogers compilaciones voz cercanía reparadora (uso referencial tonal no infantilización usuario); Ladysmith Black Mambazo a capella comunidad;",
+  },
+  neuroticismo: {
+    "muy-baja":
+      "Brian Eno Ambient 1 Music for Airports;",
+    baja:
+      "Bill Evans Waltz for Debby calma reflexiva;",
+    "media-baja":
+      "Mazzy Star Fade Into You melancolía suave;",
+    "media-alta":
+      "Portishead Dummy tensión noir trip hop;",
+    alta:
+      "Radiohead OK Computer paranoia melodía alta presión;",
+    "muy-alta":
+      "Swans To Be Kind descarga repetitiva visceral;",
+  },
+};
+
 const MUSIC_RULES = {
   apertura:
     "Apertura: baja=estructura tradicional y melodía clara; media-baja=alternativo accesible; media-alta=híbridos y texturas menos obvias; alta/muy-alta=experimental, avant-pop o ambient abstracto.",
@@ -295,6 +438,16 @@ const CATEGORY_RULE_BLOCKS = [
 ];
 
 const HEADING_CALIBRATION_EXAMPLES = {
+  VIDEOJUEGOS: {
+    dataset: FACET_GAME_EXAMPLES,
+    abstractRules: GAME_RULES,
+    targetLabel: "videojuegos reales verificables",
+  },
+  MÚSICA: {
+    dataset: FACET_MUSIC_EXAMPLES,
+    abstractRules: MUSIC_RULES,
+    targetLabel: "grabaciones o artistas verificables",
+  },
   CINE: {
     dataset: FACET_CINEMA_EXAMPLES,
     abstractRules: CINEMA_RULES,
@@ -399,22 +552,18 @@ function topFacetKeys(dimensions, count = 1) {
     .map(([key]) => key);
 }
 
-function stablePickOneExample(rawExamples, seed) {
-  const options = String(rawExamples || "")
+/** Todas las anclas separadas por `;` en la fuente; se muestran enteras para que el modelo las use como familia tonal. */
+function joinExampleAnchors(rawExamples) {
+  return String(rawExamples || "")
     .split(";")
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (!options.length) return "";
-  let hash = 0;
-  const s = String(seed || "");
-  for (let i = 0; i < s.length; i += 1) {
-    hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
-  }
-  return options[hash % options.length];
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .join(" · ");
 }
 
 /** Una referencia de tono por cada rasgo (matiz según puntación), no solo los dos rasgos más altos. */
 function formatFacetExamplesAllDimensions(dimensions, examplesByFacet, heading, targetLabel, seedSalt = "") {
+  void seedSalt;
   const lines = [];
   for (const [key, value] of dimensions) {
     const detail = scoreDetailBand(value);
@@ -423,15 +572,15 @@ function formatFacetExamplesAllDimensions(dimensions, examplesByFacet, heading, 
       examplesByFacet[key]?.["media-baja"] ||
       examplesByFacet[key]?.["media-alta"] ||
       "";
-    const ex = stablePickOneExample(rawExamples, `${seedSalt}|${heading}|${key}|${detail}`);
+    const ex = joinExampleAnchors(rawExamples);
     if (!ex) continue;
     const label = DIMENSION_LABEL_ES[key] || key;
     lines.push(`  - ${label} (${detail}): ${ex}`);
   }
   if (!lines.length) return "";
   return (
-    `- ${heading} — referencias de tono (un ejemplo por rasgo, matizado a este perfil):\n` +
-    `  Úsalas como **brújula**: propón **otras obras reales** equivalentes en sensibilidad; prioriza ${targetLabel} distintos y verificables.\n` +
+    `- ${heading} — referencias de tono concretas por rasgo (matiz de este perfil); **lista completa** tras cada dos puntos:\n` +
+    `  Cada punto es una ancla tonal: puedes recomendar cualquiera de esa familia o **obras diferentes** misma línea sensibilidad; prioriza ${targetLabel}.\n` +
     lines.join("\n")
   );
 }
@@ -511,30 +660,6 @@ function buildOceanFacetInterpretation(scores, totals, seedSalt = "") {
   return { compactRules, keySubfacets };
 }
 
-const MECHANICAL_LINE_BY_BAND = {
-  c: {
-    alta:
-      "Responsabilidad ALTA: prioriza sistemas complejos, metódicos y obras con estructuras arquitectónicas (diseño, precisión, lógica interna).",
-    baja:
-      "Responsabilidad BAJA: prioriza energía cruda, improvisación y ruptura de reglas sin forzar rigidez formal.",
-    media:
-      "Responsabilidad MEDIA: alterna orden y libertad; equilibra clásicos controlados con propuestas más libres.",
-  },
-  n: {
-    alta:
-      'Neuroticismo ALTO: prioriza alta resolución emocional y catarsis (vulnerabilidad, tensión psicológica), no solo "obras tristes" genéricas.',
-    baja: "Neuroticismo BAJO: puedes incluir obras serenas y reguladoras sin forzar melodrama constante.",
-    media:
-      "Neuroticismo MEDIO: alterna tensión afectiva moderada con respiros; busca contraste emocional sin monotonía.",
-  },
-};
-
-function mechanicalCurationLines(c, n) {
-  const bc = scoreBand(c);
-  const bn = scoreBand(n);
-  return [MECHANICAL_LINE_BY_BAND.c[bc], MECHANICAL_LINE_BY_BAND.n[bn]];
-}
-
 function formatSubfacetBlockForPrompt(keySubfacets) {
   if (!keySubfacets.length) {
     return "   (sin subfacetas detalladas; infiere con cuidado desde la traducción OCEAN del bloque siguiente.)";
@@ -552,17 +677,11 @@ function feedEntityIdFromOceanResult(oceanResult) {
 }
 
 function buildPersonalizedFeedCuratorPrompt({
-  o,
-  c,
-  e,
-  a,
-  n,
   rulesText,
   facetInterpretation,
   keySubfacets,
 }) {
   const subfacetBlock = formatSubfacetBlockForPrompt(keySubfacets);
-  const mechanicalLines = mechanicalCurationLines(c, n);
   const diversitySalt = diversityPromptSalt();
 
   const sections = [
@@ -574,10 +693,8 @@ function buildPersonalizedFeedCuratorPrompt({
       "2) Subfacetas disponibles:",
       subfacetBlock,
       "2.1) Si en facetas aparecen títulos de ejemplo (p. ej. cine o literatura), son **guías de matiz**: tu lista debe **proponer obras reales equivalentes** en espíritu (misma línea afectiva y formal), no copiar mecánicamente el mismo título salvo que sea la mejor opción.",
-      "3) Lógica mecánica (no solo estética):",
-      mechanicalLines.map((x) => `   - ${x}`).join("\n"),
-      "4) Prohibido optimizar solo un rasgo aislado: cada recomendación debe encajar en el patrón conjunto (trade-offs entre apertura, responsabilidad, extraversión, amabilidad y neuroticismo).",
-      "5) No cites ni inventes cifras del test; trabaja solo con el significado de las bandas y reglas anteriores.",
+      "3) Prohibido optimizar solo un rasgo aislado: cada recomendación debe encajar en el patrón conjunto (trade-offs entre apertura, responsabilidad, extraversión, amabilidad y neuroticismo).",
+      "4) No cites ni inventes cifras del test; trabaja solo con el significado de las bandas y reglas anteriores.",
     ].join("\n"),
     `### REGLAS POR FACETA/CATEGORÍA\n${facetInterpretation}`,
     [

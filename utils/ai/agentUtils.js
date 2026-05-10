@@ -246,23 +246,7 @@ function buildProfileDrivenCurationRules({ o, c, e, a, n }) {
   const ab = oceanLikertTraitBand(a);
   const nb = oceanLikertTraitBand(n);
   const rules = [
-    `Apertura ${ob}, Responsabilidad ${cb}, Extraversión ${eb}, Amabilidad ${ab}, Neuroticismo ${nb} (clasificación alta/media/baja por rasgo; no uses puntuaciones del cuestionario).`,
-    eb === "alta"
-      ? "Prioriza propuestas con energía social y dinamismo."
-      : eb === "baja"
-      ? "Prioriza propuestas introspectivas, contemplativas y de ritmo pausado."
-      : "Combina propuestas introspectivas y sociales de forma equilibrada.",
-    nb === "alta"
-      ? "Incluye intensidad emocional y catarsis guiada; evita frialdad excesiva."
-      : nb === "baja"
-      ? "Incluye calma, precisión formal y coherencia estética."
-      : "Alterna estabilidad tonal con contraste emocional moderado.",
-    ob === "alta"
-      ? "Incluye riesgo creativo y estructuras menos convencionales."
-      : ob === "baja"
-      ? "Incluye claridad narrativa y formatos más accesibles."
-      : "Mezcla innovación moderada con formatos familiares.",
-    "Prioriza subgéneros concretos y menos obvios cuando encajen con el perfil, sin bloquear obras por lista fija.",
+    `Apertura ${ob}, Responsabilidad ${cb}, Extraversión ${eb}, Amabilidad ${ab}, Neuroticismo ${nb} (solo estas bandas cualitativas alta/media/baja por rasgo; sin puntuaciones del cuestionario).`,
   ];
   return { rulesText: rules.join("\n- "), avoidTitles: [] };
 }

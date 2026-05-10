@@ -63,11 +63,6 @@ async function curatePersonalizedFeed(agent, oceanResult, deps = {}) {
   const webUsed = false;
   const promptBuildStartAt = Date.now();
   const prompt = buildPersonalizedFeedCuratorPrompt({
-    o,
-    c,
-    e,
-    a,
-    n,
     rulesText: profileDrivenRules.rulesText,
     facetInterpretation,
     keySubfacets,
