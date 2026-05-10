@@ -524,7 +524,37 @@ function formatAbstractRulesFiltered(heading, rules, dimensions) {
   }
   if (!lines.length) return "";
   return (
-    `- Reglas para ${heading} — **un criterio por rasgo** acorde al matiz de este perfil (el resto de niveles se omite):\n` +
+    `- **${heading}** — criterio por rasgo (matiz del perfil; demás niveles omitidos):\n` +
+    lines.join("\n")
+  );
+}
+
+/**
+ * Una entrada por rasgo: criterio abstracto filtrado + referencias de tono en la misma viñeta (menos tokens, menos repetición).
+ */
+function formatCombinedCriterionAndAnchors(heading, abstractRules, examplesByFacet, dimensions, targetLabel) {
+  const lines = [];
+  for (const [key, value] of dimensions) {
+    const detail = scoreDetailBand(value);
+    const label = DIMENSION_LABEL_ES[key] || key;
+    const full = abstractRules[key];
+    const slice = full ? traitDiscoverySliceForDetail(full, detail) : "";
+    const rawExamples =
+      examplesByFacet[key]?.[detail] ||
+      examplesByFacet[key]?.["media-baja"] ||
+      examplesByFacet[key]?.["media-alta"] ||
+      "";
+    const refs = joinExampleAnchors(rawExamples);
+    const parts = [];
+    if (slice) parts.push(`Criterio: ${slice}`);
+    if (refs) parts.push(`Referencias: ${refs}`);
+    if (!parts.length) continue;
+    lines.push(`  - ${label} (${detail}) — ${parts.join(" · ")}`);
+  }
+  if (!lines.length) return "";
+  const labelHint = targetLabel ? ` Prioriza ${targetLabel}.` : "";
+  return (
+    `- **${heading}** — por rasgo: une criterio + anclas en cada línea.${labelHint}\n` +
     lines.join("\n")
   );
 }
@@ -561,53 +591,22 @@ function joinExampleAnchors(rawExamples) {
     .join(" · ");
 }
 
-/** Una referencia de tono por cada rasgo (matiz según puntación), no solo los dos rasgos más altos. */
-function formatFacetExamplesAllDimensions(dimensions, examplesByFacet, heading, targetLabel, seedSalt = "") {
-  void seedSalt;
-  const lines = [];
-  for (const [key, value] of dimensions) {
-    const detail = scoreDetailBand(value);
-    const rawExamples =
-      examplesByFacet[key]?.[detail] ||
-      examplesByFacet[key]?.["media-baja"] ||
-      examplesByFacet[key]?.["media-alta"] ||
-      "";
-    const ex = joinExampleAnchors(rawExamples);
-    if (!ex) continue;
-    const label = DIMENSION_LABEL_ES[key] || key;
-    lines.push(`  - ${label} (${detail}): ${ex}`);
-  }
-  if (!lines.length) return "";
-  return (
-    `- ${heading} — referencias de tono concretas por rasgo (matiz de este perfil); **lista completa** tras cada dos puntos:\n` +
-    `  Cada punto es una ancla tonal: puedes recomendar cualquiera de esa familia o **obras diferentes** misma línea sensibilidad; prioriza ${targetLabel}.\n` +
-    lines.join("\n")
-  );
-}
-
 function formatCategoryRuleSections(dimensions, seedSalt = "") {
+  void seedSalt;
   return CATEGORY_RULE_BLOCKS.map(({ heading, rules }) => {
     const cal = HEADING_CALIBRATION_EXAMPLES[heading];
-    const abstractFiltered = formatAbstractRulesFiltered(heading, rules, dimensions);
-
-    if (cal) {
-      const exampleBlock = formatFacetExamplesAllDimensions(
-        dimensions,
-        cal.dataset,
+    if (cal?.dataset && cal.abstractRules) {
+      return formatCombinedCriterionAndAnchors(
         heading,
-        cal.targetLabel,
-        seedSalt
+        cal.abstractRules,
+        cal.dataset,
+        dimensions,
+        cal.targetLabel
       );
-      const abstractFromCal =
-        cal.abstractRules && typeof cal.abstractRules === "object"
-          ? formatAbstractRulesFiltered(`${heading} — criterio abstracto por rasgo`, cal.abstractRules, dimensions)
-          : "";
-      const parts = [exampleBlock, abstractFromCal].filter(Boolean);
-      return parts.join("\n\n");
     }
-
-    return abstractFiltered;
-  }).filter(Boolean)
+    return formatAbstractRulesFiltered(heading, rules, dimensions);
+  })
+    .filter(Boolean)
     .join("\n\n");
 }
 
@@ -692,7 +691,7 @@ function buildPersonalizedFeedCuratorPrompt({
       "1) Evita listas obvias y convergencia entre usuarios; prioriza long-tail verificable.",
       "2) Subfacetas disponibles:",
       subfacetBlock,
-      "2.1) Si en facetas aparecen títulos de ejemplo (p. ej. cine o literatura), son **guías de matiz**: tu lista debe **proponer obras reales equivalentes** en espíritu (misma línea afectiva y formal), no copiar mecánicamente el mismo título salvo que sea la mejor opción.",
+      "2.1) En cada categoría, las **Referencias** junto al **Criterio** son familia tonal: propón **obras reales equivalentes** en espíritu; no limites la salida a copiar esos títulos si hay opciones tan acertadas o más específicas.",
       "3) Prohibido optimizar solo un rasgo aislado: cada recomendación debe encajar en el patrón conjunto (trade-offs entre apertura, responsabilidad, extraversión, amabilidad y neuroticismo).",
       "4) No cites ni inventes cifras del test; trabaja solo con el significado de las bandas y reglas anteriores.",
     ].join("\n"),
