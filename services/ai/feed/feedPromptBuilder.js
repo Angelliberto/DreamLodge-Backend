@@ -297,13 +297,84 @@ const CATEGORY_RULE_BLOCKS = [
 const HEADING_CALIBRATION_EXAMPLES = {
   CINE: {
     dataset: FACET_CINEMA_EXAMPLES,
+    abstractRules: CINEMA_RULES,
     targetLabel: "películas/directores",
   },
   LITERATURA: {
     dataset: FACET_LITERATURE_EXAMPLES,
+    abstractRules: LITERATURE_RULES,
     targetLabel: "autores/obras",
   },
 };
+
+const DIMENSION_LABEL_ES = {
+  apertura: "Apertura",
+  responsabilidad: "Responsabilidad",
+  extraversion: "Extraversión",
+  amabilidad: "Amabilidad",
+  neuroticismo: "Neuroticismo",
+};
+
+/**
+ * Parses lines like `Apertura: baja=…; media-baja=…; alta/muy-alta=…` into segments.
+ */
+function parseLegacyOceanRuleSegments(ruleLine) {
+  const raw = String(ruleLine || "").trim();
+  const colon = raw.indexOf(":");
+  if (colon === -1) return { segments: {} };
+  const body = raw.slice(colon + 1).trim();
+  const segments = {};
+  for (const part of body.split(";")) {
+    const p = String(part || "").trim();
+    if (!p) continue;
+    const eq = p.indexOf("=");
+    if (eq === -1) continue;
+    const k = p.slice(0, eq).trim();
+    const v = p.slice(eq + 1).trim();
+    if (k && v) segments[k] = v;
+  }
+  return { segments };
+}
+
+/** Devuelve el texto de baremo aplicable al matiz Likert-detail del perfil (un solo nivel por rasgo). */
+function traitDiscoverySliceForDetail(ruleLine, detailBand) {
+  const { segments } = parseLegacyOceanRuleSegments(ruleLine);
+  const pick = (k) => (segments[k] ? String(segments[k]).trim() : "");
+
+  switch (detailBand) {
+    case "muy-baja":
+      return pick("muy-baja") || pick("baja") || pick("media-baja");
+    case "baja":
+      return pick("baja") || pick("media-baja");
+    case "media-baja":
+      return pick("media-baja") || pick("baja") || pick("media-alta");
+    case "media-alta":
+      return pick("media-alta") || pick("media-baja") || pick("alta/muy-alta");
+    case "alta":
+    case "muy-alta":
+      return pick("alta/muy-alta") || pick("alta") || pick("muy-alta") || pick("media-alta");
+    default:
+      return pick("media-alta") || pick("media-baja");
+  }
+}
+
+function formatAbstractRulesFiltered(heading, rules, dimensions) {
+  const lines = [];
+  for (const [key, value] of dimensions) {
+    const detail = scoreDetailBand(value);
+    const full = rules[key];
+    if (!full) continue;
+    const slice = traitDiscoverySliceForDetail(full, detail);
+    if (!slice) continue;
+    const label = DIMENSION_LABEL_ES[key] || key;
+    lines.push(`  - ${label} (${detail}): ${slice}`);
+  }
+  if (!lines.length) return "";
+  return (
+    `- Reglas para ${heading} — **un criterio por rasgo** acorde al matiz de este perfil (el resto de niveles se omite):\n` +
+    lines.join("\n")
+  );
+}
 
 function spanishOceanDimensionsFromTotals(totals) {
   return [
@@ -342,41 +413,53 @@ function stablePickOneExample(rawExamples, seed) {
   return options[hash % options.length];
 }
 
-function formatFacetExamplesBlock(dimensions, examplesByFacet, heading, targetLabel, seedSalt = "") {
-  const selected = topFacetKeys(dimensions, 2);
-  const lines = selected.map((key) => {
-    const value = dimensions.find(([k]) => k === key)?.[1] ?? 0;
+/** Una referencia de tono por cada rasgo (matiz según puntación), no solo los dos rasgos más altos. */
+function formatFacetExamplesAllDimensions(dimensions, examplesByFacet, heading, targetLabel, seedSalt = "") {
+  const lines = [];
+  for (const [key, value] of dimensions) {
     const detail = scoreDetailBand(value);
     const rawExamples =
-      examplesByFacet[key]?.[detail] || examplesByFacet[key]?.["media-baja"] || "";
+      examplesByFacet[key]?.[detail] ||
+      examplesByFacet[key]?.["media-baja"] ||
+      examplesByFacet[key]?.["media-alta"] ||
+      "";
     const ex = stablePickOneExample(rawExamples, `${seedSalt}|${heading}|${key}|${detail}`);
-    return `  - ${key} (${detail}): ${ex}`;
-  });
+    if (!ex) continue;
+    const label = DIMENSION_LABEL_ES[key] || key;
+    lines.push(`  - ${label} (${detail}): ${ex}`);
+  }
+  if (!lines.length) return "";
   return (
-    `- ${heading} — referencias de tono (ejemplos alineados con las facetas más marcadas de este perfil):\n` +
-    `  Úsalos como **brújula**: propón **otras obras reales** que transmitan la misma sensibilidad (atmósfera, tensión, forma); prioriza ${targetLabel} distintos y verificables, variando títulos sin traicionar el matiz.\n` +
-    `${lines.join("\n")}`
+    `- ${heading} — referencias de tono (un ejemplo por rasgo, matizado a este perfil):\n` +
+    `  Úsalas como **brújula**: propón **otras obras reales** equivalentes en sensibilidad; prioriza ${targetLabel} distintos y verificables.\n` +
+    lines.join("\n")
   );
 }
 
 function formatCategoryRuleSections(dimensions, seedSalt = "") {
-  const dimKeys = dimensions.map(([key]) => key);
   return CATEGORY_RULE_BLOCKS.map(({ heading, rules }) => {
     const cal = HEADING_CALIBRATION_EXAMPLES[heading];
+    const abstractFiltered = formatAbstractRulesFiltered(heading, rules, dimensions);
+
     if (cal) {
-      return formatFacetExamplesBlock(
+      const exampleBlock = formatFacetExamplesAllDimensions(
         dimensions,
         cal.dataset,
         heading,
         cal.targetLabel,
         seedSalt
       );
+      const abstractFromCal =
+        cal.abstractRules && typeof cal.abstractRules === "object"
+          ? formatAbstractRulesFiltered(`${heading} — criterio abstracto por rasgo`, cal.abstractRules, dimensions)
+          : "";
+      const parts = [exampleBlock, abstractFromCal].filter(Boolean);
+      return parts.join("\n\n");
     }
-    return (
-      `- Reglas para ${heading} (solo dimensiones abstractas; sin títulos de obras en esta subsección — traduce cada rasgo a criterios de descubrimiento):\n` +
-      dimKeys.map((k) => `  - ${rules[k]}`).join("\n")
-    );
-  }).join("\n");
+
+    return abstractFiltered;
+  }).filter(Boolean)
+    .join("\n\n");
 }
 
 function distinctiveSpanishTraitLine(dimensions) {
