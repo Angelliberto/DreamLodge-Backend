@@ -10,7 +10,6 @@ const {
   DEFAULT_OCEAN_SCORE_METRIC,
 } = require("../../../utils/ai/agentUtils");
 const {
-  buildArtisticProfileExtra,
   buildOceanFacetInterpretation,
   buildPersonalizedFeedCuratorPrompt,
   feedEntityIdFromOceanResult,
@@ -64,7 +63,6 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
   );
 
   const webUsed = false;
-  const artExtra = buildArtisticProfileExtra(artisticProfile);
   const promptBuildStartAt = Date.now();
   const prompt = buildPersonalizedFeedCuratorPrompt({
     o,
@@ -73,16 +71,14 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
     a,
     n,
     oceanFingerprint,
-    artExtra,
     rulesText: profileDrivenRules.rulesText,
     facetInterpretation,
     keySubfacets,
-    targetCandidates: TARGET_CANDIDATES,
   });
   const promptBuildMs = Date.now() - promptBuildStartAt;
 
   console.log(
-    `[dreamlodge] PROMPT FEED PERSONALIZADO (OCEAN) → IA | fingerprint=${oceanFingerprint} | ${prompt.length} chars\n${prompt}`
+    `[dreamlodge] PROMPT FEED PERSONALIZADO (OCEAN) → IA | fingerprint=${oceanFingerprint} | ${prompt.length} chars | ts=${new Date().toISOString()}\n${prompt}`
   );
 
   let text;

@@ -1,15 +1,12 @@
-const { PROMPT_TMDB_SPAIN_CINE_TITLE_RULE, pickVideoGameExplorationAxes } = require("../../../utils/ai/agentUtils");
+const {
+  PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
+  oceanLikertTraitBand,
+  IPIP_LIKERT_BAND_HIGH_GE,
+  IPIP_LIKERT_BAND_LOW_LT,
+} = require("../../../utils/ai/agentUtils");
 
-/** Media Likert 1–5 (Mini-IPIP/IPIP): un solo origen para bandas alta/media/baja en anti-patrón y reglas adaptativas. */
-const IPIP_BAND_HIGH_GE = 3.55;
-const IPIP_BAND_LOW_LT = 2.75;
-
-function scoreBand(v) {
-  const n = Number(v) || 0;
-  if (n >= IPIP_BAND_HIGH_GE) return "alta";
-  if (n < IPIP_BAND_LOW_LT) return "baja";
-  return "media";
-}
+/** Misma banda alta/media/baja que buildProfileDrivenCurationRules (agentUtils). */
+const scoreBand = oceanLikertTraitBand;
 
 function scoreDetailBand(v) {
   const n = Number(v) || 0;
@@ -462,62 +459,6 @@ function mechanicalCurationLines(c, n) {
   return [MECHANICAL_LINE_BY_BAND.c[bc], MECHANICAL_LINE_BY_BAND.n[bn]];
 }
 
-const NEGATIVE_ANTIPATTERNS = {
-  o: {
-    alta:
-      'Apertura ALTA: NO llenes la lista solo con remakes, blockbusters de fórmula o "obras raras" vacías sin sustancia; la rareza debe ir acompañada de intención clara.',
-    baja:
-      "Apertura BAJA: NO fuerces vanguardia ilegible, metaficción constante ni formalismo extremo como mayoría; respeta necesidad de anclas narrativas o melódicas.",
-    media:
-      'Apertura MEDIA: NO polarices todo entre catálogo mainstream y experimentación inaccesible; evita el cliché de mezcla "de manual" sin matices.',
-  },
-  c: {
-    alta:
-      "Responsabilidad ALTA: NO propongas como eje obras caóticas sin sistema, sin reglas internas ni progresión comprensible en la mayoría de entradas.",
-    baja:
-      "Responsabilidad BAJA: NO satures de simulación milimétrica, puzzles ultra-rígidos o narrativas hiper-controladas sin respiradero creativo.",
-    media:
-      'Responsabilidad MEDIA: NO caigas en "solo orden" o "solo caos"; evita listas que ignoren el equilibrio entre método y libertad.',
-  },
-  e: {
-    alta:
-      "Extraversión ALTA: NO te quedes solo en íntimo, lento y de baja estimulación social en la mayoría de candidatos; evita monotonía contemplativa.",
-    baja:
-      "Extraversión BAJA: NO priorices solo multijugador ruidoso, maximalismo social o alto bombardeo performativo sin pausas introspectivas.",
-    media:
-      "Extraversión MEDIA: NO uses solo un registro (fiesta continua o ermitaño total); alterna mal la escala social.",
-  },
-  a: {
-    alta:
-      "Amabilidad ALTA: NO abuses de crueldad gratuita, humillación voyerista, cinismo fácil ni conflictos resueltos solo con sarcasmo duro.",
-    baja:
-      "Amabilidad BAJA: NO rellenes con fábulas edulcoradas, moralina ingenua ni arcos de redención forzada y complacientes en exceso.",
-    media:
-      'Amabilidad MEDIA: NO homogeneices todo a "bondad light" ni todo a fricción cínica; evita tono único en toda la tanda.',
-  },
-  n: {
-    alta:
-      'Neuroticismo ALTO: NO suavices el feed a catálogo solo "zen/bienestar" ni trivialices emociones fuertes con soluciones genéricas.',
-    baja:
-      "Neuroticismo BAJO: NO conviertas la lista en maratón de tragedia, terror psicológico o ansiedad constante sin respiros reguladores.",
-    media:
-      "Neuroticismo MEDIO: NO mezcles solo melodrama barato ni solo frialdad emocional; evita ausencia de arco afectivo creíble.",
-  },
-};
-
-const NEG_ANTIPATTERN_TRAIT_KEYS = ["o", "c", "e", "a", "n"];
-
-function negativeCurationLines(o, c, e, a, n) {
-  const totals = [o, c, e, a, n];
-  return NEG_ANTIPATTERN_TRAIT_KEYS.map((k, i) => NEGATIVE_ANTIPATTERNS[k][scoreBand(totals[i])]);
-}
-
-function entropyBucketCounts(targetTotal) {
-  const safe = Math.round(targetTotal * 0.2);
-  const niche = Math.round(targetTotal * 0.5);
-  return { safe, niche, risk: targetTotal - safe - niche };
-}
-
 function formatSubfacetBlockForPrompt(keySubfacets) {
   if (!keySubfacets.length) {
     return "   (sin subfacetas numéricas; infiere con cuidado desde los totales OCEAN.)";
@@ -556,8 +497,8 @@ const IPIP_ADAPTIVE_SPECS = [
 
 /** Ajustes de curación según bandas IPIP (mismos umbrales que `scoreBand`). */
 function buildAdaptiveRulesFromTest(o, c, e, a, n) {
-  const hi = IPIP_BAND_HIGH_GE;
-  const loLt = IPIP_BAND_LOW_LT;
+  const hi = IPIP_LIKERT_BAND_HIGH_GE;
+  const loLt = IPIP_LIKERT_BAND_LOW_LT;
   const values = [o, c, e, a, n];
   const rules = [];
   for (let i = 0; i < IPIP_ADAPTIVE_SPECS.length; i += 1) {
@@ -565,20 +506,13 @@ function buildAdaptiveRulesFromTest(o, c, e, a, n) {
     const { label, high, low } = IPIP_ADAPTIVE_SPECS[i];
     if (v >= hi) {
       rules.push(
-        `${label} en rango alto (media Likert ≥${IPIP_BAND_HIGH_GE}, IPIP): ${high}`
+        `${label} en rango alto (media Likert ≥${IPIP_LIKERT_BAND_HIGH_GE}, IPIP): ${high}`
       );
     } else if (v < loLt) {
-      rules.push(`${label} en rango bajo (media Likert <${IPIP_BAND_LOW_LT}, IPIP): ${low}`);
+      rules.push(`${label} en rango bajo (media Likert <${IPIP_LIKERT_BAND_LOW_LT}, IPIP): ${low}`);
     }
   }
   return rules;
-}
-
-function buildArtisticProfileExtra(artisticProfile) {
-  if (!artisticProfile || typeof artisticProfile !== "object") return "";
-  const prof = String(artisticProfile.profile || "").trim();
-  const desc = String(artisticProfile.description || "").trim().slice(0, 500);
-  return `\nPerfil artístico existente: ${prof}\n${desc}\n`;
 }
 
 function diversityPromptSalt() {
@@ -597,23 +531,14 @@ function buildPersonalizedFeedCuratorPrompt({
   a,
   n,
   oceanFingerprint,
-  artExtra,
   rulesText,
   facetInterpretation,
   keySubfacets,
-  targetCandidates,
 }) {
-  const { safe: nEntropySafe, niche: nEntropyNiche, risk: nEntropyRisk } = entropyBucketCounts(
-    targetCandidates
-  );
   const subfacetBlock = formatSubfacetBlockForPrompt(keySubfacets);
   const adaptiveRules = buildAdaptiveRulesFromTest(o, c, e, a, n);
   const mechanicalLines = mechanicalCurationLines(c, n);
-  const negativeLines = negativeCurationLines(o, c, e, a, n);
   const diversitySalt = diversityPromptSalt();
-  const gameAxes = pickVideoGameExplorationAxes(oceanFingerprint, 2);
-  const gameAxisA = gameAxes[0] || "(eje no disponible)";
-  const gameAxisB = gameAxes[1] || "(eje no disponible)";
   const [oS, cS, eS, aS, nS] = oceanMeansLikertParts(o, c, e, a, n);
   const oceanMeansInline = `O:${oS}, C:${cS}, E:${eS}, A:${aS}, N:${nS}`;
   const oceanCombinationLine = `Combinación global OCEAN prioritaria: ${oceanMeansInline.replace(/, /g, " + ")}.`;
@@ -624,7 +549,6 @@ function buildPersonalizedFeedCuratorPrompt({
       "### PERFIL",
       `- OCEAN (medias Likert 1–5 por rasgo, ítems recodificados estilo IPIP): ${oceanMeansInline}`,
       `- Huella: ${oceanFingerprint}`,
-      artExtra.trim() ? artExtra.trim() : null,
       `- Diferenciación obligatoria: ${rulesText}`,
     ]
       .filter(Boolean)
@@ -632,29 +556,21 @@ function buildPersonalizedFeedCuratorPrompt({
     [
       "### REGLAS NÚCLEO",
       "1) Evita listas obvias y convergencia entre usuarios; prioriza long-tail verificable.",
-      `2) Videojuegos: al menos 6 candidatos alineados con ambos ejes: (1) ${gameAxisA} (2) ${gameAxisB}.`,
-      "3) Música: al menos 6 candidatos; genreHint con subgén/movimiento concreto, no etiquetas vagas.",
-      "4) Subfacetas disponibles:",
+      "2) Subfacetas disponibles:",
       subfacetBlock,
-      '4.1) Cualquier bloque más abajo con títulos concretos (solo cine/literatura ya) es tonalidad/plantilla mental, NO algo que el usuario \"deba recibir\". Máximo 1 coincidencia literal entre TODOS los candidatos si repites ese título de ejemplo.',
-      "4.2) Música y videojuegos: el prompt usa solo rasgos dimensionales abstractos ahí — no tienes lista de obra de calibración; evita repetir la misma nómina habitual que recomendaría un modelo genérico ante OCEAN parecido; obliga dispersión década/región/formato/indie dentro de ese par de categorías.",
-      `5) Genera exactamente ${targetCandidates} candidatos en cinco categorías (cine, musica, literatura, videojuegos, arte-visual), balanceadas cuando sea posible.`,
-      `   - ${nEntropySafe} obras "seguras" (alto encaje OCEAN, popularidad media).`,
-      `   - ${nEntropyNiche} obras de nicho (alto encaje, baja popularidad / indie / autor).`,
-      `   - ${nEntropyRisk} "apuestas de riesgo" (desafían al usuario pero encajan en apertura o neuroticismo del perfil).`,
-      "6) Lógica mecánica (no solo estética):",
+      '2.1) Cualquier bloque más abajo con títulos concretos (solo cine/literatura ya) es tonalidad/plantilla mental, NO algo que el usuario \"deba recibir\". Máximo 1 coincidencia literal entre TODOS los candidatos si repites ese título de ejemplo.',
+      "2.2) Música y videojuegos: el prompt usa solo rasgos dimensionales abstractos ahí — no tienes lista de obra de calibración; evita repetir la misma nómina habitual que recomendaría un modelo genérico ante OCEAN parecido; obliga dispersión década/región/formato/indie dentro de ese par de categorías.",
+      "3) Lógica mecánica (no solo estética):",
       mechanicalLines.map((x) => `   - ${x}`).join("\n"),
-      "7) Prohibido puntuar solo por rasgo individual: decide cada recomendación por patrón total del perfil (trade-offs entre O, C, E, A, N).",
-      `8) ${oceanCombinationLine}`,
+      "4) Prohibido puntuar solo por rasgo individual: decide cada recomendación por patrón total del perfil (trade-offs entre O, C, E, A, N).",
+      `5) ${oceanCombinationLine}`,
     ].join("\n"),
     adaptiveRules.length
       ? `### AJUSTE DINÁMICO POR TEST OCEAN\n${adaptiveRules.map((x) => `- ${x}`).join("\n")}`
       : "",
-    `### ANTI-PATRONES (NO SATURAR)\n${negativeLines.map((x) => `   - ${x}`).join("\n")}`,
     `### REGLAS POR FACETA/CATEGORÍA\n${facetInterpretation}`,
     [
       "### CONTEXTO",
-      "Sin búsqueda web. Usa solo conocimiento interno.",
       "Títulos/creadores reales y buscables.",
       PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
     ].join("\n"),
@@ -668,7 +584,6 @@ Devuelve solo este objeto JSON:
 }
 
 module.exports = {
-  buildArtisticProfileExtra,
   buildOceanFacetInterpretation,
   buildPersonalizedFeedCuratorPrompt,
   feedEntityIdFromOceanResult,

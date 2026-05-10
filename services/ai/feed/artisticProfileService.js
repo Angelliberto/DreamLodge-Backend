@@ -11,21 +11,15 @@ const {
   PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
   oceanScoresToCanonicalLikert,
   DEFAULT_OCEAN_SCORE_METRIC,
+  oceanLikertTraitBand,
 } = require("../../../utils/ai/agentUtils");
 
-function scoreBand(v) {
-  const n = Number(v) || 0;
-  if (n >= 3.8) return "alta";
-  if (n <= 2.2) return "baja";
-  return "media";
-}
-
 function buildCompactOceanGuidance(totals) {
-  const oBand = scoreBand(totals.o);
-  const cBand = scoreBand(totals.c);
-  const eBand = scoreBand(totals.e);
-  const aBand = scoreBand(totals.a);
-  const nBand = scoreBand(totals.n);
+  const oBand = oceanLikertTraitBand(totals.o);
+  const cBand = oceanLikertTraitBand(totals.c);
+  const eBand = oceanLikertTraitBand(totals.e);
+  const aBand = oceanLikertTraitBand(totals.a);
+  const nBand = oceanLikertTraitBand(totals.n);
   const dimensionRows = [
     { key: "apertura", value: Number(totals.o) || 0 },
     { key: "responsabilidad", value: Number(totals.c) || 0 },

@@ -29,6 +29,18 @@ const WORK_CAT_ALIAS = {
   pintura: "arte-visual",
 };
 
+/** Umbrales IPIP (media Likert 1–5 por rasgo): misma lógica que anti-patrones / ajuste dinámico del feed. */
+const IPIP_LIKERT_BAND_HIGH_GE = 3.55;
+const IPIP_LIKERT_BAND_LOW_LT = 2.75;
+
+/** Banda cualitativa alta / media / baja (etiquetas en español para prompts). */
+function oceanLikertTraitBand(v) {
+  const n = Number(v) || 0;
+  if (n >= IPIP_LIKERT_BAND_HIGH_GE) return "alta";
+  if (n < IPIP_LIKERT_BAND_LOW_LT) return "baja";
+  return "media";
+}
+
 const OCEAN_SUBFACET_ORDER = {
   openness: [
     "intellect",
@@ -227,34 +239,27 @@ function buildDeepSubfacetsBlock(scores) {
   return `Subfacetas detalladas (deben considerarse todas):\n${parts.join("\n")}\n`;
 }
 
-function scoreBand(v) {
-  const n = Number(v) || 0;
-  if (n >= 3.8) return "high";
-  if (n <= 2.2) return "low";
-  return "mid";
-}
-
 function buildProfileDrivenCurationRules({ o, c, e, a, n, fingerprint }) {
-  const ob = scoreBand(o);
-  const cb = scoreBand(c);
-  const eb = scoreBand(e);
-  const ab = scoreBand(a);
-  const nb = scoreBand(n);
+  const ob = oceanLikertTraitBand(o);
+  const cb = oceanLikertTraitBand(c);
+  const eb = oceanLikertTraitBand(e);
+  const ab = oceanLikertTraitBand(a);
+  const nb = oceanLikertTraitBand(n);
   const rules = [
-    `Apertura ${ob}, Responsabilidad ${cb}, Extraversión ${eb}, Amabilidad ${ab}, Neuroticismo ${nb}.`,
-    eb === "high"
+    `Apertura ${ob}, Responsabilidad ${cb}, Extraversión ${eb}, Amabilidad ${ab}, Neuroticismo ${nb} (cortes IPIP: ≥${IPIP_LIKERT_BAND_HIGH_GE} alta, <${IPIP_LIKERT_BAND_LOW_LT} baja, resto media).`,
+    eb === "alta"
       ? "Prioriza propuestas con energía social y dinamismo."
-      : eb === "low"
+      : eb === "baja"
       ? "Prioriza propuestas introspectivas, contemplativas y de ritmo pausado."
       : "Combina propuestas introspectivas y sociales de forma equilibrada.",
-    nb === "high"
+    nb === "alta"
       ? "Incluye intensidad emocional y catarsis guiada; evita frialdad excesiva."
-      : nb === "low"
+      : nb === "baja"
       ? "Incluye calma, precisión formal y coherencia estética."
       : "Alterna estabilidad tonal con contraste emocional moderado.",
-    ob === "high"
+    ob === "alta"
       ? "Incluye riesgo creativo y estructuras menos convencionales."
-      : ob === "low"
+      : ob === "baja"
       ? "Incluye claridad narrativa y formatos más accesibles."
       : "Mezcla innovación moderada con formatos familiares.",
     `Usa la huella ${String(fingerprint || "na")} para que la selección sea única del perfil y no clónica frente a otros usuarios.`,
@@ -436,6 +441,9 @@ const PROMPT_TMDB_SPAIN_CINE_TITLE_RULE =
   "- CINE (película o serie): en \"title\" usa el nombre comercial en español de España exactamente como lo lista TMDB con locale es-ES (cartelera España). No uses título en inglés ni variantes latinoamericanas si en TMDB España el estreno tiene otro título; así el validador automático encuentra la ficha.";
 
 module.exports = {
+  IPIP_LIKERT_BAND_HIGH_GE,
+  IPIP_LIKERT_BAND_LOW_LT,
+  oceanLikertTraitBand,
   normalizeWorkCandidateRows,
   formatExceptionForClient,
   traitTotal,
