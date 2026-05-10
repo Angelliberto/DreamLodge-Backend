@@ -162,6 +162,10 @@ Responde SOLO JSON válido, sin markdown:
   ]
 }`;
 
+  console.log(
+    `[dreamlodge] PROMPT DESCRIPCIÓN ARTÍSTICA (test OCEAN) → IA | user=${userId || "anon"} | fp=${oceanFingerprint} | ${prompt.length} chars\n${prompt}`
+  );
+
   let text;
   try {
     text = await agent.generateWithGemini(prompt, {

@@ -81,16 +81,9 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
   });
   const promptBuildMs = Date.now() - promptBuildStartAt;
 
-  const dumpFullPrompt =
-    process.env.FEED_LOG_FULL_PROMPT === "1" ||
-    /^true$/i.test(String(process.env.FEED_LOG_FULL_PROMPT || ""));
-  if (dumpFullPrompt) {
-    logger.info("[dreamlodge][feed] full_curator_prompt chars=%s fingerprint=%s", prompt.length, oceanFingerprint);
-    // Salida literal multilinea (los loggers tipo JSON suelen aplastar saltos de línea)
-    console.log(
-      `\n---------- FEED CURATOR PROMPT (chars=${prompt.length}) ----------\n${prompt}\n---------- FIN PROMPT ----------\n`
-    );
-  }
+  console.log(
+    `[dreamlodge] PROMPT FEED PERSONALIZADO (OCEAN) → IA | fingerprint=${oceanFingerprint} | ${prompt.length} chars\n${prompt}`
+  );
 
   let text;
   const modelStartAt = Date.now();
