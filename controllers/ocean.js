@@ -9,7 +9,7 @@ const {
 } = require("../utils/ai/agentUtils");
 
 const BIG_FIVE_TRAITS = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism'];
-const ARTISTIC_PROMPT_VERSION = "v4-genre-specificity";
+const ARTISTIC_PROMPT_VERSION = "v5-no-genre-object";
 
 function parseArtisticDescriptionPayload(raw) {
   if (!raw || typeof raw !== "string") return null;
@@ -634,15 +634,11 @@ const generateArtisticDescription = async (req, res) => {
       const swCount = Array.isArray(artisticDescription?.suggestedWorks)
         ? artisticDescription.suggestedWorks.length
         : 0;
-      const gr = artisticDescription?.genreRecommendations;
-      const grKeys =
-        gr && typeof gr === "object" ? Object.keys(gr).join(",") : "none";
       console.log(
-        "[ocean artistic-description] generado userId=%s forceRegenerate=%s suggestedWorks=%s genreRecommendations_keys=%s | obras detalladas: busca en logs el prefijo [dreamlodge][ia_obras] artistic_description",
+        "[ocean artistic-description] generado userId=%s forceRegenerate=%s suggestedWorks=%s | obras detalladas: busca en logs el prefijo [dreamlodge][ia_obras] artistic_description",
         userId,
         Boolean(forceRegenerate),
-        swCount,
-        grKeys
+        swCount
       );
     } catch (genErr) {
       console.error("[ocean artistic-description] fallo IA:", genErr?.message || genErr);

@@ -4,14 +4,10 @@ const {
   buildDeepSubfacetsBlock,
   buildProfileDrivenCurationRules,
   buildOceanFingerprint,
-  normalizeGenreRecommendations,
-  genreSpecificityMetrics,
-  genreNaturalnessMetrics,
   normalizeProfileDescription,
-  normalizeSuggestedWorksByGenre,
+  normalizeWorkCandidateRows,
   countDefaultCanonOverlap,
   countGlobalCanonOverlap,
-  GENRE_REC_KEYS,
   PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
   oceanScoresToCanonicalLikert,
   DEFAULT_OCEAN_SCORE_METRIC,
@@ -41,38 +37,8 @@ function buildCompactOceanGuidance(totals) {
   return `Guía OCEAN compacta (sin repetir lógica de curación):
 - Apertura ${oBand}, Responsabilidad ${cBand}, Extraversión ${eBand}, Amabilidad ${aBand}, Neuroticismo ${nBand}.
 - Faceta dominante: ${dominantFacet?.key || "no_disponible"} (${(dominantFacet?.value || 0).toFixed(2)}), úsala como señal principal.
-- Deriva géneros simples y útiles desde esta señal, sin listas rebuscadas ni hiper-específicas.
+- Que la descripción explique tono y estilos de descubrimiento en prosa natural, sin objetos género-etiqueta separados del texto.
 - Evita copiar literalmente reglas largas de curación; aquí solo define orientación general del perfil.`;
-}
-
-function simplifyGenreLabel(raw) {
-  const text = String(raw || "")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!text) return "";
-  const words = text.split(" ").slice(0, 3);
-  return words.join(" ");
-}
-
-function simplifyGenreRecommendations(raw) {
-  const norm = normalizeGenreRecommendations(raw);
-  const out = {};
-  for (const key of GENRE_REC_KEYS) {
-    const list = Array.isArray(norm[key]) ? norm[key] : [];
-    const seen = new Set();
-    const simplified = [];
-    for (const item of list) {
-      const label = simplifyGenreLabel(item);
-      if (!label || seen.has(label)) continue;
-      seen.add(label);
-      simplified.push(label);
-      if (simplified.length >= 4) break;
-    }
-    out[key] = simplified.slice(0, 4);
-  }
-  return out;
 }
 
 async function generateArtisticDescription(agent, oceanResult, options = {}, deps = {}) {
@@ -147,14 +113,13 @@ async function generateArtisticDescription(agent, oceanResult, options = {}, dep
 - Evita tono tajante o absoluto (por ejemplo, evita "eres", "siempre", "nunca"); prefiere "podrías", "sueles", "te puede encajar".`;
 
   const variationBlock = regenerationSeed
-    ? `- Semilla de regeneración: ${regenerationSeed}. Elige una combinación distinta de obras ancla (suggestedWorks) respecto a otras ejecuciones con la misma huella; prioriza títulos distintos siempre que sigan siendo coherentes con el perfil y con genreRecommendations.`
+    ? `- Semilla de regeneración: ${regenerationSeed}. Elige una combinación distinta de obras ancla (suggestedWorks) respecto a otras ejecuciones con la misma huella; prioriza títulos distintos siempre que sigan siendo coherentes con el perfil y con la descripción.`
     : "- Primera generación o sin semilla: elige obras ancla variadas, menos obvias y coherentes con el perfil.";
 
   const prompt = `Actúa como guía psicométrico-cultural orientado a recomendación.
 Tu tarea es:
 1) Usar exactamente "Análisis de personalidad" en "profile" (no inventes otro nombre).
-2) Inferir GÉNEROS base por ámbito cultural en "genreRecommendations" (sin nombres de obras en ese objeto).
-3) Proponer OBRAS CONCRETAS ancla en "suggestedWorks" (reales, buscables en TMDB, Spotify, Google Books, IGDB o museos), alineadas con el perfil, con "description" y con los géneros declarados en genreRecommendations.
+2) Proponer OBRAS CONCRETAS ancla en "suggestedWorks" (reales, buscables en TMDB, Spotify, Google Books, IGDB o museos), alineadas con el perfil y con "description".
 ${PROMPT_TMDB_SPAIN_CINE_TITLE_RULE}
 
 ${variationBlock}
@@ -171,7 +136,7 @@ Contexto: no se usa búsqueda web externa. Prioriza obras menos obvias pero fiel
 
 En tu razonamiento interno (no lo escribas): elige 10-16 obras reales mezclando categorías; que cada categoría tenga al menos una obra coherente con los rasgos más distintivos del perfil (no solo uno). En música y videojuegos, fuerza mayoría fuera del pack de GOTY/streaming repetido; alterna épocas y estudios/región.
 
-En música y videojuegos: cada entrada suggestedWorks debe estar alineada con la interacción de al menos DOS dimensiones OCEAN (no justifiques solo con un rasgo ni con frases cliché reproducibles entre usuarios).
+En música y videojuegos: suggestedWorks debe sentirse anclado al perfil (tono, ritmo, complejidad); evita justificaciones cliché intercambiables entre usuarios; no fuerces enumerar rasgos si el encaje es claro.
 
 ${descriptionGuidelines}
 
@@ -184,28 +149,16 @@ Objetivo de escritura de la descripción:
 - Mantén un tono acompañante: orienta, sugiere y propone caminos de exploración.
 - Patrón recomendado de redacción: "tiendes a ser X en Y, por lo que te puede gustar Z".
 
-Campo "genreRecommendations" (obligatorio):
-- Debe incluir EXACTAMENTE estas claves: "cine", "musica", "literatura", "videojuegos", "arte-visual".
-- Cada clave: array de 2 a 4 strings, simples y útiles.
-- Longitud por etiqueta: 1 a 3 palabras (ej. "drama psicológico", "indie narrativo", "synth pop").
-- Evita etiquetas rebuscadas, compuestas en exceso o demasiado abstractas.
-- NO pongas títulos de obras ni nombres de artistas dentro de genreRecommendations; solo géneros/estilos.
-- Debe derivarse del perfil OCEAN actual y ser coherente con "description".
-- No repitas aquí la lógica de curación detallada; usa este campo solo como resumen de orientación.
+Campo "suggestedWorks" (obligatorio):
+- Mezcla categorías: cine, musica, literatura, videojuegos, arte-visual.
+- Cada entrada: category, title, creator (opcional), genreHint (subgénero o matiz concreto coherente con la obra y el párrafo description, 1–4 palabras útiles).
 
 Responde SOLO JSON válido, sin markdown:
 {
   "profile": "Análisis de personalidad",
   "description": "texto en español que cumpla estrictamente las reglas anteriores",
-  "genreRecommendations": {
-    "cine": ["género o estilo 1", "género o estilo 2"],
-    "musica": ["..."],
-    "literatura": ["..."],
-    "videojuegos": ["..."],
-    "arte-visual": ["..."]
-  },
   "suggestedWorks": [
-    {"category":"cine","title":"Título en español de España (TMDB es-ES) si aplica","creator":"director o autor opcional","genreHint":"uno de los géneros exactos declarados en genreRecommendations.cine"}
+    {"category":"cine","title":"Título en español de España (TMDB es-ES) si aplica","creator":"director o autor opcional","genreHint":"matiz concreto (ej. drama psicológico europeo)"}
   ]
 }`;
 
@@ -256,63 +209,10 @@ Responde SOLO JSON válido, sin markdown:
   }
   if (parsed.recommendations == null) parsed.recommendations = [];
 
-  const genresNorm = simplifyGenreRecommendations(parsed.genreRecommendations);
-  const missingGenreKeys = GENRE_REC_KEYS.filter((k) => !genresNorm[k] || genresNorm[k].length < 1);
-  if (missingGenreKeys.length) {
-    const err = new Error(`La respuesta del modelo incompleta en genreRecommendations: ${missingGenreKeys.join(", ")}`);
-    err.statusCode = 502;
-    throw err;
-  }
-
-  const genreMetrics = genreSpecificityMetrics(genresNorm);
-  const genericRatio = genreMetrics.total > 0 ? genreMetrics.genericCount / genreMetrics.total : 1;
-  const naturalness = genreNaturalnessMetrics(genresNorm);
-  const overengineeredRatio =
-    naturalness.total > 0 ? naturalness.overengineeredCount / naturalness.total : 0;
-  logger.info(
-    "[dreamlodge][ia_profile] genre_specificity userId=%s total=%s generic=%s specific=%s genericRatio=%s overengineeredRatio=%s",
-    userId || "(anon)",
-    genreMetrics.total,
-    genreMetrics.genericCount,
-    genreMetrics.specificCount,
-    genericRatio.toFixed(2),
-    overengineeredRatio.toFixed(2)
-  );
-  if (genericRatio > 0.3) {
-    if (!options._retryGenreSpecificity) {
-      return generateArtisticDescription(agent, oceanResult, {
-        ...options,
-        regenerationSeed: regenerationSeed || `auto-genre-specific-${Date.now().toString(36)}`,
-        _retryGenreSpecificity: true,
-      }, deps);
-    }
-    const err = new Error("genreRecommendations demasiado genérico; se requiere mayor especificidad por perfil.");
-    err.statusCode = 502;
-    throw err;
-  }
-  if (overengineeredRatio > 0.35) {
-    if (!options._retryGenreNaturalness) {
-      return generateArtisticDescription(
-        agent,
-        oceanResult,
-        {
-          ...options,
-          regenerationSeed:
-            regenerationSeed || `auto-genre-natural-${Date.now().toString(36)}`,
-          _retryGenreNaturalness: true,
-        },
-        deps
-      );
-    }
-    const err = new Error("genreRecommendations demasiado rebuscado; se requiere lenguaje más natural.");
-    err.statusCode = 502;
-    throw err;
-  }
-
-  parsed.genreRecommendations = genresNorm;
   parsed.suggestedWorks = Array.isArray(parsed.suggestedWorks)
-    ? normalizeSuggestedWorksByGenre(parsed.suggestedWorks, parsed.genreRecommendations, 20)
+    ? normalizeWorkCandidateRows(parsed.suggestedWorks, 20)
     : [];
+  delete parsed.genreRecommendations;
 
   const defaultCanonOverlap = countDefaultCanonOverlap(parsed.suggestedWorks, profileDrivenRules.avoidTitles);
   const globalCanonOverlap = countGlobalCanonOverlap(parsed.suggestedWorks);

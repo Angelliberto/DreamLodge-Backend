@@ -526,10 +526,6 @@ const getPersonalizedFeedCurated = async (req, res) => {
             profile: parsed.profile,
             description: parsed.description,
             recommendations: parsed.recommendations,
-            genreRecommendations:
-              parsed.genreRecommendations && typeof parsed.genreRecommendations === "object"
-                ? parsed.genreRecommendations
-                : undefined,
             suggestedWorks: Array.isArray(parsed.suggestedWorks)
               ? parsed.suggestedWorks
               : [],
@@ -916,10 +912,6 @@ const rebuildPersonalizedFeed = async (req, res) => {
             profile: parsed.profile,
             description: parsed.description,
             recommendations: parsed.recommendations,
-            genreRecommendations:
-              parsed.genreRecommendations && typeof parsed.genreRecommendations === "object"
-                ? parsed.genreRecommendations
-                : undefined,
             suggestedWorks: Array.isArray(parsed.suggestedWorks)
               ? parsed.suggestedWorks
               : [],

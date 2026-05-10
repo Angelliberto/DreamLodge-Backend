@@ -255,23 +255,7 @@ function artisticProfilePrompt(oceanResults) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 900);
-  const genreRecommendations =
-    payload.genreRecommendations && typeof payload.genreRecommendations === "object"
-      ? payload.genreRecommendations
-      : {};
   const suggestedWorks = Array.isArray(payload.suggestedWorks) ? payload.suggestedWorks : [];
-
-  const genreLines = [];
-  for (const [category, list] of Object.entries(genreRecommendations)) {
-    if (!Array.isArray(list) || !list.length) continue;
-    const cleaned = list
-      .map((x) => String(x || "").trim())
-      .filter(Boolean)
-      .slice(0, 5);
-    if (cleaned.length) {
-      genreLines.push(`- ${category}: ${cleaned.join(", ")}`);
-    }
-  }
 
   const worksLines = suggestedWorks
     .slice(0, 8)
@@ -293,9 +277,6 @@ function artisticProfilePrompt(oceanResults) {
     ? `Descripción base del análisis: ${description}`
     : "Descripción base del análisis: (no disponible)";
 
-  const genreBlock = genreLines.length
-    ? `\nGéneros/estilos sugeridos por perfil:\n${genreLines.join("\n")}`
-    : "";
   const worksBlock = worksLines.length
     ? `\nObras semilla del análisis de personalidad:\n${worksLines.join("\n")}`
     : "";
@@ -304,7 +285,7 @@ function artisticProfilePrompt(oceanResults) {
 
 ANÁLISIS DE PERSONALIDAD PERSISTIDO DEL USUARIO (prioritario para recomendaciones):
 ${profileLine}
-${descriptionLine}${genreBlock}${worksBlock}
+${descriptionLine}${worksBlock}
 
 Úsalo como contexto de alto valor para orientar tono, complejidad, energía y selección de obras.`;
 }

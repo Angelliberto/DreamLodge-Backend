@@ -87,14 +87,6 @@ const OCEAN_SUBFACET_ORDER = {
   ],
 };
 
-const GENRE_REC_KEYS = [
-  "cine",
-  "musica",
-  "literatura",
-  "videojuegos",
-  "arte-visual",
-];
-
 const DEFAULT_CANON_TITLES = [
   "stalker",
   "blade runner",
@@ -112,32 +104,6 @@ const DEFAULT_CANON_TITLES = [
   "el extranjero",
   "1984",
 ];
-
-const GENERIC_GENRE_TERMS = new Set([
-  "drama",
-  "comedia",
-  "accion",
-  "acción",
-  "thriller",
-  "romance",
-  "terror",
-  "horror",
-  "fantasia",
-  "fantasía",
-  "musica",
-  "música",
-  "rock",
-  "pop",
-  "jazz",
-  "clasica",
-  "clásica",
-  "novela",
-  "ficcion",
-  "ficción",
-  "cine",
-  "arte",
-  "videojuegos",
-]);
 
 function normalizeWorkCandidateRows(rawList, maxItems = 24) {
   if (!Array.isArray(rawList)) return [];
@@ -326,85 +292,6 @@ function buildOceanFingerprint(scores) {
   return (h >>> 0).toString(16).slice(0, 12);
 }
 
-function normalizeGenreRecommendations(raw) {
-  if (!raw || typeof raw !== "object") return {};
-  const out = {};
-  for (const k of GENRE_REC_KEYS) {
-    let arr = raw[k];
-    if (!Array.isArray(arr) && k === "arte-visual" && Array.isArray(raw.arte_visual)) {
-      arr = raw.arte_visual;
-    }
-    if (!Array.isArray(arr)) continue;
-    const cleaned = arr
-      .map((x) => String(x || "").trim())
-      .filter((x) => x.length > 0)
-      .slice(0, 12);
-    if (cleaned.length) out[k] = cleaned;
-  }
-  return out;
-}
-
-function normalizeGenreText(raw) {
-  return String(raw || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function isGenericGenreLabel(label) {
-  const n = normalizeGenreText(label);
-  if (!n) return true;
-  if (GENERIC_GENRE_TERMS.has(n)) return true;
-  const tokenCount = n.split(" ").filter(Boolean).length;
-  return tokenCount <= 1;
-}
-
-function genreSpecificityMetrics(genreRecommendations) {
-  let total = 0;
-  let genericCount = 0;
-  for (const key of GENRE_REC_KEYS) {
-    const list = Array.isArray(genreRecommendations?.[key])
-      ? genreRecommendations[key]
-      : [];
-    for (const item of list) {
-      total += 1;
-      if (isGenericGenreLabel(item)) genericCount += 1;
-    }
-  }
-  return { total, genericCount, specificCount: Math.max(0, total - genericCount) };
-}
-
-function looksOverengineeredGenreLabel(label) {
-  const raw = String(label || "").trim();
-  if (!raw) return true;
-  const n = normalizeGenreText(raw);
-  const tokenCount = n.split(" ").filter(Boolean).length;
-  const weirdChars = (raw.match(/[\/|()[\]{}]/g) || []).length;
-  const commaCount = (raw.match(/,/g) || []).length;
-  // Penalize ultra-long or stacked compound tags that sound unnatural.
-  return raw.length > 42 || tokenCount > 5 || weirdChars >= 2 || commaCount >= 2;
-}
-
-function genreNaturalnessMetrics(genreRecommendations) {
-  let total = 0;
-  let overengineeredCount = 0;
-  for (const key of GENRE_REC_KEYS) {
-    const list = Array.isArray(genreRecommendations?.[key]) ? genreRecommendations[key] : [];
-    for (const item of list) {
-      total += 1;
-      if (looksOverengineeredGenreLabel(item)) overengineeredCount += 1;
-    }
-  }
-  return {
-    total,
-    overengineeredCount,
-    naturalCount: Math.max(0, total - overengineeredCount),
-  };
-}
-
 function normalizeTitleForCompare(raw) {
   return String(raw || "")
     .normalize("NFD")
@@ -457,16 +344,6 @@ function pickVideoGameExplorationAxes(seed, count = 2) {
   return out;
 }
 
-function isGenreHintCompatible(genreHint, allowedGenres) {
-  if (!genreHint || !Array.isArray(allowedGenres) || !allowedGenres.length) return false;
-  const hint = normalizeGenreText(genreHint);
-  if (!hint) return false;
-  const allowed = allowedGenres.map((g) => normalizeGenreText(g)).filter(Boolean);
-  return allowed.some(
-    (g) => hint === g || hint.includes(g) || g.includes(hint)
-  );
-}
-
 function normalizeProfileDescription(raw) {
   const text = String(raw || "").trim();
   if (!text) return "";
@@ -478,39 +355,6 @@ function normalizeProfileDescription(raw) {
     .replace(/\s+/g, " ")
     .trim();
   return summary.length > 900 ? `${summary.slice(0, 899)}…` : summary;
-}
-
-function normalizeSuggestedWorksByGenre(rawList, genreRecommendations, maxItems = 20) {
-  if (!Array.isArray(rawList) || !genreRecommendations || typeof genreRecommendations !== "object") {
-    return [];
-  }
-
-  const cleaned = normalizeWorkCandidateRows(rawList, maxItems * 2);
-  const byKey = new Map();
-  for (const item of rawList) {
-    if (!item || typeof item !== "object") continue;
-    const key = `${String(item.category || "").trim().toLowerCase().replace(/\s+/g, "").replace(/_/g, "-")}|${String(item.title || "").trim().toLowerCase()}`;
-    byKey.set(key, item);
-  }
-
-  const filtered = [];
-  for (const row of cleaned) {
-    const key = `${row.category}|${String(row.title || "").trim().toLowerCase()}`;
-    const original = byKey.get(key);
-    const hint =
-      original?.genreHint ||
-      original?.genre ||
-      original?.style ||
-      original?.subgenre ||
-      "";
-    const allowed = genreRecommendations[row.category] || [];
-    if (isGenreHintCompatible(hint, allowed)) {
-      filtered.push(row);
-      if (filtered.length >= maxItems) break;
-    }
-  }
-
-  return filtered;
 }
 
 function countDefaultCanonOverlap(works, avoidTitles) {
@@ -592,7 +436,6 @@ const PROMPT_TMDB_SPAIN_CINE_TITLE_RULE =
   "- CINE (película o serie): en \"title\" usa el nombre comercial en español de España exactamente como lo lista TMDB con locale es-ES (cartelera España). No uses título en inglés ni variantes latinoamericanas si en TMDB España el estreno tiene otro título; así el validador automático encuentra la ficha.";
 
 module.exports = {
-  GENRE_REC_KEYS,
   normalizeWorkCandidateRows,
   formatExceptionForClient,
   traitTotal,
@@ -602,12 +445,8 @@ module.exports = {
   buildDeepSubfacetsBlock,
   buildProfileDrivenCurationRules,
   buildOceanFingerprint,
-  normalizeGenreRecommendations,
-  genreSpecificityMetrics,
-  genreNaturalnessMetrics,
   normalizeTitleForCompare,
   normalizeProfileDescription,
-  normalizeSuggestedWorksByGenre,
   countDefaultCanonOverlap,
   countGlobalCanonOverlap,
   envModels,

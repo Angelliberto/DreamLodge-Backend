@@ -1,9 +1,13 @@
 const { PROMPT_TMDB_SPAIN_CINE_TITLE_RULE, pickVideoGameExplorationAxes } = require("../../../utils/ai/agentUtils");
 
+/** Media Likert 1–5 (Mini-IPIP/IPIP): un solo origen para bandas alta/media/baja en anti-patrón y reglas adaptativas. */
+const IPIP_BAND_HIGH_GE = 3.55;
+const IPIP_BAND_LOW_LT = 2.75;
+
 function scoreBand(v) {
   const n = Number(v) || 0;
-  if (n >= 3.8) return "alta";
-  if (n <= 2.2) return "baja";
+  if (n >= IPIP_BAND_HIGH_GE) return "alta";
+  if (n < IPIP_BAND_LOW_LT) return "baja";
   return "media";
 }
 
@@ -15,6 +19,10 @@ function scoreDetailBand(v) {
   if (n < 3.8) return "media-alta";
   if (n < 4.4) return "alta";
   return "muy-alta";
+}
+
+function oceanMeansLikertParts(o, c, e, a, n) {
+  return [o, c, e, a, n].map((x) => Number(x || 0).toFixed(2));
 }
 
 function facetValue(scores, traitKey, facetKey) {
@@ -31,15 +39,6 @@ function formatFacetLine(scores, traitKey, facetKey, label) {
   if (v == null) return null;
   return `${label}: ${v.toFixed(2)} (${scoreBand(v)})`;
 }
-
-const FACET_DETAIL_LABELS = {
-  "muy-baja": "muy-baja",
-  baja: "baja",
-  "media-baja": "media-baja",
-  "media-alta": "media-alta",
-  alta: "alta",
-  "muy-alta": "muy-alta",
-};
 
 const FACET_PROMPT_RULES = {
   apertura: {
@@ -304,6 +303,17 @@ const CATEGORY_RULE_BLOCKS = [
   { heading: "ARTE-VISUAL", rules: VISUAL_ART_RULES },
 ];
 
+const HEADING_CALIBRATION_EXAMPLES = {
+  CINE: {
+    dataset: FACET_CINEMA_EXAMPLES,
+    targetLabel: "películas/directores",
+  },
+  LITERATURA: {
+    dataset: FACET_LITERATURE_EXAMPLES,
+    targetLabel: "autores/obras",
+  },
+};
+
 function spanishOceanDimensionsFromTotals(totals) {
   return [
     ["apertura", Number(totals.o) || 0],
@@ -315,8 +325,8 @@ function spanishOceanDimensionsFromTotals(totals) {
 }
 
 function dominantFacetFromDimensions(dimensions) {
-  const sorted = [...dimensions].sort((a, b) => b[1] - a[1]);
-  const [key, value] = sorted[0] || ["no_disponible", 0];
+  const key = topFacetKeys(dimensions, 1)[0] || "no_disponible";
+  const value = Number(dimensions.find(([k]) => k === key)?.[1]) || 0;
   return { key, value };
 }
 
@@ -349,8 +359,7 @@ function formatFacetExamplesBlock(dimensions, examplesByFacet, heading, targetLa
     const rawExamples =
       examplesByFacet[key]?.[detail] || examplesByFacet[key]?.["media-baja"] || "";
     const ex = stablePickOneExample(rawExamples, `${seedSalt}|${heading}|${key}|${detail}`);
-    const label = FACET_DETAIL_LABELS[detail] || detail;
-    return `  - ${key} (${label}): ${ex}`;
+    return `  - ${key} (${detail}): ${ex}`;
   });
   return (
     `- ${heading} (facetas más marcadas en este perfil): ejemplos concretos solo para calibrar matiz, NO catálogo de salida.\n` +
@@ -363,21 +372,13 @@ function formatFacetExamplesBlock(dimensions, examplesByFacet, heading, targetLa
 function formatCategoryRuleSections(dimensions, seedSalt = "") {
   const dimKeys = dimensions.map(([key]) => key);
   return CATEGORY_RULE_BLOCKS.map(({ heading, rules }) => {
-    if (heading === "CINE") {
+    const cal = HEADING_CALIBRATION_EXAMPLES[heading];
+    if (cal) {
       return formatFacetExamplesBlock(
         dimensions,
-        FACET_CINEMA_EXAMPLES,
-        "CINE",
-        "películas/directores",
-        seedSalt
-      );
-    }
-    if (heading === "LITERATURA") {
-      return formatFacetExamplesBlock(
-        dimensions,
-        FACET_LITERATURE_EXAMPLES,
-        "LITERATURA",
-        "autores/obras",
+        cal.dataset,
+        heading,
+        cal.targetLabel,
         seedSalt
       );
     }
@@ -401,8 +402,8 @@ function buildCompactFacetPrompt(dimensions, dominantFacet, seedSalt = "") {
   const dimLines = dimensions.map(([key, value]) => {
     const detail = scoreDetailBand(value);
     const current = Number(value || 0).toFixed(2);
-    const rule = FACET_PROMPT_RULES[key]?.[detail] || FACET_PROMPT_RULES[key]?.media || "";
-    return `- ${key}: ${current} (${FACET_DETAIL_LABELS[detail] || detail}) => ${rule}`;
+    const rule = FACET_PROMPT_RULES[key]?.[detail] || "";
+    return `- ${key}: ${current} (${detail}) => ${rule}`;
   });
 
   return `TRADUCCIÓN OCEAN (compacta, obligatoria):
@@ -504,14 +505,11 @@ const NEGATIVE_ANTIPATTERNS = {
   },
 };
 
+const NEG_ANTIPATTERN_TRAIT_KEYS = ["o", "c", "e", "a", "n"];
+
 function negativeCurationLines(o, c, e, a, n) {
-  return [
-    NEGATIVE_ANTIPATTERNS.o[scoreBand(o)],
-    NEGATIVE_ANTIPATTERNS.c[scoreBand(c)],
-    NEGATIVE_ANTIPATTERNS.e[scoreBand(e)],
-    NEGATIVE_ANTIPATTERNS.a[scoreBand(a)],
-    NEGATIVE_ANTIPATTERNS.n[scoreBand(n)],
-  ];
+  const totals = [o, c, e, a, n];
+  return NEG_ANTIPATTERN_TRAIT_KEYS.map((k, i) => NEGATIVE_ANTIPATTERNS[k][scoreBand(totals[i])]);
 }
 
 function entropyBucketCounts(targetTotal) {
@@ -527,34 +525,51 @@ function formatSubfacetBlockForPrompt(keySubfacets) {
   return keySubfacets.map((line) => `   ${line}`).join("\n");
 }
 
+const IPIP_ADAPTIVE_SPECS = [
+  {
+    label: "Apertura",
+    high:
+      "más riesgo formal con sustancia (no etiqueta hueca «experimental»); evita lista demasiado obvia.",
+    low: "privilegia accesibilidad y anclas claras; el riesgo formal minoritario.",
+  },
+  {
+    label: "Responsabilidad",
+    high: "prioriza estructura, método y progresión interna legibles.",
+    low: "hueco para energía cruda e improvisación sin rigidez constante.",
+  },
+  {
+    label: "Extraversión",
+    high: "no concentres la lista solo en lo íntimo/lento; añade pulso social donde encaje.",
+    low: "evita saturar con piezas solo hiper-sociales o solo performativas.",
+  },
+  {
+    label: "Amabilidad",
+    high: "calidez, cooperación y reparación sin moralina obligatoria.",
+    low: "admite aspereza y fricción ética; menos sentimentalismo forzado.",
+  },
+  {
+    label: "Neuroticismo",
+    high: "catarsis y vulnerabilidad pueden entrar fuerte sin listar solo cosas «zen».",
+    low: "más regulación y equilibrio; evita martilleo solo con angustia extrema.",
+  },
+];
+
+/** Ajustes de curación según bandas IPIP (mismos umbrales que `scoreBand`). */
 function buildAdaptiveRulesFromTest(o, c, e, a, n) {
+  const hi = IPIP_BAND_HIGH_GE;
+  const loLt = IPIP_BAND_LOW_LT;
+  const values = [o, c, e, a, n];
   const rules = [];
-  if (o >= 3.8) {
-    rules.push(
-      "Apertura muy alta: sube riesgo formal real (no solo etiqueta \"experimental\") y evita obras demasiado obvias."
-    );
-  } else if (o <= 2.2) {
-    rules.push("Apertura baja: privilegia accesibilidad y anclas claras; el riesgo debe ser minoritario.");
-  }
-  if (c >= 3.8) {
-    rules.push("Responsabilidad alta: prioriza obras con estructura, método y progresión interna legible.");
-  } else if (c <= 2.2) {
-    rules.push("Responsabilidad baja: deja espacio a energía cruda e improvisación sin sobrecargar de rigidez.");
-  }
-  if (e >= 3.8) {
-    rules.push("Extraversión alta: evita una lista excesivamente íntima/lenta; añade piezas de pulso social.");
-  } else if (e <= 2.2) {
-    rules.push("Extraversión baja: evita saturar con propuestas hiper-sociales o performativas.");
-  }
-  if (a >= 3.8) {
-    rules.push("Amabilidad alta: prioriza calidez, cooperación y reparación emocional sin caer en moralina.");
-  } else if (a <= 2.2) {
-    rules.push("Amabilidad baja: tolera aspereza y fricción ética, evitando sentimentalismo forzado.");
-  }
-  if (n >= 3.8) {
-    rules.push("Neuroticismo alto: habilita catarsis y vulnerabilidad intensa; evita el sesgo exclusivamente zen.");
-  } else if (n <= 2.2) {
-    rules.push("Neuroticismo bajo: prioriza regulación y equilibrio; evita saturación de angustia extrema.");
+  for (let i = 0; i < IPIP_ADAPTIVE_SPECS.length; i += 1) {
+    const v = values[i];
+    const { label, high, low } = IPIP_ADAPTIVE_SPECS[i];
+    if (v >= hi) {
+      rules.push(
+        `${label} en rango alto (media Likert ≥${IPIP_BAND_HIGH_GE}, IPIP): ${high}`
+      );
+    } else if (v < loLt) {
+      rules.push(`${label} en rango bajo (media Likert <${IPIP_BAND_LOW_LT}, IPIP): ${low}`);
+    }
   }
   return rules;
 }
@@ -599,27 +614,15 @@ function buildPersonalizedFeedCuratorPrompt({
   const gameAxes = pickVideoGameExplorationAxes(oceanFingerprint, 2);
   const gameAxisA = gameAxes[0] || "(eje no disponible)";
   const gameAxisB = gameAxes[1] || "(eje no disponible)";
-  const oceanCombinationLine = `Combinación global OCEAN prioritaria: O:${o.toFixed(2)} + C:${c.toFixed(
-    2
-  )} + E:${e.toFixed(2)} + A:${a.toFixed(2)} + N:${n.toFixed(2)}.`;
-  const gameOpennessRule =
-    o >= 3.2
-      ? "Apertura O ≥ 3.2: en videojuegos, cero títulos de la lista de megablocks globalizados (Witcher 3, BOTW, GTA V, Minecraft, Fortnite, FIFA, Call of Duty, Elden Ring, Cyberpunk 2077, RDR2, BG3, Mario Odyssey, Among Us, Apex, LoL, TLoU, Horizon FW, Starfield, Valorant, Genshin, WoW, Hogwarts Legacy, Diablo IV, RE4 remake, CS2, PUBG salvo nombres parciales en títulos distintos); elige alternativas de mecánica parecida pero menos masificadas."
-      : o < 2.4
-        ? "Apertura O < 2.4: puedes incluir como máximo 2 megatítulos de esa familia si encajan de verdad con el perfil; el resto debe ser catálogo menos obvio."
-        : "Apertura media: como máximo 1 megatítulo de esa familia; prioriza variedad de estudio, época y plataforma.";
-  const musicOpennessRule =
-    o >= 3.2
-      ? "Prioriza proyectos menos \"playlist virales iguales para todos\"; al menos mitad sello/indie/obras de culto o escena regional coherentes con OCEAN."
-      : o < 2.4
-        ? "Puedes usar clásicos accesibles pero al menos mitad debe ser música fuera del bloque habitual de grandes hits actuales (varía época/región/formato)."
-        : "Combina conocidos y medio-nicho; no concentres en los mismos 10 artistas típicicos de otros feeds.";
+  const [oS, cS, eS, aS, nS] = oceanMeansLikertParts(o, c, e, a, n);
+  const oceanMeansInline = `O:${oS}, C:${cS}, E:${eS}, A:${aS}, N:${nS}`;
+  const oceanCombinationLine = `Combinación global OCEAN prioritaria: ${oceanMeansInline.replace(/, /g, " + ")}.`;
 
   const sections = [
-    "Rol: Curador cultural. Objetivo: discovery personalizado con sesgo a nicho real y diversidad; no inventes obras.",
+    "Rol: Curador cultural. Objetivo: discovery personalizado inclusivo (desde repertorio más conocido hasta nicho verificable), sin sesgar solo a underground ni solo a mainstream; diversidad y encaje OCEAN; no inventes obras.",
     [
       "### PERFIL",
-      `- OCEAN (medias Likert 1–5 por rasgo, ítems recodificados estilo IPIP): O:${o.toFixed(2)}, C:${c.toFixed(2)}, E:${e.toFixed(2)}, A:${a.toFixed(2)}, N:${n.toFixed(2)}`,
+      `- OCEAN (medias Likert 1–5 por rasgo, ítems recodificados estilo IPIP): ${oceanMeansInline}`,
       `- Huella: ${oceanFingerprint}`,
       artExtra.trim() ? artExtra.trim() : null,
       `- Diferenciación obligatoria: ${rulesText}`,
@@ -629,21 +632,20 @@ function buildPersonalizedFeedCuratorPrompt({
     [
       "### REGLAS NÚCLEO",
       "1) Evita listas obvias y convergencia entre usuarios; prioriza long-tail verificable.",
-      `2) Videojuegos: al menos 6 candidatos alineados con ambos ejes: (1) ${gameAxisA} (2) ${gameAxisB}. ${gameOpennessRule}`,
-      `3) Música: al menos 6 candidatos; ${musicOpennessRule}; genreHint con subgén/movimiento concreto, no etiquetas vagas.`,
-      '4) Música y videojuegos: cada oceanFitReason debe mencionar DOS dimensiones OCEAN por su letra O,C,E,A,N y nivel relativo DEL USUARIO (alto/medio/bajo respecto ~3), y explicar la interacción entre ambas (no bastan adjetivos genéricos ni un solo rasgo).',
-      "5) Subfacetas disponibles:",
+      `2) Videojuegos: al menos 6 candidatos alineados con ambos ejes: (1) ${gameAxisA} (2) ${gameAxisB}.`,
+      "3) Música: al menos 6 candidatos; genreHint con subgén/movimiento concreto, no etiquetas vagas.",
+      "4) Subfacetas disponibles:",
       subfacetBlock,
-      '5.1) Cualquier bloque más abajo con títulos concretos (solo cine/literatura ya) es tonalidad/plantilla mental, NO algo que el usuario \"deba recibir\". Máximo 1 coincidencia literal entre TODOS los candidatos si repites ese título de ejemplo.',
-      "5.2) Música y videojuegos: el prompt usa solo rasgos dimensionales abstractos ahí — no tienes lista de obra de calibración; evita repetir la misma nómina habitual que recomendaría un modelo genérico ante OCEAN parecido; obliga dispersión década/región/formato/indie dentro de ese par de categorías.",
-      `6) Genera exactamente ${targetCandidates} candidatos en cinco categorías (cine, musica, literatura, videojuegos, arte-visual), balanceadas cuando sea posible.`,
+      '4.1) Cualquier bloque más abajo con títulos concretos (solo cine/literatura ya) es tonalidad/plantilla mental, NO algo que el usuario \"deba recibir\". Máximo 1 coincidencia literal entre TODOS los candidatos si repites ese título de ejemplo.',
+      "4.2) Música y videojuegos: el prompt usa solo rasgos dimensionales abstractos ahí — no tienes lista de obra de calibración; evita repetir la misma nómina habitual que recomendaría un modelo genérico ante OCEAN parecido; obliga dispersión década/región/formato/indie dentro de ese par de categorías.",
+      `5) Genera exactamente ${targetCandidates} candidatos en cinco categorías (cine, musica, literatura, videojuegos, arte-visual), balanceadas cuando sea posible.`,
       `   - ${nEntropySafe} obras "seguras" (alto encaje OCEAN, popularidad media).`,
       `   - ${nEntropyNiche} obras de nicho (alto encaje, baja popularidad / indie / autor).`,
       `   - ${nEntropyRisk} "apuestas de riesgo" (desafían al usuario pero encajan en apertura o neuroticismo del perfil).`,
-      "7) Lógica mecánica (no solo estética):",
+      "6) Lógica mecánica (no solo estética):",
       mechanicalLines.map((x) => `   - ${x}`).join("\n"),
-      "8) Prohibido puntuar solo por rasgo individual: decide cada recomendación por patrón total del perfil (trade-offs entre O, C, E, A, N).",
-      `9) ${oceanCombinationLine}`,
+      "7) Prohibido puntuar solo por rasgo individual: decide cada recomendación por patrón total del perfil (trade-offs entre O, C, E, A, N).",
+      `8) ${oceanCombinationLine}`,
     ].join("\n"),
     adaptiveRules.length
       ? `### AJUSTE DINÁMICO POR TEST OCEAN\n${adaptiveRules.map((x) => `- ${x}`).join("\n")}`
@@ -658,7 +660,7 @@ function buildPersonalizedFeedCuratorPrompt({
     ].join("\n"),
     `### FORMATO DE SALIDA (JSON ESTRICTO)
 Devuelve solo este objeto JSON:
-{"candidates":[{"category":"cine|musica|literatura|videojuegos|arte-visual","title":"Título en español de España (TMDB es-ES) u original si no hay traducción","creator":"Autor/Director/Estudio","genreHint":"Subgénero hiper-específico (ej. post-punk báltico, slow cinema distópico)","oceanFitReason":"Interacción de al menos 2 dimensiones O,C,E,A,N con niveles relativos al perfil numérico arriba y por qué esta obra encaja"}]}`,
+{"candidates":[{"category":"cine|musica|literatura|videojuegos|arte-visual","title":"Título en español de España (TMDB es-ES) u original si no hay traducción","creator":"Autor/Director/Estudio","genreHint":"Subgénero hiper-específico (ej. post-punk báltico, slow cinema distópico)"}]}`,
     `Random seed de diversidad: ${diversitySalt}`,
   ];
 
