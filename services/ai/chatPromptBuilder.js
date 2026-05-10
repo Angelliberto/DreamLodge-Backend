@@ -11,7 +11,7 @@ function buildChatFullPrompt(
   const hist = conversationHistory || [];
   if (hist.length) {
     contextText += "Historial de conversación:\n";
-    for (const msg of hist.slice(-5)) {
+    for (const msg of hist.slice(-14)) {
       const role = msg.role || "";
       const content = msg.content || "";
       const label = role === "user" ? "Usuario" : "Asistente";
@@ -116,8 +116,26 @@ function buildChatFullPrompt(
 `;
   }
 
+  const umTrim = String(userMessage || "").trim();
+  const isVeryShortMsg = umTrim.length > 0 && umTrim.length <= 28;
+  const isAffirmation =
+    /^(s[ií]|ok|vale|sip|yeah|yes|perfecto|claro|eso|eso mismo|eso es|dap)\.?$/i.test(umTrim);
+
   fullPrompt +=
     "Responde de manera natural, conversacional y útil. Sé específico y evita respuestas genéricas o vagas.";
+  fullPrompt +=
+    "\nNo repitas párrafos enteros ya dichos en el historial como si fuera una respuesta nueva: avanza la conversación o pregunta qué cambiar.";
+  fullPrompt +=
+    "\nCompleta cada respuesta hasta el final (termina cada frase; no cortes a mitad de enunciado).";
+
+  if (isVeryShortMsg || isAffirmation) {
+    fullPrompt +=
+      `\nNOTA IMPORTANTE PARA ESTE TURNO: el usuario escribió "${umTrim}" (mensaje muy breve): responde en proporción breve (2–4 frases máximo si no hay un pedido explícito largo); no rearranques desde cero con saludos ni explicaciones LGTBQ+ largas si el contexto ya lo cubrió.`;
+    if (hist.length >= 2) {
+      fullPrompt +=
+        " Si antes ya recomendaste, ofrece un matiz nuevo (ej. subgénero / tono / plataforma / época) o una sola nueva sugerencia, no repetir el mismo pack.";
+    }
+  }
 
   return fullPrompt;
 }

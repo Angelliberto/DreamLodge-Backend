@@ -2,7 +2,7 @@
  * Agente IA Dream Lodge: Gemini + herramientas Mongo (orquestador).
  */
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { normalizeWorkCandidateRows } = require("./agentUtils");
+const { normalizeWorkCandidateRows, chatGeminiCandidates } = require("./agentUtils");
 const { generateArtisticDescription } = require("./artisticProfileService");
 const { curatePersonalizedFeed } = require("./feedCurationService");
 const {
@@ -67,7 +67,10 @@ class DreamLodgeAIAgent {
       conversationHistory,
       toolResults
     );
-    return this.generateWithGemini(fullPrompt, CHAT_GEMINI_OPTS);
+    return this.generateWithGemini(fullPrompt, {
+      ...CHAT_GEMINI_OPTS,
+      modelCandidates: chatGeminiCandidates(),
+    });
   }
 
   async generateResponseStream(
@@ -83,7 +86,10 @@ class DreamLodgeAIAgent {
       conversationHistory,
       toolResults
     );
-    return this.generateWithGeminiStream(fullPrompt, CHAT_GEMINI_OPTS, onChunk);
+    return this.generateWithGeminiStream(fullPrompt, {
+      ...CHAT_GEMINI_OPTS,
+      modelCandidates: chatGeminiCandidates(),
+    }, onChunk);
   }
 
   async processMessage(userMessage, { userId, conversationHistory, contextItems } = {}) {

@@ -3,12 +3,12 @@
  */
 const CHAT_GEMINI_OPTS = {
   purpose: "respuesta de chat",
-  timeoutMs: 32000,
+  timeoutMs: 90000,
   generationConfig: {
-    temperature: 0.72,
+    temperature: 0.65,
     topP: 0.9,
     topK: 40,
-    maxOutputTokens: 1400,
+    maxOutputTokens: 8192,
   },
 };
 

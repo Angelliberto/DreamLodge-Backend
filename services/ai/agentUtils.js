@@ -511,6 +511,33 @@ function envModels() {
   return [...new Set(candidates)];
 }
 
+/**
+ * Modelos Gemini para el chat (calidad alta primero).
+ * GEMINI_CHAT_MODEL override (coma-separado o un solo modelo); si no, GEMINI_MODEL y luego cascada estable.
+ */
+function chatGeminiCandidates() {
+  const primary = (
+    process.env.GEMINI_CHAT_MODEL ||
+    process.env.GEMINI_MODEL ||
+    ""
+  )
+    .split(",")
+    .map((s) => String(s || "").trim())
+    .filter(Boolean);
+  const defaults = [
+    "gemini-2.5-pro",
+    "gemini-2.5-pro-latest",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash",
+  ];
+  const merged = [...primary, ...defaults];
+  return [...new Set(merged)];
+}
+
 function normalizeForIntent(text) {
   if (!text || typeof text !== "string") return "";
   return text
@@ -542,6 +569,7 @@ module.exports = {
   countDefaultCanonOverlap,
   countGlobalCanonOverlap,
   envModels,
+  chatGeminiCandidates,
   normalizeForIntent,
   PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
   pickVideoGameExplorationAxes,

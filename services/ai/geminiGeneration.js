@@ -10,12 +10,13 @@ const { isNotSupported, isQuota, isTransient } = require("./geminiErrors");
 async function generateWithGemini(
   genAI,
   prompt,
-  { purpose = "respuesta", timeoutMs = 40000, generationConfig = null } = {}
+  { purpose = "respuesta", timeoutMs = 40000, generationConfig = null, modelCandidates = null } = {}
 ) {
   if (!genAI) {
     throw new Error("El servicio de IA no está configurado (Gemini no disponible).");
   }
-  const candidates = envModels();
+  const candidates =
+    Array.isArray(modelCandidates) && modelCandidates.length ? modelCandidates : envModels();
   if (!candidates.length) {
     throw new Error("No hay modelos Gemini configurados. Define GEMINI_API_KEY o GEMINI_MODEL.");
   }
@@ -85,13 +86,14 @@ async function generateWithGemini(
 async function generateWithGeminiStream(
   genAI,
   prompt,
-  { purpose = "respuesta", timeoutMs = 40000, generationConfig = null } = {},
+  { purpose = "respuesta", timeoutMs = 40000, generationConfig = null, modelCandidates = null } = {},
   onChunk
 ) {
   if (!genAI) {
     throw new Error("El servicio de IA no está configurado (Gemini no disponible).");
   }
-  const candidates = envModels();
+  const candidates =
+    Array.isArray(modelCandidates) && modelCandidates.length ? modelCandidates : envModels();
   if (!candidates.length) {
     throw new Error("No hay modelos Gemini configurados. Define GEMINI_API_KEY o GEMINI_MODEL.");
   }
