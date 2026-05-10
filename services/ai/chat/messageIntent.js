@@ -1,7 +1,7 @@
 /**
  * Extracción de intención de búsqueda y selección de herramientas desde el mensaje del usuario.
  */
-const { normalizeForIntent } = require("./agentUtils");
+const { normalizeForIntent } = require("../../../utils/ai/agentUtils");
 
 function extractSearchParams(message) {
   const params = {};

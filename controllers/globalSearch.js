@@ -1,4 +1,4 @@
-const { runGlobalSearch } = require("../services/globalSearchService");
+const { runGlobalSearch } = require("../services/search/globalSearchService");
 
 function parseListParam(value) {
   if (Array.isArray(value)) return value.filter(Boolean);

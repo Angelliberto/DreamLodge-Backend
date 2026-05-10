@@ -7,7 +7,7 @@ const {
   extractSearchParams,
   extractArtworkId,
   analyzeMessageAndSelectTools,
-} = require("../../services/ai/messageIntent");
+} = require("../../services/ai/chat/messageIntent");
 
 describe("messageIntent", () => {
   describe("extractSearchParams", () => {

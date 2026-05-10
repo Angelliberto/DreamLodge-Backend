@@ -3,10 +3,10 @@ const { ArtworkModel, UserModel } = require("../models");
 const { clearPersonalizedFeedCacheForUser } = require("./feed");
 const mongoose = require("mongoose");
 const ai = require("../services/ai");
-const { resolveCuratedFeedCandidates } = require("../services/feedCandidateResolver");
+const { resolveCuratedFeedCandidates } = require("../services/search/feedCandidateResolver");
 const {
   enrichSpotifyAlbumDescriptionIfNeeded,
-} = require("../services/albumDescriptionEnricher");
+} = require("../services/ai/content/albumDescriptionEnricher");
 
 const SIMILAR_CACHE = new Map();
 const SIMILAR_CACHE_TTL_MS = 6 * 60 * 60 * 1000;

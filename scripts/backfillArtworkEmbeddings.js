@@ -2,8 +2,8 @@
 require("dotenv").config();
 const mongoose = require("mongoose");
 const { ArtworkModel } = require("../models");
-const { DreamLodgeAIAgent } = require("../services/ai/dreamLodgeAiAgent");
-const { embedText, buildArtworkEmbeddingText, EMBEDDING_MODEL } = require("../services/ai/embeddingService");
+const { DreamLodgeAIAgent } = require("../services/ai/core/dreamLodgeAiAgent");
+const { embedText, buildArtworkEmbeddingText, EMBEDDING_MODEL } = require("../services/ai/embeddings/embeddingService");
 
 function parseArgs(argv) {
   const out = { limit: 0, force: false };

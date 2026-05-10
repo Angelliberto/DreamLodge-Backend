@@ -1,6 +1,6 @@
 const { handleHTTPError } = require("../utils/handleHTTPError");
 const ai = require("../services/ai");
-const chatPersistence = require("../services/chatPersistence");
+const chatPersistence = require("../services/persistence/chatPersistence");
 
 /**
  * Enviar un mensaje al agente IA

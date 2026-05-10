@@ -1,4 +1,4 @@
-const { getSpotifyClientCredentialsPayload } = require("../services/spotifyClient");
+const { getSpotifyClientCredentialsPayload } = require("../services/integrations/spotifyClient");
 
 exports.getAppAccessToken = async (req, res) => {
   try {

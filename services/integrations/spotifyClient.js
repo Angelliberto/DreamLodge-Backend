@@ -1,5 +1,5 @@
 const axios = require("axios");
-const { getSpotifyMarket } = require("./contentLocaleConfig");
+const { getSpotifyMarket } = require("../../config/contentLocaleConfig");
 
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
 

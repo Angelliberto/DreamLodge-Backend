@@ -1,7 +1,7 @@
 /**
  * Servicio de IA local (Gemini + Mongo). Sustituye el antiguo cliente HTTP al servidor MCP.
  */
-const { getAiAgent } = require("./dreamLodgeAiAgent");
+const { getAiAgent } = require("./core/dreamLodgeAiAgent");
 
 /**
  * @returns {Promise<{ response: string, toolsUsed: string[], context: object, suggestedTitle: null }>}

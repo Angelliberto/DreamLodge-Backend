@@ -3,7 +3,7 @@
  */
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const { buildChatFullPrompt } = require("../../services/ai/chatPromptBuilder");
+const { buildChatFullPrompt } = require("../../services/ai/chat/chatPromptBuilder");
 
 describe("chatPromptBuilder", () => {
   it("incluye el mensaje del usuario y el system prompt", () => {

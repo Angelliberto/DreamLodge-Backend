@@ -42,7 +42,8 @@ const scoresHaveSubfacetDetail = (scores) => {
 /**
  * Convierte un documento Ocean guardado al formato que consume el frontend (test_results, etc.).
  * - dimensions: totales 0–5 por rasgo
- * - subfacetas (solo test deep): valores en escala -2..+2 como arrays de un elemento (como tras calcular en cliente)
+ * - subfacetas (solo test deep): un elemento por faceta — media keyed en 1–5 (IPIP) o −2..+2 (legado),
+ *   según plain.responseScale, para poder recalcular barras sin sesgo.
  * Incluye `scores` crudo por compatibilidad.
  */
 const formatOceanForFrontend = (doc) => {
@@ -53,6 +54,9 @@ const formatOceanForFrontend = (doc) => {
   if (testType === 'quick' && scoresHaveSubfacetDetail(scores)) {
     testType = 'deep';
   }
+
+  const responseScale =
+    plain.responseScale === 'ipip_1_5' ? 'ipip_1_5' : 'legacy_neg2_pos2';
 
   const dimensions = {};
   const subfacets = {};
@@ -71,9 +75,9 @@ const formatOceanForFrontend = (doc) => {
         if (key === 'total') continue;
         const val = scoreObj[key];
         if (typeof val !== 'number') continue;
-        // Backend almacena subfacetas en 0–5; frontend espera -2..+2 en arrays
-        const onNegTwoToTwo = ((val / 5) * 4) - 2;
-        facetEntries[key] = [onNegTwoToTwo];
+        const keyedMean =
+          responseScale === 'ipip_1_5' ? (val / 5) * 4 + 1 : (val / 5) * 4 - 2;
+        facetEntries[key] = [keyedMean];
       }
       if (Object.keys(facetEntries).length > 0) {
         subfacets[trait] = facetEntries;
@@ -86,6 +90,7 @@ const formatOceanForFrontend = (doc) => {
     entityType: plain.entityType,
     entityId: plain.entityId,
     testType,
+    responseScale,
     timestamp: plain.updatedAt || plain.createdAt,
     createdAt: plain.createdAt,
     updatedAt: plain.updatedAt,
@@ -142,7 +147,10 @@ const saveTestResults = async (req, res) => {
   let useTransaction = false;
 
   try {
-    const { entityType, entityId, scores, totalScore, testType } = req.body;
+    const { entityType, entityId, scores, totalScore, testType, responseScale: bodyResponseScale } = req.body;
+
+    const responseScale =
+      bodyResponseScale === 'ipip_1_5' ? 'ipip_1_5' : 'legacy_neg2_pos2';
 
     // Validaciones básicas
     if (!entityType || !['user', 'artwork'].includes(entityType)) {
@@ -221,6 +229,7 @@ const saveTestResults = async (req, res) => {
         oceanResult.totalScore = totalScore;
       }
       oceanResult.testType = testType || 'quick';
+      oceanResult.responseScale = responseScale;
       // Nuevo test: invalidar descripción IA para que se regenere con los scores actuales
       if (entityType === 'user') {
         oceanResult.artisticDescription = null;
@@ -238,7 +247,8 @@ const saveTestResults = async (req, res) => {
           entityId,
           scores,
           totalScore,
-          testType: testType || 'quick'
+          testType: testType || 'quick',
+          responseScale,
         }], { session });
         oceanResult = created[0];
       } else {
@@ -247,7 +257,8 @@ const saveTestResults = async (req, res) => {
           entityId,
           scores,
           totalScore,
-          testType: testType || 'quick'
+          testType: testType || 'quick',
+          responseScale,
         });
       }
     }

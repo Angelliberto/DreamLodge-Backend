@@ -1,6 +1,6 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const { CHAT_GEMINI_OPTS } = require("../../services/ai/chatConstants");
+const { CHAT_GEMINI_OPTS } = require("../../services/ai/chat/chatConstants");
 
 describe("chatConstants", () => {
   it("expone opciones de generación para el chat", () => {

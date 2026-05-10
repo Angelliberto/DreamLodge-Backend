@@ -7,7 +7,7 @@ const {
   searchTmdbMovies,
   searchTmdbTv,
   discoverPopularMovies,
-} = require("./tmdbShared");
+} = require("../integrations/tmdbShared");
 const {
   adaptIGDB,
   adaptTMDBMovie,
@@ -16,12 +16,12 @@ const {
   adaptBook,
   adaptMet,
   adaptCmaArt,
-} = require("./culturalItemAdapters");
-const { searchSpotifyAlbums } = require("./spotifyClient");
-const { searchIgdbGames, stableStringHash32 } = require("./igdbClient");
-const { fetchGoogleBooksVolumesMerged } = require("./googleBooksClient");
-const { searchMetArtworkRows } = require("./metMuseumClient");
-const { fetchCmaRandomArtworkRows } = require("./cmaArtClient");
+} = require("../../utils/culturalItemAdapters");
+const { searchSpotifyAlbums } = require("../integrations/spotifyClient");
+const { searchIgdbGames, stableStringHash32 } = require("../integrations/igdbClient");
+const { fetchGoogleBooksVolumesMerged } = require("../integrations/googleBooksClient");
+const { searchMetArtworkRows } = require("../integrations/metMuseumClient");
+const { fetchCmaRandomArtworkRows } = require("../integrations/cmaArtClient");
 
 async function searchBooksMerged(titleQuery) {
   const raw = await fetchGoogleBooksVolumesMerged(

@@ -1,4 +1,4 @@
-const { PROMPT_TMDB_SPAIN_CINE_TITLE_RULE, pickVideoGameExplorationAxes } = require("./agentUtils");
+const { PROMPT_TMDB_SPAIN_CINE_TITLE_RULE, pickVideoGameExplorationAxes } = require("../../../utils/ai/agentUtils");
 
 function scoreBand(v) {
   const n = Number(v) || 0;

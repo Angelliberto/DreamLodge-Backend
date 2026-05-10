@@ -1,7 +1,7 @@
 /**
  * Llamadas a Gemini con reintentos por modelo (sync y stream).
  */
-const { envModels, formatExceptionForClient } = require("./agentUtils");
+const { envModels, formatExceptionForClient } = require("../../../utils/ai/agentUtils");
 const { isNotSupported, isQuota, isTransient } = require("./geminiErrors");
 
 /**

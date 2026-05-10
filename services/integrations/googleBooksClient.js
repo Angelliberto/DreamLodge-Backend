@@ -1,5 +1,5 @@
 const axios = require("axios");
-const { getGoogleBooksLangRestrict } = require("./contentLocaleConfig");
+const { getGoogleBooksLangRestrict } = require("../../config/contentLocaleConfig");
 
 const GOOGLE_BOOKS = "https://www.googleapis.com/books/v1/volumes";
 

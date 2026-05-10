@@ -1,4 +1,4 @@
-const { searchIgdbGames } = require("../services/igdbClient");
+const { searchIgdbGames } = require("../services/integrations/igdbClient");
 const { handleHTTPError } = require("../utils/handleHTTPError");
 
 /**

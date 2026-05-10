@@ -2,7 +2,7 @@
  * Acceso MongoDB para el agente IA (equivalente a dreamlodge_db.py).
  */
 const mongoose = require("mongoose");
-const { ArtworkModel, UserModel, OceanModel } = require("../../models");
+const { ArtworkModel, UserModel, OceanModel } = require("../../../models");
 
 function serializeObject(obj) {
   if (obj == null) return obj;

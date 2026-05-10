@@ -6,7 +6,7 @@ const {
   normalizeWorkCandidateRows,
   countDefaultCanonOverlap,
   countGlobalCanonOverlap,
-} = require("./agentUtils");
+} = require("../../../utils/ai/agentUtils");
 const {
   buildArtisticProfileExtra,
   buildOceanFacetInterpretation,

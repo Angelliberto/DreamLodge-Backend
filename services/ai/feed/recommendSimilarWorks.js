@@ -6,7 +6,7 @@ const {
   formatExceptionForClient,
   PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
   pickVideoGameExplorationAxes,
-} = require("./agentUtils");
+} = require("../../../utils/ai/agentUtils");
 const { logIaRecommendedWorks } = require("./iaLogRecommendedWorks");
 
 const logger = console;

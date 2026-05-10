@@ -31,6 +31,13 @@ const oceanSchema = new mongoose.Schema({
     enum: ['quick', 'deep'],
     default: 'quick'
   },
+
+  /** Escala de respuesta del cuestionario: IPIP 1–5 frente al legado interno −2/+2 */
+  responseScale: {
+    type: String,
+    enum: ['ipip_1_5', 'legacy_neg2_pos2'],
+    default: 'legacy_neg2_pos2',
+  },
   
   // Descripción artística generada por el agente IA
   artisticDescription: {

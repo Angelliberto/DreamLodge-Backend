@@ -1,4 +1,4 @@
-const { normalizeTitleForCompare } = require("./agentUtils");
+const { normalizeTitleForCompare } = require("../../../utils/ai/agentUtils");
 
 const RECENT_FEED_TITLES = new Map();
 const RECENT_TTL_MS = 24 * 60 * 60 * 1000;

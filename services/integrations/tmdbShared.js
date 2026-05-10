@@ -2,10 +2,8 @@
  * TMDB: cabeceras, URL base, imagen w500 y mapa de géneros (película + TV) con caché compartida.
  */
 const axios = require("axios");
-const { getTmdbLanguage } = require("./contentLocaleConfig");
-
-const TMDB_BASE = "https://api.themoviedb.org/3";
-const TMDB_IMG_W500 = "https://image.tmdb.org/t/p/w500";
+const { getTmdbLanguage } = require("../../config/contentLocaleConfig");
+const { TMDB_BASE, TMDB_IMG_W500 } = require("../../utils/tmdbConstants");
 
 function tmdbHeaders() {
   const key = (process.env.TMDB_API_KEY || "").trim();

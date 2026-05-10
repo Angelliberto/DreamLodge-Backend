@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { ChatConversationModel, ChatMessageModel } = require("../models");
+const { ChatConversationModel, ChatMessageModel } = require("../../models");
 
 const OID_HEX = /^[a-fA-F0-9]{24}$/;
 

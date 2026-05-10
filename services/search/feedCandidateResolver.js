@@ -9,7 +9,7 @@ const {
   searchTmdbTv,
   getTmdbMovieDirectors,
   getTmdbTvCreators,
-} = require("./tmdbShared");
+} = require("../integrations/tmdbShared");
 const {
   adaptIGDB,
   adaptTMDBMovie,
@@ -17,18 +17,18 @@ const {
   adaptSpotifyAlbum,
   adaptBook,
   adaptMet,
-} = require("./culturalItemAdapters");
-const { searchSpotifyAlbums } = require("./spotifyClient");
-const { fetchGoogleBooksVolumesMerged } = require("./googleBooksClient");
-const { searchIgdbGames, stableStringHash32 } = require("./igdbClient");
-const { searchMetArtworkRows } = require("./metMuseumClient");
+} = require("../../utils/culturalItemAdapters");
+const { searchSpotifyAlbums } = require("../integrations/spotifyClient");
+const { fetchGoogleBooksVolumesMerged } = require("../integrations/googleBooksClient");
+const { searchIgdbGames, stableStringHash32 } = require("../integrations/igdbClient");
+const { searchMetArtworkRows } = require("../integrations/metMuseumClient");
 const {
   pickBestTitleMatch,
   defaultMinScore,
   personNameSimilarity,
   normalizeForMatch,
   bestVariantScore,
-} = require("./candidateMatchUtils");
+} = require("../../utils/candidateMatchUtils");
 
 const ALLOWED = new Set(["cine", "musica", "literatura", "videojuegos", "arte-visual"]);
 

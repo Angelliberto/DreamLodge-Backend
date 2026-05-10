@@ -5,7 +5,7 @@ const {
   resolveCuratedFeedCandidates,
   mergeCulturalFeedDedupe,
   extractSuggestedWorksFromArtisticJson,
-} = require("../services/feedCandidateResolver");
+} = require("../services/search/feedCandidateResolver");
 
 /** Caché en memoria por usuario (TTL corto; el cliente puede forzar refresh). */
 const FEED_CACHE = new Map();

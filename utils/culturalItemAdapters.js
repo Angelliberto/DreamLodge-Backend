@@ -2,7 +2,7 @@
  * Normaliza respuestas de APIs externas al shape CulturalItem del cliente.
  * Compartido por feedCandidateResolver y globalSearchService.
  */
-const { TMDB_IMG_W500 } = require("./tmdbShared");
+const { TMDB_IMG_W500 } = require("./tmdbConstants");
 
 function formatTag(tag) {
   if (!tag || typeof tag !== "string") return "";

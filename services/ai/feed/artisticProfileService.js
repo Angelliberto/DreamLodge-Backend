@@ -13,7 +13,7 @@ const {
   countGlobalCanonOverlap,
   GENRE_REC_KEYS,
   PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
-} = require("./agentUtils");
+} = require("../../../utils/ai/agentUtils");
 
 function scoreBand(v) {
   const n = Number(v) || 0;

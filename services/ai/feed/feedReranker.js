@@ -1,4 +1,4 @@
-const { buildUserProfileText, rerankByEmbeddingSimilarity } = require("./vectorRetriever");
+const { buildUserProfileText, rerankByEmbeddingSimilarity } = require("../embeddings/vectorRetriever");
 
 const FEED_EMBED_CONCURRENCY = Math.max(1, Number(process.env.FEED_EMBED_CONCURRENCY) || 6);
 const SKIP_FEED_EMBED_RERANK = /^(1|true|yes)$/i.test(String(process.env.FEED_SKIP_EMBED_RERANK || ""));

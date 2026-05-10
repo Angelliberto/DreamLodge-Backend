@@ -1,5 +1,5 @@
 const axios = require("axios");
-const { getIgdbAcceptLanguage } = require("./contentLocaleConfig");
+const { getIgdbAcceptLanguage } = require("../../config/contentLocaleConfig");
 
 let _token = null;
 let _exp = 0;

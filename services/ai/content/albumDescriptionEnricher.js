@@ -3,7 +3,7 @@
  * 1) extracto de Wikipedia (es/en), 2) si falla, breve texto con Gemini.
  */
 const axios = require("axios");
-const { getAiAgent } = require("./ai/dreamLodgeAiAgent");
+const { getAiAgent } = require("../core/dreamLodgeAiAgent");
 
 const UA = "DreamLodge/1.0 (https://github.com; album metadata enrichment)";
 

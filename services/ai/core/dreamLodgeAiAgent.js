@@ -2,20 +2,20 @@
  * Agente IA Dream Lodge: Gemini + herramientas Mongo (orquestador).
  */
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { normalizeWorkCandidateRows, chatGeminiCandidates } = require("./agentUtils");
-const { generateArtisticDescription } = require("./artisticProfileService");
-const { curatePersonalizedFeed } = require("./feedCurationService");
+const { normalizeWorkCandidateRows, chatGeminiCandidates } = require("../../../utils/ai/agentUtils");
+const { generateArtisticDescription } = require("../feed/artisticProfileService");
+const { curatePersonalizedFeed } = require("../feed/feedCurationService");
 const {
   generateWithGemini: geminiGenerate,
   generateWithGeminiStream: geminiGenerateStream,
-} = require("./geminiGeneration");
-const { buildChatFullPrompt } = require("./chatPromptBuilder");
-const { prepareChatTurn, buildChatProcessReturn } = require("./prepareChatTurn");
-const messageIntent = require("./messageIntent");
-const { executeTools: runAgentTools } = require("./agentTools");
-const { logIaRecommendedWorks } = require("./iaLogRecommendedWorks");
-const { recommendSimilarWorks: runRecommendSimilarWorks } = require("./recommendSimilarWorks");
-const { CHAT_GEMINI_OPTS } = require("./chatConstants");
+} = require("../gemini/geminiGeneration");
+const { buildChatFullPrompt } = require("../chat/chatPromptBuilder");
+const { prepareChatTurn, buildChatProcessReturn } = require("../chat/prepareChatTurn");
+const messageIntent = require("../chat/messageIntent");
+const { executeTools: runAgentTools } = require("../chat/agentTools");
+const { logIaRecommendedWorks } = require("../feed/iaLogRecommendedWorks");
+const { recommendSimilarWorks: runRecommendSimilarWorks } = require("../feed/recommendSimilarWorks");
+const { CHAT_GEMINI_OPTS } = require("../chat/chatConstants");
 
 class DreamLodgeAIAgent {
   constructor() {
