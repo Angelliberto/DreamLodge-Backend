@@ -38,6 +38,17 @@ const oceanSchema = new mongoose.Schema({
     enum: ['ipip_1_5', 'legacy_neg2_pos2'],
     default: 'legacy_neg2_pos2',
   },
+
+  /**
+   * Cómo se interpretan `scores.*.total` y facetas guardadas:
+   * - ipip_mean_1_5: media Likert 1–5 (ítems recodificados, alineado IPIP)
+   * - display_affine_05: legado ((media−1)/4)*5
+   */
+  scoreMetric: {
+    type: String,
+    enum: ['display_affine_05', 'ipip_mean_1_5'],
+    default: 'display_affine_05',
+  },
   
   // Descripción artística generada por el agente IA
   artisticDescription: {

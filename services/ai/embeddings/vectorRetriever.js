@@ -49,7 +49,7 @@ function buildUserProfileText({ o, c, e, a, n, artisticProfile, oceanFingerprint
       : "";
   return [
     `fingerprint: ${oceanFingerprint || "na"}`,
-    `ocean: openness ${Number(o || 0).toFixed(2)}, conscientiousness ${Number(c || 0).toFixed(2)}, extraversion ${Number(e || 0).toFixed(2)}, agreeableness ${Number(a || 0).toFixed(2)}, neuroticism ${Number(n || 0).toFixed(2)}`,
+    `ocean (medias Likert 1–5): openness ${Number(o || 0).toFixed(2)}, conscientiousness ${Number(c || 0).toFixed(2)}, extraversion ${Number(e || 0).toFixed(2)}, agreeableness ${Number(a || 0).toFixed(2)}, neuroticism ${Number(n || 0).toFixed(2)}`,
     `profile: ${artisticProfile?.profile || ""}`,
     `description: ${artisticProfile?.description || ""}`,
     genreLine ? `genres: ${genreLine}` : "",

@@ -85,152 +85,6 @@ const FACET_PROMPT_RULES = {
 };
 
 // Calibración de matiz por faceta + banda. No son repertorio final.
-const FACET_VIDEOGAME_EXAMPLES = {
-  apertura: {
-    "muy-baja":
-      "Tetris — reglas mínimas; Super Mario Bros — plataforma lineal clásica; Candy Crush Saga — bucle inmediato.",
-    baja:
-      "Portal — acertijos guiados con narración clara; Uncharted 2 — blockbuster cinematográfico legible; Minecraft (supervivencia guiada) — metas concretas.",
-    "media-baja":
-      "The Legend of Zelda: Breath of the Wild — open world familiar con curiosidad; Hollow Knight — metroidvania con mapa progresivo; Portal 2 — spin conocido con más capas.",
-    "media-alta":
-      "Outer Wilds — bucle y exploración no convencional; Death Stranding — logística y metáfora arriesgada; Subnautica — descubrimiento y tensión controlada.",
-    alta:
-      "Return of the Obra Dinn — investigación no lineal; Her Story — narrativa fragmentada; Hypnospace Outlaw — interfaz como tema.",
-    "muy-alta":
-      "Immortality — interfaz fílmica experimental; Eliza — diálogo sobre IA con estructura rara; The Stanley Parable — metanarrativa extrema.",
-  },
-  responsabilidad: {
-    "muy-baja":
-      "Goat Simulator — física caótica; Untitled Goose Game — reglas como sugerencia; Saints Row IV — sandbox irreverente.",
-    baja:
-      "Just Cause 3 — explosiones y libertad loca; No Man's Sky (modo creativo/zen) — metas abiertas; Skate 3 — flow improvisado.",
-    "media-baja":
-      "Slay the Spire — runs variables con reglas claras; Hades — progresión flexible entre intentos; Rogue Legacy — bucles con sorpresa.",
-    "media-alta":
-      "Dark Souls — patrones duros pero aprendibles; Monster Hunter: World — caza con rutinas claras; Celeste — plataformas exigentes por salas.",
-    alta:
-      "Factorio — líneas y optimización; Into the Breach — táctica cerrada y precisa; Opus Magnum — puzzle de ensamblaje sistémico.",
-    "muy-alta":
-      "Kerbal Space Program — simulación orbital; Chess Ultra — precisión pura; Baba Is You — reglas como objeto de diseño.",
-  },
-  extraversion: {
-    "muy-baja":
-      "Firewatch — solo y contemplativo; Gone Home — escala doméstica; Everybody's Gone to the Rapture — mapa vacío y contemplativo.",
-    baja:
-      "Journey — encuentros escasos y meditativos; Shadow of the Colossus — aislamiento épico; ABZÛ — flotación solitaria.",
-    "media-baja":
-      "It Takes Two — co-op elegido; Deep Rock Galactic — squad cuando quieres; Divinity: Original Sin 2 — party opcional.",
-    "media-alta":
-      "Sea of Thieves — crew flexible; Monster Hunter Rise — caza solo o en grupo; Destiny 2 — mix misiones solo/grupo.",
-    alta:
-      "Rocket League — equipos y ritmo; Mario Kart 8 Deluxe — multijugador social; Overwatch 2 — roles y comunicación.",
-    "muy-alta":
-      "Fall Guys — masivo y performativo; Jackbox Party Pack — improvisación grupal; Among Us — deducción social alta.",
-  },
-  amabilidad: {
-    "muy-baja":
-      "Spec Ops: The Line — choque moral duro; This War of Mine — supervivencia despiadada; Hotline Miami — violencia cruda.",
-    baja:
-      "The Witcher 3 — decisiones grises; Papers, Please — dilemas burocráticos; Disco Elysium — ética cínica con carisma.",
-    "media-baja":
-      "Detroit: Become Human — ramas morales tensas; The Last of Us Part II — empatía y conflicto; Frostpunk — líder ante dilemas.",
-    "media-alta":
-      "Life is Strange — vínculos con conflicto; Spiritfarer — duelo con calidez; Coffee Talk — tensión conversacional suave.",
-    alta:
-      "Animal Crossing: New Horizons — cuidado e isla; Stardew Valley — cooperación rural; A Short Hike — ternura sin moralina.",
-    "muy-alta":
-      "Kind Words (lo fi chill beats to write to) — apoyo anónimo; Sky: Children of the Light — gestos prosociales; Chicory: A Colorful Tale — cuidado como mecánica.",
-  },
-  neuroticismo: {
-    "muy-baja":
-      "Alto's Adventure — ritmo calmado; Unpacking — orden sereno; PowerWash Simulator — regulación casi meditativa.",
-    baja:
-      "Euro Truck Simulator 2 — viaje estable; Stardew Valley — rutina reconfortante; A Short Hike — descanso afectivo.",
-    "media-baja":
-      "Night in the Woods — melancolía juvenil contenida; Oxenfree — tensión sobrenatural moderada; Coffee Talk — conflicto bajo lluvia.",
-    "media-alta":
-      "Silent Hill 2 — angustia psicológica sostenida; Inside — incomodidad controlada; Limbo — tensión visual.",
-    alta:
-      "Hellblade: Senua's Sacrifice — vulnerabilidad sensorial; Fran Bow — inquietud onírica; NieR: Automata — duelo y vértigo narrativo.",
-    "muy-alta":
-      "OMORI — picos afectivos intensos; Darkwood — ansiedad survival; Cry of Fear — carga emocional extrema.",
-  },
-};
-
-const FACET_MUSIC_EXAMPLES = {
-  apertura: {
-    "muy-baja":
-      "The Beatles — Let It Be (tradición melódica clara); ABBA — Dancing Queen (estructura pop legible); Adele — Easy On Me (balada clásica).",
-    baja:
-      "Coldplay — Viva la Vida (accesible con color tímbrico); Phoebe Bridgers — Motion Sickness (indie directo); The Killers — Mr. Brightside (himno de forma familiar).",
-    "media-baja":
-      "Tame Impala — The Less I Know The Better (psicodelia pop accesible); Mitski — Nobody (alternativo emotivo legible); Arcade Fire — Wake Up (épica indie con ancla melódica).",
-    "media-alta":
-      "FKA twigs — cellophane (textura y riesgo controlado); Bjork — Hyperballad (experimental emotivo entendible); James Blake — Retrograde (minimalismo híbrido).",
-    alta:
-      "Arca — Piel (diseño sonoro arriesgado); SOPHIE — Immaterial (deconstrucción pop); Autechre — Rae (abstracción electrónica).",
-    "muy-alta":
-      "Scott Walker — The Escape (ruptura formal extrema); Tim Hecker — Virginal II (ambient abstracto radical); Merzbow — Pulse Demon (límite de ruido estructurado).",
-  },
-  responsabilidad: {
-    "muy-baja":
-      "The Stooges — I Wanna Be Your Dog (crudeza directa); Nirvana — Territorial Pissings (impulso bruto); Death Grips — Punk Weight (caos intencional).",
-    baja:
-      "The White Stripes — Seven Nation Army (energía sencilla); IDLES — Never Fight a Man with a Perm (ataque frontal); The Libertines — Time for Heroes (desorden controlado).",
-    "media-baja":
-      "Arctic Monkeys — Do I Wanna Know? (groove firme con flexibilidad); Gorillaz — Feel Good Inc. (producción híbrida sin rigidez); Rosalía — BAGDAD (pop mutante legible).",
-    "media-alta":
-      "Kendrick Lamar — DNA. (arquitectura compleja con impulso); Radiohead — 15 Step (detalle y libertad); St. Vincent — Digital Witness (estructura sofisticada).",
-    alta:
-      "Steely Dan — Aja (meticulosidad de arreglo); Snarky Puppy — Lingus (precisión de ensemble); Tool — Schism (diseño rítmico exigente).",
-    "muy-alta":
-      "Johann Sebastian Bach — The Art of Fugue (lógica compositiva extrema); Meshuggah — Bleed (métrica milimétrica); Igor Stravinsky — The Rite of Spring (arquitectura avanzada).",
-  },
-  extraversion: {
-    "muy-baja":
-      "Nick Drake — Pink Moon (intimidad máxima); Sufjan Stevens — Fourth of July (confesional); Agnes Obel — Riverside (recogimiento contemplativo).",
-    baja:
-      "Bon Iver — Holocene (escala contenida); Daughter — Youth (energía baja sensible); Cigarettes After Sex — Apocalypse (atmósfera reservada).",
-    "media-baja":
-      "The National — Bloodbuzz Ohio (tensión social moderada); Lorde — Liability (interior con alcance pop); Beach House — Space Song (sueño compartible sin estridencia).",
-    "media-alta":
-      "Florence + The Machine — Dog Days Are Over (catarsis con introspección); LCD Soundsystem — All My Friends (social e íntimo); Billie Eilish — bad guy (performativo con control).",
-    alta:
-      "Dua Lipa — Levitating (energía de pista); Daft Punk — One More Time (celebración colectiva); The Weeknd — Blinding Lights (pulso social alto).",
-    "muy-alta":
-      "Beyonce — BREAK MY SOUL (máxima performance social); Charli xcx — Vroom Vroom (impulso hiperexpresivo); BTS — Dynamite (himno de interacción masiva).",
-  },
-  amabilidad: {
-    "muy-baja":
-      "Nine Inch Nails — Closer (fricción agresiva); Eminem — The Way I Am (confrontación directa); Swans — Screen Shot (intensidad áspera).",
-    baja:
-      "Pulp — Common People (ironía social afilada); Kanye West — Black Skinhead (tensión frontal); PJ Harvey — Rid of Me (aspereza emocional).",
-    "media-baja":
-      "Lana Del Rey — A&W (ambivalencia afectiva); The Smiths — Heaven Knows I'm Miserable Now (cinismo melódico); Interpol — Obstacle 1 (distancia emocional).",
-    "media-alta":
-      "Frank Ocean — Ivy (empatía con herida); Lord Huron — The Night We Met (calidez triste); Silvana Estrada — Te Guardo (ternura con tensión).",
-    alta:
-      "Bill Withers — Lean On Me (cuidado directo); Hozier — Cherry Wine (humanidad íntima); Natalia Lafourcade — Hasta la Raíz (afecto reparador).",
-    "muy-alta":
-      "The Beatles — All You Need Is Love (unión explícita); Coldplay — Fix You (consuelo prosocial); Louis Armstrong — What a Wonderful World (reconciliación afectiva).",
-  },
-  neuroticismo: {
-    "muy-baja":
-      "Brian Eno — An Ending (Ascent) (regulación serena); Khruangbin — Friday Morning (calma estable); Tycho — Awake (equilibrio emocional).",
-    baja:
-      "Norah Jones — Don't Know Why (suavidad reguladora); Jack Johnson — Better Together (reposo afectivo); Men I Trust — Show Me How (melancolía ligera).",
-    "media-baja":
-      "The xx — Intro (tensión suave); Phoebe Bridgers — Kyoto (fragilidad controlada); Vetusta Morla — Copenhague (carga emocional media).",
-    "media-alta":
-      "Radiohead — How to Disappear Completely (ansiedad elegíaca); Bjork — Jóga (intensidad vulnerable); Portishead — Roads (drama contenido).",
-    alta:
-      "Jeff Buckley — Grace (catarsis poderosa); Fiona Apple — Paper Bag (vulnerabilidad explícita); Lingua Ignota — PENNSYLVANIA FURNACE (descarga emocional).",
-    "muy-alta":
-      "Mount Eerie — Real Death (duelo extremo); Xiu Xiu — I Luv the Valley OH! (quiebre afectivo); Diamanda Galás — Let My People Go (intensidad límite).",
-  },
-};
-
 const FACET_CINEMA_EXAMPLES = {
   apertura: {
     "muy-baja":
@@ -390,6 +244,19 @@ const MUSIC_RULES = {
     "Neuroticismo: baja=calma reguladora; media-baja=melancolía suave; media-alta=tensión emocional notable; alta/muy-alta=catarsis intensa y vulnerabilidad explícita.",
 };
 
+const GAME_RULES = {
+  apertura:
+    "Apertura: baja=mecánicas familiares, tutoriales claros y poca ambigüedad; media-baja=open world o sandbox accesible; media-alta=sistemas híbridos y curiosidad de diseño; alta/muy-alta=formalismo arriesgado, metanarrativa o reglas poco convencionales con intención clara.",
+  responsabilidad:
+    "Responsabilidad: baja=física caótica, sandbox irreverente o progresión flexible; media-baja=roguelike/ runs con reglas claras pero variación; media-alta=patrones duros aprendibles y progresión legible; alta/muy-alta=optimización, puzzles sistémicos o simulación con alta exigencia de método.",
+  extraversion:
+    "Extraversión: baja=experiencia solitaria, contemplativa o walking sim; media-baja=co-op opcional sin forzar multitud; media-alta=mix solo/grupo o roles sociales moderados; alta/muy-alta=multijugador competido, party o alta interacción performativa.",
+  amabilidad:
+    "Amabilidad: baja=conflicto moral duro o violencia con intención crítica; media-baja=dilemas grises tensos; media-alta=vínculos y cuidado con fricción; alta/muy-alta=cooperación, construcción amable o reparación emocional explícita.",
+  neuroticismo:
+    "Neuroticismo: baja=ritmo calmado y regulación casi meditativa; media-baja=melancolía o tensión leve; media-alta=miedo o incomodidad psicológica sostenida; alta/muy-alta=catarsis afectiva fuerte o ansiedad narrativa marcada.",
+};
+
 const CINEMA_RULES = {
   apertura:
     "Apertura: baja=narrativa clásica y legible; media-baja=convención con giro; media-alta=lenguaje visual más arriesgado; alta/muy-alta=estructura no lineal y apuesta autoral.",
@@ -430,7 +297,7 @@ const VISUAL_ART_RULES = {
 };
 
 const CATEGORY_RULE_BLOCKS = [
-  { heading: "VIDEOJUEGOS", rules: null },
+  { heading: "VIDEOJUEGOS", rules: GAME_RULES },
   { heading: "MÚSICA", rules: MUSIC_RULES },
   { heading: "CINE", rules: CINEMA_RULES },
   { heading: "LITERATURA", rules: LITERATURE_RULES },
@@ -475,7 +342,7 @@ function stablePickOneExample(rawExamples, seed) {
 }
 
 function formatFacetExamplesBlock(dimensions, examplesByFacet, heading, targetLabel, seedSalt = "") {
-  const selected = topFacetKeys(dimensions, 1);
+  const selected = topFacetKeys(dimensions, 2);
   const lines = selected.map((key) => {
     const value = dimensions.find(([k]) => k === key)?.[1] ?? 0;
     const detail = scoreDetailBand(value);
@@ -486,9 +353,9 @@ function formatFacetExamplesBlock(dimensions, examplesByFacet, heading, targetLa
     return `  - ${key} (${label}): ${ex}`;
   });
   return (
-    `- ${heading} (facetas dominantes): ejemplos de matiz, NO repertorio.\n` +
-    `  Usa estos ejemplos como calibración y prioriza ${targetLabel} alternativos con encaje OCEAN.\n` +
-    `  No repitas estos ejemplos por defecto; úsalos solo para entender la vibra.\n` +
+    `- ${heading} (facetas más marcadas en este perfil): ejemplos concretos solo para calibrar matiz, NO catálogo de salida.\n` +
+    `  NO recomiendes al usuario esos títulos salvo como mucho uno en toda la respuesta si encaja sin alternativa mejor.\n` +
+    `  Prioriza ${targetLabel} distintos pero con la misma vibra dimensional y perfil Big Five numérico global.\n` +
     `${lines.join("\n")}`
   );
 }
@@ -496,24 +363,6 @@ function formatFacetExamplesBlock(dimensions, examplesByFacet, heading, targetLa
 function formatCategoryRuleSections(dimensions, seedSalt = "") {
   const dimKeys = dimensions.map(([key]) => key);
   return CATEGORY_RULE_BLOCKS.map(({ heading, rules }) => {
-    if (heading === "VIDEOJUEGOS") {
-      return formatFacetExamplesBlock(
-        dimensions,
-        FACET_VIDEOGAME_EXAMPLES,
-        "VIDEOJUEGOS",
-        "títulos",
-        seedSalt
-      );
-    }
-    if (heading === "MÚSICA") {
-      return formatFacetExamplesBlock(
-        dimensions,
-        FACET_MUSIC_EXAMPLES,
-        "MÚSICA",
-        "artistas/obras",
-        seedSalt
-      );
-    }
     if (heading === "CINE") {
       return formatFacetExamplesBlock(
         dimensions,
@@ -532,10 +381,20 @@ function formatCategoryRuleSections(dimensions, seedSalt = "") {
         seedSalt
       );
     }
-    return `- Reglas para ${heading} (aplican según nivel actual por faceta):\n${dimKeys
-      .map((k) => `  - ${rules[k]}`)
-      .join("\n")}`;
+    return (
+      `- Reglas para ${heading} (solo dimensiones abstractas; sin nombres de obras en esta subsección — evita sesgo de “copiar ejemplo”):\n` +
+      dimKeys.map((k) => `  - ${rules[k]}`).join("\n")
+    );
   }).join("\n");
+}
+
+function distinctiveSpanishTraitLine(dimensions) {
+  const sorted = [...dimensions].sort(
+    (a, b) => Math.abs(Number(b[1]) - 3) - Math.abs(Number(a[1]) - 3)
+  );
+  const top = sorted.slice(0, 2);
+  if (!top.length) return "no_disponible";
+  return top.map(([k, v]) => `${k}=${Number(v).toFixed(2)}`).join(" | ");
 }
 
 function buildCompactFacetPrompt(dimensions, dominantFacet, seedSalt = "") {
@@ -549,6 +408,7 @@ function buildCompactFacetPrompt(dimensions, dominantFacet, seedSalt = "") {
   return `TRADUCCIÓN OCEAN (compacta, obligatoria):
 ${dimLines.join("\n")}
 - Faceta dominante prioritaria: ${dominantFacet?.key || "no_disponible"} (${(dominantFacet?.value || 0).toFixed(2)}).
+- Rasgos más distintivos (mayor alejamiento del punto medio 3): ${distinctiveSpanishTraitLine(dimensions)} — prioriza diferenciación ahí sin ignorar interacciones con los demás.
 ${formatCategoryRuleSections(dimensions, seedSalt)}
 - Usa esta lógica en mecánicas/ritmo/tono, no solo estética.
 - Distingue media-baja de media-alta y evita recomendaciones clónicas.`;
@@ -748,12 +608,18 @@ function buildPersonalizedFeedCuratorPrompt({
       : o < 2.4
         ? "Apertura O < 2.4: puedes incluir como máximo 2 megatítulos de esa familia si encajan de verdad con el perfil; el resto debe ser catálogo menos obvio."
         : "Apertura media: como máximo 1 megatítulo de esa familia; prioriza variedad de estudio, época y plataforma.";
+  const musicOpennessRule =
+    o >= 3.2
+      ? "Prioriza proyectos menos \"playlist virales iguales para todos\"; al menos mitad sello/indie/obras de culto o escena regional coherentes con OCEAN."
+      : o < 2.4
+        ? "Puedes usar clásicos accesibles pero al menos mitad debe ser música fuera del bloque habitual de grandes hits actuales (varía época/región/formato)."
+        : "Combina conocidos y medio-nicho; no concentres en los mismos 10 artistas típicicos de otros feeds.";
 
   const sections = [
     "Rol: Curador cultural. Objetivo: discovery personalizado con sesgo a nicho real y diversidad; no inventes obras.",
     [
       "### PERFIL",
-      `- OCEAN: O:${o.toFixed(2)}, C:${c.toFixed(2)}, E:${e.toFixed(2)}, A:${a.toFixed(2)}, N:${n.toFixed(2)}`,
+      `- OCEAN (medias Likert 1–5 por rasgo, ítems recodificados estilo IPIP): O:${o.toFixed(2)}, C:${c.toFixed(2)}, E:${e.toFixed(2)}, A:${a.toFixed(2)}, N:${n.toFixed(2)}`,
       `- Huella: ${oceanFingerprint}`,
       artExtra.trim() ? artExtra.trim() : null,
       `- Diferenciación obligatoria: ${rulesText}`,
@@ -764,12 +630,12 @@ function buildPersonalizedFeedCuratorPrompt({
       "### REGLAS NÚCLEO",
       "1) Evita listas obvias y convergencia entre usuarios; prioriza long-tail verificable.",
       `2) Videojuegos: al menos 6 candidatos alineados con ambos ejes: (1) ${gameAxisA} (2) ${gameAxisB}. ${gameOpennessRule}`,
-      "3) Música: al menos 6 candidatos con justificación explícita y no genérica para este perfil.",
-      "4) En videojuegos y música, cada oceanFitReason debe explicar encaje por combinación de rasgos (interacción entre al menos 2 dimensiones OCEAN) y no por un rasgo aislado.",
+      `3) Música: al menos 6 candidatos; ${musicOpennessRule}; genreHint con subgén/movimiento concreto, no etiquetas vagas.`,
+      '4) Música y videojuegos: cada oceanFitReason debe mencionar DOS dimensiones OCEAN por su letra O,C,E,A,N y nivel relativo DEL USUARIO (alto/medio/bajo respecto ~3), y explicar la interacción entre ambas (no bastan adjetivos genéricos ni un solo rasgo).',
       "5) Subfacetas disponibles:",
       subfacetBlock,
-      "5.1) Los ejemplos incluidos en este prompt son solo calibración de vibra, NO repertorio objetivo.",
-      "5.2) Evita copiar títulos de ejemplo; como máximo 1 candidato total puede coincidir literalmente con esos ejemplos.",
+      '5.1) Cualquier bloque más abajo con títulos concretos (solo cine/literatura ya) es tonalidad/plantilla mental, NO algo que el usuario \"deba recibir\". Máximo 1 coincidencia literal entre TODOS los candidatos si repites ese título de ejemplo.',
+      "5.2) Música y videojuegos: el prompt usa solo rasgos dimensionales abstractos ahí — no tienes lista de obra de calibración; evita repetir la misma nómina habitual que recomendaría un modelo genérico ante OCEAN parecido; obliga dispersión década/región/formato/indie dentro de ese par de categorías.",
       `6) Genera exactamente ${targetCandidates} candidatos en cinco categorías (cine, musica, literatura, videojuegos, arte-visual), balanceadas cuando sea posible.`,
       `   - ${nEntropySafe} obras "seguras" (alto encaje OCEAN, popularidad media).`,
       `   - ${nEntropyNiche} obras de nicho (alto encaje, baja popularidad / indie / autor).`,
@@ -792,7 +658,7 @@ function buildPersonalizedFeedCuratorPrompt({
     ].join("\n"),
     `### FORMATO DE SALIDA (JSON ESTRICTO)
 Devuelve solo este objeto JSON:
-{"candidates":[{"category":"cine|musica|literatura|videojuegos|arte-visual","title":"Título en español de España (TMDB es-ES) u original si no hay traducción","creator":"Autor/Director/Estudio","genreHint":"Subgénero hiper-específico (ej. post-punk báltico, slow cinema distópico)","oceanFitReason":"Justificación breve basada en combinación global OCEAN (al menos 2 rasgos interactuando)"}]}`,
+{"candidates":[{"category":"cine|musica|literatura|videojuegos|arte-visual","title":"Título en español de España (TMDB es-ES) u original si no hay traducción","creator":"Autor/Director/Estudio","genreHint":"Subgénero hiper-específico (ej. post-punk báltico, slow cinema distópico)","oceanFitReason":"Interacción de al menos 2 dimensiones O,C,E,A,N con niveles relativos al perfil numérico arriba y por qué esta obra encaja"}]}`,
     `Random seed de diversidad: ${diversitySalt}`,
   ];
 

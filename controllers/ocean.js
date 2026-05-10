@@ -2,6 +2,11 @@ const { handleHTTPError } = require("../utils/handleHTTPError");
 const { OceanModel, UserModel, ArtworkModel } = require("../models");
 const mongoose = require("mongoose");
 const ai = require("../services/ai");
+const {
+  affineDisplay05ToLikertMean,
+  DEFAULT_OCEAN_SCORE_METRIC,
+  oceanScoresToCanonicalLikert,
+} = require("../utils/ai/agentUtils");
 
 const BIG_FIVE_TRAITS = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism'];
 const ARTISTIC_PROMPT_VERSION = "v4-genre-specificity";
@@ -41,9 +46,9 @@ const scoresHaveSubfacetDetail = (scores) => {
 
 /**
  * Convierte un documento Ocean guardado al formato que consume el frontend (test_results, etc.).
- * - dimensions: totales 0–5 por rasgo
- * - subfacetas (solo test deep): un elemento por faceta — media keyed en 1–5 (IPIP) o −2..+2 (legado),
- *   según plain.responseScale, para poder recalcular barras sin sesgo.
+ * - dimensions: media Likert 1–5 por rasgo (métrica IPIP habitual)
+ * - subfacetas (deep): [media Likert 1–5] por faceta
+ * - scoreMetric: cómo estaban guardados en Mongo (`ipip_mean_1_5` vs `display_affine_05` legado)
  * Incluye `scores` crudo por compatibilidad.
  */
 const formatOceanForFrontend = (doc) => {
@@ -58,6 +63,14 @@ const formatOceanForFrontend = (doc) => {
   const responseScale =
     plain.responseScale === 'ipip_1_5' ? 'ipip_1_5' : 'legacy_neg2_pos2';
 
+  const scoreMetric =
+    plain.scoreMetric === 'ipip_mean_1_5'
+      ? 'ipip_mean_1_5'
+      : DEFAULT_OCEAN_SCORE_METRIC;
+
+  const toLikert = (v) =>
+    scoreMetric === 'ipip_mean_1_5' ? v : affineDisplay05ToLikertMean(v);
+
   const dimensions = {};
   const subfacets = {};
 
@@ -66,7 +79,7 @@ const formatOceanForFrontend = (doc) => {
     if (!scoreObj || typeof scoreObj !== 'object') continue;
 
     if (typeof scoreObj.total === 'number') {
-      dimensions[trait] = scoreObj.total;
+      dimensions[trait] = toLikert(scoreObj.total);
     }
 
     if (testType === 'deep') {
@@ -75,9 +88,7 @@ const formatOceanForFrontend = (doc) => {
         if (key === 'total') continue;
         const val = scoreObj[key];
         if (typeof val !== 'number') continue;
-        const keyedMean =
-          responseScale === 'ipip_1_5' ? (val / 5) * 4 + 1 : (val / 5) * 4 - 2;
-        facetEntries[key] = [keyedMean];
+        facetEntries[key] = [toLikert(val)];
       }
       if (Object.keys(facetEntries).length > 0) {
         subfacets[trait] = facetEntries;
@@ -91,6 +102,7 @@ const formatOceanForFrontend = (doc) => {
     entityId: plain.entityId,
     testType,
     responseScale,
+    scoreMetric,
     timestamp: plain.updatedAt || plain.createdAt,
     createdAt: plain.createdAt,
     updatedAt: plain.updatedAt,
@@ -147,10 +159,23 @@ const saveTestResults = async (req, res) => {
   let useTransaction = false;
 
   try {
-    const { entityType, entityId, scores, totalScore, testType, responseScale: bodyResponseScale } = req.body;
+    const {
+      entityType,
+      entityId,
+      scores,
+      totalScore,
+      testType,
+      responseScale: bodyResponseScale,
+      scoreMetric: bodyScoreMetric,
+    } = req.body;
 
     const responseScale =
       bodyResponseScale === 'ipip_1_5' ? 'ipip_1_5' : 'legacy_neg2_pos2';
+
+    const scoreMetric =
+      bodyScoreMetric === 'ipip_mean_1_5'
+        ? 'ipip_mean_1_5'
+        : DEFAULT_OCEAN_SCORE_METRIC;
 
     // Validaciones básicas
     if (!entityType || !['user', 'artwork'].includes(entityType)) {
@@ -230,6 +255,7 @@ const saveTestResults = async (req, res) => {
       }
       oceanResult.testType = testType || 'quick';
       oceanResult.responseScale = responseScale;
+      oceanResult.scoreMetric = scoreMetric;
       // Nuevo test: invalidar descripción IA para que se regenere con los scores actuales
       if (entityType === 'user') {
         oceanResult.artisticDescription = null;
@@ -249,6 +275,7 @@ const saveTestResults = async (req, res) => {
           totalScore,
           testType: testType || 'quick',
           responseScale,
+          scoreMetric,
         }], { session });
         oceanResult = created[0];
       } else {
@@ -259,6 +286,7 @@ const saveTestResults = async (req, res) => {
           totalScore,
           testType: testType || 'quick',
           responseScale,
+          scoreMetric,
         });
       }
     }
@@ -537,7 +565,8 @@ const generateArtisticDescription = async (req, res) => {
         if (!forceRegenerate) {
           return res.status(200).json({
             message: "Descripción artística obtenida desde almacenamiento",
-            data: parsedDescription
+            data: parsedDescription,
+            regenerated: false,
           });
         }
       } else if (!forceRegenerate) {
@@ -548,7 +577,8 @@ const generateArtisticDescription = async (req, res) => {
             profile: "Personalizado",
             description: oceanResult.artisticDescription,
             recommendations: [],
-          }
+          },
+          regenerated: false,
         });
       }
     }
@@ -570,6 +600,17 @@ const generateArtisticDescription = async (req, res) => {
         res,
         { message: "Error interno preparando datos para el servicio de IA" },
         500
+      );
+    }
+
+    const descScoreMetric =
+      oceanJsonSafe.scoreMetric === "ipip_mean_1_5"
+        ? "ipip_mean_1_5"
+        : DEFAULT_OCEAN_SCORE_METRIC;
+    if (oceanJsonSafe.scores && typeof oceanJsonSafe.scores === "object") {
+      oceanJsonSafe.scores = oceanScoresToCanonicalLikert(
+        oceanJsonSafe.scores,
+        descScoreMetric
       );
     }
 
@@ -644,7 +685,8 @@ const generateArtisticDescription = async (req, res) => {
 
     return res.status(200).json({
       message: "Descripción artística generada correctamente",
-      data: artisticPayload
+      data: artisticPayload,
+      regenerated: true,
     });
 
   } catch (error) {

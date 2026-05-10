@@ -6,6 +6,8 @@ const {
   normalizeWorkCandidateRows,
   countDefaultCanonOverlap,
   countGlobalCanonOverlap,
+  oceanScoresToCanonicalLikert,
+  DEFAULT_OCEAN_SCORE_METRIC,
 } = require("../../../utils/ai/agentUtils");
 const {
   buildArtisticProfileExtra,
@@ -27,13 +29,19 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
   const logIaRecommendedWorks = deps.logIaRecommendedWorks || (() => {});
   const aiStartAt = Date.now();
 
-  const scores = oceanResult.scores;
-  if (!scores || typeof scores !== "object") {
+  const rawScores = oceanResult.scores;
+  if (!rawScores || typeof rawScores !== "object") {
     return { candidates: [], webSearchUsed: false, reason: "no_ocean_scores" };
   }
   if (!agent.configured()) {
     return { candidates: [], webSearchUsed: false, reason: "no_gemini" };
   }
+
+  const scoreMetric =
+    oceanResult.scoreMetric === "ipip_mean_1_5"
+      ? "ipip_mean_1_5"
+      : DEFAULT_OCEAN_SCORE_METRIC;
+  const scores = oceanScoresToCanonicalLikert(rawScores, scoreMetric);
 
   const o = traitTotal(scores, "openness");
   const c = traitTotal(scores, "conscientiousness");
@@ -72,6 +80,17 @@ async function curatePersonalizedFeed(agent, oceanResult, artisticProfile, deps 
     targetCandidates: TARGET_CANDIDATES,
   });
   const promptBuildMs = Date.now() - promptBuildStartAt;
+
+  const dumpFullPrompt =
+    process.env.FEED_LOG_FULL_PROMPT === "1" ||
+    /^true$/i.test(String(process.env.FEED_LOG_FULL_PROMPT || ""));
+  if (dumpFullPrompt) {
+    logger.info("[dreamlodge][feed] full_curator_prompt chars=%s fingerprint=%s", prompt.length, oceanFingerprint);
+    // Salida literal multilinea (los loggers tipo JSON suelen aplastar saltos de línea)
+    console.log(
+      `\n---------- FEED CURATOR PROMPT (chars=${prompt.length}) ----------\n${prompt}\n---------- FIN PROMPT ----------\n`
+    );
+  }
 
   let text;
   const modelStartAt = Date.now();

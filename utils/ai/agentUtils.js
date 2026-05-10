@@ -195,6 +195,44 @@ function traitTotal(scores, key) {
   return 0;
 }
 
+/** Histórico: totales facetas guardados como ((mediaLikert − 1) / 4) * 5 → media Likert equivalente en [1, 5]. */
+function affineDisplay05ToLikertMean(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return (n / 5) * 4 + 1;
+}
+
+const DEFAULT_OCEAN_SCORE_METRIC = "display_affine_05";
+
+/** Convierte el árbol de scores Mongo a medias Likert 1–5 para prompts IA y curación (traslada formato antiguo). */
+function oceanScoresToCanonicalLikert(scores, scoreMetric = DEFAULT_OCEAN_SCORE_METRIC) {
+  if (!scores || typeof scores !== "object") return scores;
+  const dims = [
+    "openness",
+    "conscientiousness",
+    "extraversion",
+    "agreeableness",
+    "neuroticism",
+  ];
+  const useLikertStored = scoreMetric === "ipip_mean_1_5";
+  const out = { ...scores };
+  for (const d of dims) {
+    const row = scores[d];
+    if (!row || typeof row !== "object") continue;
+    const next = { ...row };
+    const t = parseFloat(row.total);
+    if (Number.isFinite(t)) next.total = useLikertStored ? t : affineDisplay05ToLikertMean(t);
+    for (const k of Object.keys(row)) {
+      if (k === "total") continue;
+      const sv = parseFloat(row[k]);
+      if (!Number.isFinite(sv)) continue;
+      next[k] = useLikertStored ? sv : affineDisplay05ToLikertMean(sv);
+    }
+    out[d] = next;
+  }
+  return out;
+}
+
 function buildDeepSubfacetsBlock(scores) {
   if (!scores || typeof scores !== "object") return "";
   const parts = [];
@@ -256,6 +294,7 @@ function buildProfileDrivenCurationRules({ o, c, e, a, n, fingerprint }) {
     `Usa la huella ${String(fingerprint || "na")} para que la selección sea única del perfil y no clónica frente a otros usuarios.`,
     "Prioriza subgéneros concretos y menos obvios cuando encajen con el perfil, sin bloquear obras por lista fija.",
     "Videojuegos: evita que tu lista sea intercambiable con la de otro usuario con OCEAN distinto; varía década, plataforma, región del estudio y subgénero mecánico.",
+    "Música: igual criterio de diferenciación; no repitas el mismo bouquet de grandes hits/actuales que servirían a cualquier perfil medio; menciona obra o disco concreto, no solo género vaporoso.",
   ];
   return { rulesText: rules.join("\n- "), avoidTitles: [] };
 }
@@ -557,6 +596,9 @@ module.exports = {
   normalizeWorkCandidateRows,
   formatExceptionForClient,
   traitTotal,
+  affineDisplay05ToLikertMean,
+  DEFAULT_OCEAN_SCORE_METRIC,
+  oceanScoresToCanonicalLikert,
   buildDeepSubfacetsBlock,
   buildProfileDrivenCurationRules,
   buildOceanFingerprint,

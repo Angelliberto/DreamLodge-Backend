@@ -200,7 +200,15 @@ function formatOceanTraitBlock(traitKey, traitScores) {
 function oceanPrompt(oceanResults) {
   if (!oceanResults || !oceanResults.length) return "";
   const latest = oceanResults[0];
-  const scores = latest.scores || {};
+  const {
+    oceanScoresToCanonicalLikert,
+    DEFAULT_OCEAN_SCORE_METRIC,
+  } = require("../../../utils/ai/agentUtils");
+  const scoreMetric =
+    latest.scoreMetric === "ipip_mean_1_5"
+      ? "ipip_mean_1_5"
+      : DEFAULT_OCEAN_SCORE_METRIC;
+  const scores = oceanScoresToCanonicalLikert(latest.scores || {}, scoreMetric);
   const blocks = [];
   for (const traitKey of [
     "openness",
@@ -217,7 +225,7 @@ function oceanPrompt(oceanResults) {
   return `
 
 PERFIL DE PERSONALIDAD DEL USUARIO (Big Five - OCEAN, con las 9 facetas AB5C por dimensión cuando existan):
-El usuario ha completado un test de personalidad. Escala típica 0–5 por ítem (total del rasgo y cada faceta).
+El usuario ha completado un test de personalidad. Los números son medias Likert en escala 1–5 por rasgo y por faceta (ítems recodificados al estilo IPIP/Mini-IPIP; 1 = muy bajo en el rasgo o faceta, 5 = muy alto, 3 ≈ punto medio teórico).
 En test rápido solo suele haber "total"; el resto de facetas aparecerá como N/A hasta el análisis profundo.
 
 ${body}

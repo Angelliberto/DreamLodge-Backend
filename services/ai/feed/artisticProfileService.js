@@ -13,6 +13,8 @@ const {
   countGlobalCanonOverlap,
   GENRE_REC_KEYS,
   PROMPT_TMDB_SPAIN_CINE_TITLE_RULE,
+  oceanScoresToCanonicalLikert,
+  DEFAULT_OCEAN_SCORE_METRIC,
 } = require("../../../utils/ai/agentUtils");
 
 function scoreBand(v) {
@@ -84,13 +86,19 @@ async function generateArtisticDescription(agent, oceanResult, options = {}, dep
   const regenerationSeed =
     options.regenerationSeed != null ? String(options.regenerationSeed).trim() : "";
 
-  const scores = oceanResult.scores;
-  if (!scores || typeof scores !== "object") {
+  const rawScores = oceanResult.scores;
+  if (!rawScores || typeof rawScores !== "object") {
     logger.warn("generateArtisticDescription: scores inválidos");
     const err = new Error("Resultados OCEAN no válidos");
     err.statusCode = 400;
     throw err;
   }
+
+  const scoreMetric =
+    oceanResult.scoreMetric === "ipip_mean_1_5"
+      ? "ipip_mean_1_5"
+      : DEFAULT_OCEAN_SCORE_METRIC;
+  const scores = oceanScoresToCanonicalLikert(rawScores, scoreMetric);
 
   const o = traitTotal(scores, "openness");
   const c = traitTotal(scores, "conscientiousness");
@@ -151,7 +159,7 @@ ${PROMPT_TMDB_SPAIN_CINE_TITLE_RULE}
 
 ${variationBlock}
 
-Perfil numérico (0-5):
+Perfil numérico — medias Likert 1–5 por rasgo (ítems recodificados al estilo IPIP/Mini-IPIP; 1 = muy bajo en el rasgo, 5 = muy alto):
 - Apertura ${Number(o).toFixed(2)}, Responsabilidad ${Number(c).toFixed(2)}, Extraversión ${Number(e).toFixed(2)}, Amabilidad ${Number(a).toFixed(2)}, Neuroticismo ${Number(n).toFixed(2)}
 
 ${sub}
@@ -159,9 +167,11 @@ Reglas de diferenciación entre perfiles (OBLIGATORIO):
 - ${profileDrivenRules.rulesText}
 ${detailedOceanGuidance}
 
-Contexto: no se usa búsqueda web externa. Prioriza obras menos obvias pero fieles al perfil; evita caer en los mismos títulos universales.
+Contexto: no se usa búsqueda web externa. Prioriza obras menos obvias pero fieles al perfil; evita caer en los mismos títulos universales entre distintos usuarios con OCEAN parecido (especialmente en música y videojuegos: dispersa año, país/escena, sello/indie vs blockbuster).
 
-En tu razonamiento interno (no lo escribas): elige 10-16 obras reales mezclando categorías; que cada categoría tenga al menos una obra coherente con la descripción del perfil. En videojuegos, alterna épocas de lanzamiento y familias de plataforma; no agrupes varias obras solo en lo más popular o reciente del mercado.
+En tu razonamiento interno (no lo escribas): elige 10-16 obras reales mezclando categorías; que cada categoría tenga al menos una obra coherente con los rasgos más distintivos del perfil (no solo uno). En música y videojuegos, fuerza mayoría fuera del pack de GOTY/streaming repetido; alterna épocas y estudios/región.
+
+En música y videojuegos: cada entrada suggestedWorks debe estar alineada con la interacción de al menos DOS dimensiones OCEAN (no justifiques solo con un rasgo ni con frases cliché reproducibles entre usuarios).
 
 ${descriptionGuidelines}
 
