@@ -28,7 +28,6 @@ async function processChatMessage({
     response: result.response,
     toolsUsed: result.toolsUsed,
     context: result.context,
-    recommendedItems: result.recommendedItems ?? [],
     suggestedTitle,
   };
 }
@@ -60,7 +59,6 @@ async function processChatMessageStream(
     response: result.response,
     toolsUsed: result.toolsUsed,
     context: result.context,
-    recommendedItems: result.recommendedItems ?? [],
     suggestedTitle,
   };
 }
