@@ -50,7 +50,7 @@ function mapMongoArtworkToClientRecommended(doc) {
   return out;
 }
 
-function collectRecommendedItemsFromToolResults(toolResults, maxItems = 12) {
+function collectRecommendedItemsFromToolResults(toolResults, maxItems = 20) {
   const out = [];
   const seen = new Set();
   const push = (doc) => {
@@ -72,7 +72,64 @@ function collectRecommendedItemsFromToolResults(toolResults, maxItems = 12) {
   return out.slice(0, maxItems);
 }
 
+function normalizeMatchText(str) {
+  return String(str || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Variantes de título para buscar coincidencia en la respuesta (p. ej. sin año entre paréntesis). */
+function titleSearchVariants(title) {
+  const raw = String(title || "").trim();
+  if (!raw) return [];
+  const variants = new Set();
+  variants.add(raw);
+  const noYear = raw.replace(/\s*\(\d{4}\)\s*$/, "").trim();
+  if (noYear.length >= 3) variants.add(noYear);
+  const beforeDash = raw.split(/\s[—\-]\s/)[0]?.trim();
+  if (beforeDash && beforeDash.length >= 3 && beforeDash !== raw) variants.add(beforeDash);
+  const slashParts = raw.split(/\s*\/\s*/).map((s) => s.trim()).filter((s) => s.length >= 3);
+  for (const p of slashParts) variants.add(p);
+  return [...variants];
+}
+
+/**
+ * Solo obras cuyo título (o variante) aparece literalmente en el texto del asistente,
+ * en el orden en que aparecen en la respuesta.
+ */
+function filterRecommendedItemsByResponseText(responseText, items) {
+  if (!Array.isArray(items) || !items.length) return [];
+  const body = normalizeMatchText(responseText);
+  if (!body) return [];
+  const scored = [];
+  for (const art of items) {
+    const variants = titleSearchVariants(art.title);
+    let bestIdx = -1;
+    for (const v of variants) {
+      const t = normalizeMatchText(v);
+      if (t.length < 3) continue;
+      const idx = body.indexOf(t);
+      if (idx >= 0 && (bestIdx < 0 || idx < bestIdx)) bestIdx = idx;
+    }
+    if (bestIdx >= 0) scored.push({ art, idx: bestIdx });
+  }
+  scored.sort((a, b) => a.idx - b.idx);
+  const seen = new Set();
+  const out = [];
+  for (const { art } of scored) {
+    const id = String(art.id || "");
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(art);
+  }
+  return out;
+}
+
 module.exports = {
   collectRecommendedItemsFromToolResults,
   mapMongoArtworkToClientRecommended,
+  filterRecommendedItemsByResponseText,
 };

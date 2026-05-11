@@ -6,7 +6,10 @@ const db = require("./dbTools");
 const { buildSystemPrompt } = require("./systemPrompts");
 const { extractSearchParams, analyzeMessageAndSelectTools } = require("./messageIntent");
 const { executeTools } = require("./agentTools");
-const { collectRecommendedItemsFromToolResults } = require("./chatRecommendedPayload");
+const {
+  collectRecommendedItemsFromToolResults,
+  filterRecommendedItemsByResponseText,
+} = require("./chatRecommendedPayload");
 
 async function prepareChatTurn(userMessage, { userId, conversationHistory, contextItems } = {}) {
   const tAll = Date.now();
@@ -114,7 +117,11 @@ async function prepareChatTurn(userMessage, { userId, conversationHistory, conte
 
 function buildChatProcessReturn(prep, aiResponse) {
   const { oceanResults, favorites, ctx, toolResults, toolsToUse } = prep;
-  const recommendedItems = collectRecommendedItemsFromToolResults(toolResults, 12);
+  const candidates = collectRecommendedItemsFromToolResults(toolResults, 20);
+  const recommendedItems = filterRecommendedItemsByResponseText(
+    String(aiResponse || ""),
+    candidates
+  );
   return {
     response: aiResponse,
     toolsUsed: toolsToUse,
