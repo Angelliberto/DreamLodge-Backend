@@ -254,28 +254,43 @@ const sendMessageStream = async (req, res) => {
     }
 
     const trimmedMessage = message.trim();
-    let conversationHistory = [];
-    let serverConversation = null;
-
-    if (userId && conversationId && String(conversationId).trim()) {
-      serverConversation = await chatPersistence.upsertConversationByClientKey(
-        userId,
-        conversationId,
-        { title: currentTitle || "", contextItems: contextItems || [] }
-      );
-      if (serverConversation) {
-        conversationHistory = await chatPersistence.getRecentHistory(
-          serverConversation._id,
-          14
-        );
-      }
-    }
 
     res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("X-Accel-Buffering", "no");
     res.status(200);
     if (typeof res.flushHeaders === "function") res.flushHeaders();
+
+    safeWrite({ type: "status", phase: "persistence" });
+
+    let conversationHistory = [];
+    let serverConversation = null;
+
+    if (userId && conversationId && String(conversationId).trim()) {
+      try {
+        serverConversation = await chatPersistence.upsertConversationByClientKey(
+          userId,
+          conversationId,
+          { title: currentTitle || "", contextItems: contextItems || [] }
+        );
+        if (serverConversation) {
+          conversationHistory = await chatPersistence.getRecentHistory(
+            serverConversation._id,
+            14
+          );
+        }
+      } catch (dbErr) {
+        console.error("Error persistencia (chat stream):", dbErr?.message || dbErr);
+        safeWrite({
+          type: "error",
+          message:
+            dbErr && typeof dbErr.message === "string"
+              ? dbErr.message
+              : "No se pudo preparar la conversación.",
+        });
+        return res.end();
+      }
+    }
 
     let result;
     try {
@@ -289,6 +304,9 @@ const sendMessageStream = async (req, res) => {
         },
         (cumulativeText) => {
           safeWrite({ type: "chunk", text: cumulativeText });
+        },
+        (phase) => {
+          safeWrite({ type: "status", phase });
         }
       );
     } catch (aiErr) {

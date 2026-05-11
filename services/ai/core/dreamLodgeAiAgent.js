@@ -86,10 +86,37 @@ class DreamLodgeAIAgent {
       conversationHistory,
       toolResults
     );
-    return this.generateWithGeminiStream(fullPrompt, {
+    const t0 = Date.now();
+    let timeToFirstChunkMs = null;
+    const wrapped =
+      typeof onChunk === "function"
+        ? (cumulative) => {
+            if (
+              timeToFirstChunkMs === null &&
+              String(cumulative || "")
+                .replace(/\s/g, "")
+                .length > 0
+            ) {
+              timeToFirstChunkMs = Date.now() - t0;
+            }
+            onChunk(cumulative);
+          }
+        : onChunk;
+
+    const text = await this.generateWithGeminiStream(fullPrompt, {
       ...CHAT_GEMINI_OPTS,
       modelCandidates: chatGeminiCandidates(),
-    }, onChunk);
+    }, wrapped);
+
+    const geminiStreamMs = Date.now() - t0;
+    return {
+      text,
+      timing: {
+        timeToFirstChunkMs: timeToFirstChunkMs ?? null,
+        geminiStreamMs,
+        responseChars: String(text || "").length,
+      },
+    };
   }
 
   async processMessage(userMessage, { userId, conversationHistory, contextItems } = {}) {
@@ -115,8 +142,14 @@ class DreamLodgeAIAgent {
   async processMessageStream(
     userMessage,
     { userId, conversationHistory, contextItems } = {},
-    onChunk
+    onChunk,
+    onPhase
   ) {
+    try {
+      onPhase?.("preparing");
+    } catch {
+      /* noop */
+    }
     const prep = await prepareChatTurn(userMessage, {
       userId,
       conversationHistory,
@@ -127,13 +160,39 @@ class DreamLodgeAIAgent {
         "El servicio de IA no está configurado (Gemini no disponible). Configura GEMINI_API_KEY."
       );
     }
-    const aiResponse = await this.generateResponseStream(
+    try {
+      onPhase?.("generating");
+    } catch {
+      /* noop */
+    }
+    const { text: aiResponse, timing: geminiTiming } = await this.generateResponseStream(
       userMessage,
       prep.systemPrompt,
       prep.hist,
       prep.toolResults,
       onChunk
     );
+    try {
+      const pt = prep._timing || {};
+      console.log(
+        JSON.stringify({
+          tag: "CHAT_TIMING",
+          phase: "chat_turn",
+          prepareTotalMs: pt.totalMs ?? null,
+          prepareParallelWallMs: pt.parallelWallMs ?? null,
+          prepareBuildPromptMs: pt.buildPromptMs ?? null,
+          prepareExtraSearchMs: pt.extraSearchMs ?? null,
+          geminiTimeToFirstChunkMs: geminiTiming?.timeToFirstChunkMs ?? null,
+          geminiStreamMs: geminiTiming?.geminiStreamMs ?? null,
+          geminiResponseChars: geminiTiming?.responseChars ?? null,
+          toolsToUse: prep.toolsToUse,
+          contextItemsCount: prep.ctx?.length ?? 0,
+          userIdPresent: Boolean(userId),
+        })
+      );
+    } catch {
+      /* noop */
+    }
     return buildChatProcessReturn(prep, aiResponse);
   }
 

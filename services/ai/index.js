@@ -35,10 +35,12 @@ async function processChatMessage({
 /**
  * Misma lógica que processChatMessage pero la respuesta final se genera con Gemini en streaming.
  * @param {(cumulativeText: string) => void} onChunk
+ * @param {(phase: string) => void} [onPhase] preparing | generating
  */
 async function processChatMessageStream(
   { message, userId, conversationHistory = [], contextItems = [], currentTitle = "" },
-  onChunk
+  onChunk,
+  onPhase
 ) {
   const agent = getAiAgent();
   const trimmed = String(message || "").trim();
@@ -49,7 +51,8 @@ async function processChatMessageStream(
       conversationHistory,
       contextItems,
     },
-    onChunk
+    onChunk,
+    onPhase
   );
   const suggestedTitle = null;
   return {
