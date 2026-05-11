@@ -92,6 +92,7 @@ const sendMessage = async (req, res) => {
         response: aiResponse,
         toolsUsed: result.toolsUsed,
         context: result.context,
+        recommendedItems: result.recommendedItems ?? [],
         suggestedTitle,
         serverConversationId: serverConversation
           ? String(serverConversation._id)
@@ -356,6 +357,7 @@ const sendMessageStream = async (req, res) => {
         response: aiResponse,
         toolsUsed: result.toolsUsed,
         context: result.context,
+        recommendedItems: result.recommendedItems ?? [],
         suggestedTitle,
         serverConversationId: serverConversation
           ? String(serverConversation._id)
