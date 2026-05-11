@@ -1,6 +1,8 @@
 /**
  * Construye el prompt largo del chat (contexto + obras + instrucciones finales).
  */
+const { buildArtworkConsumptionUrl } = require("./artworkLinks");
+
 function buildChatFullPrompt(
   userMessage,
   systemPrompt,
@@ -32,10 +34,14 @@ function buildChatFullPrompt(
       const desc = artwork.description || "";
       if (desc) line += `\n   ${desc.slice(0, 200)}`;
       if (artwork.rating != null) line += `\n   Calificación: ${artwork.rating}/10`;
+      const link = buildArtworkConsumptionUrl(artwork);
+      if (link) line += `\n   Enlace (oficial / consumo): ${link}`;
       contextText += `${line}\n`;
     }
     contextText +=
-      "\nIMPORTANTE: Estas obras están en la base de datos de Dream Lodge. Preséntalas de manera atractiva y específica, mencionando detalles relevantes.\n\n";
+      "\nIMPORTANTE: Estas obras están en la base de datos de Dream Lodge. Preséntalas de manera atractiva y específica, mencionando detalles relevantes.\n";
+    contextText +=
+      "Para cada obra que cites, incluye en tu respuesta un enlace Markdown [texto corto](URL) usando EXACTAMENTE la URL del campo \"Enlace\" cuando exista. No inventes URLs.\n\n";
   }
 
   const one = toolResults.artwork || {};
@@ -48,7 +54,10 @@ function buildChatFullPrompt(
     if (artwork.year) contextText += `Año: ${artwork.year}\n`;
     if (artwork.description) contextText += `Descripción: ${artwork.description}\n`;
     if (artwork.rating != null) contextText += `Calificación: ${artwork.rating}/10\n`;
-    contextText += "\n";
+    const oneLink = buildArtworkConsumptionUrl(artwork);
+    if (oneLink) contextText += `Enlace (oficial / consumo): ${oneLink}\n`;
+    contextText +=
+      "Incluye en tu respuesta un enlace Markdown [texto](URL) con esa URL exacta para que el usuario pueda abrirla.\n\n";
   }
 
   const oc = toolResults.oceanResults || {};
@@ -64,7 +73,8 @@ function buildChatFullPrompt(
     if (flist.length) {
       contextText += `Obras favoritas del usuario (${flist.length}):\n`;
       for (const x of flist.slice(0, 5)) {
-        contextText += `- ${x.title || x.artworkId}\n`;
+        const favLink = typeof x === "object" && x ? buildArtworkConsumptionUrl(x) : "";
+        contextText += `- ${x.title || x.artworkId}${favLink ? ` — Enlace: ${favLink}` : ""}\n`;
       }
       contextText += "\n";
     }
@@ -77,6 +87,7 @@ function buildChatFullPrompt(
 - Has encontrado ${aw.data.length} obra(s) en la base de datos.
 - Preséntalas de manera atractiva y específica, mencionando título, creador, año y categoría.
 - Explica brevemente por qué cada obra podría interesarle al usuario.
+- Cuando el contexto liste "Enlace (oficial / consumo)" para una obra, DEBES incluir en la respuesta al menos un enlace Markdown [etiqueta breve](URL) con esa URL exacta (copia literal) para que el usuario pueda abrirla en el navegador o app.
 `;
     if (oc.data) {
       fullPrompt +=
@@ -94,6 +105,7 @@ function buildChatFullPrompt(
 - Explica brevemente por qué estas recomendaciones encajan con su personalidad.
 - Si no tienes obras específicas en la base de datos, usa tu conocimiento general para sugerir contenido conocido.
 - NUNCA digas "no tengo información" - siempre ofrece algo útil.
+- Si sugieres obras concretas sin enlace en el contexto, indica dónde buscarlas (ej. plataforma, editorial) sin inventar URLs.
 
 `;
   } else if (fd && Array.isArray(fd) && fd.length > 0) {
@@ -102,13 +114,12 @@ function buildChatFullPrompt(
 - Haz recomendaciones similares o complementarias basándote en sus favoritos.
 - Sé específico: menciona obras concretas, géneros o estilos relacionados.
 - Si no tienes obras específicas en la base, usa tu conocimiento para sugerir contenido conocido que sea similar.
+- Si en el contexto aparece "Enlace:" junto a un favorito, incluye ese enlace en Markdown [etiqueta](URL) cuando hables de esa obra.
 
 `;
   } else {
     fullPrompt += `INSTRUCCIONES IMPORTANTES:
 - Responde siempre con algo útil y específico.
-- NUNCA digas "no pude encontrar", "no pude satisfacer tu solicitud" o "no entendí" como mensaje principal.
-- Interpreta la intención aunque haya typos o escritura informal.
 - Si no tienes datos en la base de datos, usa tu conocimiento general para sugerir contenido conocido, géneros o estilos.
 - Sé proactivo: ofrece opciones concretas o haz preguntas útiles para refinar la búsqueda.
 - Mantén un tono amigable y entusiasta.
