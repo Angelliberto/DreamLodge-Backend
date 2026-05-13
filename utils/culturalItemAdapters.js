@@ -17,6 +17,20 @@ function formatTags(tags) {
   return tags.map(formatTag).filter((t) => t.length > 0);
 }
 
+/** IGDB ExternalGameCategory: EXTERNAL_GAME_STEAM = 1 */
+const IGDB_EXTERNAL_STEAM = 1;
+
+function pickSteamAppIdFromIgdbGame(game) {
+  const list = game.external_games;
+  if (!Array.isArray(list)) return "";
+  for (const eg of list) {
+    if (Number(eg?.category) === IGDB_EXTERNAL_STEAM && eg?.uid != null && String(eg.uid).trim() !== "") {
+      return String(eg.uid).trim();
+    }
+  }
+  return "";
+}
+
 function adaptIGDB(game) {
   const developerName = String(game.involved_companies?.[0]?.company?.name || "").trim();
   if (!developerName) return null;
@@ -37,6 +51,14 @@ function adaptIGDB(game) {
   const cover = game.cover?.url
     ? `https:${String(game.cover.url).replace("t_thumb", "t_720p")}`
     : "https://via.placeholder.com/400x600?text=No+Cover";
+  const steamAppId = pickSteamAppIdFromIgdbGame(game);
+  const steamStoreUrl =
+    steamAppId && /^\d+$/.test(steamAppId)
+      ? `https://store.steampowered.com/app/${encodeURIComponent(steamAppId)}/`
+      : "";
+  const steamSearchUrl = game.name
+    ? `https://store.steampowered.com/search/?term=${encodeURIComponent(game.name)}`
+    : "";
   return {
     id: `game-${game.id}`,
     originalId: game.id,
@@ -54,6 +76,8 @@ function adaptIGDB(game) {
       platforms: formatTags(platforms),
       other: formatTags(other),
       label: "IGDB",
+      ...(steamAppId ? { steamAppId } : {}),
+      contextLink: steamStoreUrl || steamSearchUrl || undefined,
       igdbRatingCount:
         typeof game.total_rating_count === "number" && Number.isFinite(game.total_rating_count)
           ? game.total_rating_count

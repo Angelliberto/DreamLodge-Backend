@@ -42,7 +42,7 @@ async function getIgdbAccessToken() {
   }
 }
 
-const IGDB_FIELDS = `fields name, cover.url, rating, summary, first_release_date, total_rating_count, hypes, genres.name, platforms.name, platforms.abbreviation, game_modes.name, involved_companies.company.name;`;
+const IGDB_FIELDS = `fields name, cover.url, rating, summary, first_release_date, total_rating_count, hypes, genres.name, platforms.name, platforms.abbreviation, game_modes.name, involved_companies.company.name, external_games.category, external_games.uid;`;
 
 /**
  * @param {string} query
