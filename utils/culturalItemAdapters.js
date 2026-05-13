@@ -21,9 +21,12 @@ function formatTags(tags) {
 const IGDB_EXTERNAL_STEAM = 1;
 
 function pickSteamAppIdFromIgdbGame(game) {
+  const enriched = game.__steamUid != null ? String(game.__steamUid).trim() : "";
+  if (enriched && /^\d+$/.test(enriched)) return enriched;
   const list = game.external_games;
   if (!Array.isArray(list)) return "";
   for (const eg of list) {
+    if (typeof eg === "number") continue;
     if (Number(eg?.category) === IGDB_EXTERNAL_STEAM && eg?.uid != null && String(eg.uid).trim() !== "") {
       return String(eg.uid).trim();
     }
