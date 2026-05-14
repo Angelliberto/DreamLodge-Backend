@@ -698,6 +698,57 @@ const removeFromNotInterested = async (req, res) =>
 const getNotInterested = async (req, res) => getUserArtworkList(req, res, "notInterestedArtworks");
 
 /**
+ * Guarda la descripción enriquecida en Mongo para que GET /artworks/:id devuelva el texto al volver a la ficha.
+ * Si no hay fila con ese `id`, crea la obra solo si el body trae los campos mínimos (misma forma que el feed).
+ */
+async function persistEnrichedAlbumDescription(artwork, descriptionText) {
+  const logicalId = String(artwork?.id || "").trim();
+  if (!logicalId || !descriptionText) return;
+
+  const upd = await ArtworkModel.updateOne(
+    { id: logicalId },
+    { $set: { description: String(descriptionText) } }
+  );
+  if (upd.matchedCount > 0) {
+    console.log("[persist enrich] descripción actualizada id=%s", logicalId);
+    return;
+  }
+
+  const required = ["originalId", "source", "title", "category", "imageUrl", "creator"];
+  const missing = required.filter((k) => artwork[k] == null || String(artwork[k]).trim() === "");
+  if (missing.length) {
+    console.warn("[persist enrich] sin fila y faltan campos para crear: %s", missing.join(", "));
+    return;
+  }
+  try {
+    await ArtworkModel.create({
+      id: logicalId,
+      originalId: artwork.originalId,
+      source: artwork.source,
+      title: artwork.title,
+      category: artwork.category,
+      imageUrl: artwork.imageUrl,
+      creator: artwork.creator,
+      year: artwork.year ?? null,
+      description: String(descriptionText),
+      rating: artwork.rating ?? null,
+      metadata: artwork.metadata && typeof artwork.metadata === "object" ? artwork.metadata : {},
+      tone_tags: Array.isArray(artwork.tone_tags) ? artwork.tone_tags : [],
+      depth_emotional: artwork.depth_emotional ?? null,
+      depth_artistic: artwork.depth_artistic ?? null,
+    });
+    console.log("[persist enrich] obra creada con descripción id=%s", logicalId);
+  } catch (e) {
+    if (e.code === 11000) {
+      await ArtworkModel.updateOne({ id: logicalId }, { $set: { description: String(descriptionText) } });
+      console.log("[persist enrich] descripción tras duplicado id=%s", logicalId);
+      return;
+    }
+    console.warn("[persist enrich] create falló:", e?.message || e);
+  }
+}
+
+/**
  * POST /api/artworks/spotify/album-enrich (o alias /enrich-spotify-album)
  * Genera descripción breve para álbum Spotify aún no persistido o sin enriquecer (p. ej. ficha desde feed).
  * Body: { artwork: { title, creator, category, source, description?, year?, metadata? } }
@@ -719,7 +770,28 @@ const postEnrichSpotifyAlbumDescription = async (req, res) => {
       console.warn("[artworks/spotify/album-enrich] 400: falta artwork en body");
       return handleHTTPError(res, { message: "artwork es requerido" }, 400);
     }
+
+    const logicalId = String(artwork.id || "").trim();
+    if (logicalId) {
+      try {
+        const row = await ArtworkModel.findOne({ id: logicalId }).lean();
+        if (row?.description && hasStoredDescriptionToKeep(row.description)) {
+          console.log("[artworks/spotify/album-enrich] descripción ya en BD id=%s", logicalId);
+          return res.status(200).json({ data: { description: row.description } });
+        }
+      } catch (readErr) {
+        console.warn("[artworks/spotify/album-enrich] lectura BD:", readErr?.message || readErr);
+      }
+    }
+
     const enriched = await enrichSpotifyAlbumDescriptionIfNeeded(artwork);
+    if (enriched?.description) {
+      try {
+        await persistEnrichedAlbumDescription(artwork, enriched.description);
+      } catch (persistErr) {
+        console.warn("[artworks/spotify/album-enrich] persist:", persistErr?.message || persistErr);
+      }
+    }
     console.log(
       `[artworks/spotify/album-enrich] ok en ${Date.now() - t0}ms, descripción: ${
         enriched?.description ? `${enriched.description.length} chars` : "null"
