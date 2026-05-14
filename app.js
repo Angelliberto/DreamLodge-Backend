@@ -181,6 +181,12 @@ app.get('/', (req, res) => {
   });
 });
 
+// 404: rutas no registradas (útil para depurar clientes que pegan a URL equivocada)
+app.use((req, res) => {
+  console.warn('[http 404]', req.method, req.originalUrl);
+  res.status(404).json({ message: 'Ruta no encontrada', method: req.method, path: req.originalUrl });
+});
+
 // Start server
 const server = app.listen(port, () => {
   console.log("✅ Server listening on PORT " + port);

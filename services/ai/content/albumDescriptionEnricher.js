@@ -1,10 +1,29 @@
 /**
- * Sustituye la descripción genérica de Spotify ("Álbum con N canciones") por un texto breve generado con Gemini (modelo económico).
+ * Enriquece solo álbumes Spotify cuya descripción en BD es el placeholder ("Álbum con N canciones").
+ * Si la obra ya tiene otra descripción guardada, no se llama a la IA.
+ *
+ * La IA identifica el disco por metadatos (título, artista, año, géneros), no por IDs internos ni Spotify.
+ * Se intenta primero Gemini con Google Search (grounding); si falla, se cae a generación sin web (modelos lite).
  */
 const { getAiAgent } = require("../core/dreamLodgeAiAgent");
 
-/** Baratos primero; si la API rechaza lite, se cae a flash estándar (misma cascada que el resto del backend). */
-const ALBUM_BLURB_GEMINI_MODELS = [
+/** Herramienta de recuperación vía Google Search (SDK @google/generative-ai). */
+const GOOGLE_SEARCH_GROUNDING_TOOLS = [
+  {
+    googleSearchRetrieval: {
+      dynamicRetrievalConfig: {
+        mode: "MODE_DYNAMIC",
+        dynamicThreshold: 0.25,
+      },
+    },
+  },
+];
+
+/** Modelos que suelen admitir googleSearchRetrieval (no usar *-lite aquí). */
+const ALBUM_BLURB_WITH_WEB_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+
+/** Fallback barato si la búsqueda web no está disponible en la clave o el modelo. */
+const ALBUM_BLURB_FALLBACK_MODELS = [
   "gemini-2.5-flash-lite",
   "gemini-2.0-flash-lite",
   "gemini-2.0-flash",
@@ -20,6 +39,7 @@ function isMusicaCategory(cat) {
   return s === "musica";
 }
 
+/** Placeholder que pone adaptSpotifyAlbum al crear la obra desde Spotify. */
 function isGenericSpotifyAlbumDescription(desc) {
   if (desc == null) return true;
   const t = String(desc).trim();
@@ -31,6 +51,14 @@ function isGenericSpotifyAlbumDescription(desc) {
     .replace(/\s+/g, " ")
     .trim();
   return /^album con \d+ canciones\.?$/.test(n);
+}
+
+/**
+ * Si la obra ya tiene una descripción distinta del placeholder, no debe generarse nada.
+ * @param {unknown} desc
+ */
+function hasStoredDescriptionToKeep(desc) {
+  return !isGenericSpotifyAlbumDescription(desc);
 }
 
 function parseTrackHint(artwork) {
@@ -54,6 +82,34 @@ function genresLine(artwork) {
     .join(", ");
 }
 
+function normalizeBlurb(text) {
+  return String(text || "")
+    .trim()
+    .replace(/^["«»]|["«»]$/g, "");
+}
+
+function buildAlbumEnrichPrompt(artwork) {
+  const title = String(artwork.title || "").trim();
+  const creator = String(artwork.creator || "").trim();
+  const year = String(artwork.year || "").trim();
+  const genres = genresLine(artwork);
+  const tracks = parseTrackHint(artwork);
+
+  return `Eres un editor musical. Tu tarea es identificar UN único álbum musical usando solo estos datos de catálogo (no uses ningún ID interno de base de datos ni ID de Spotify para decidir de qué disco hablas; solo título, intérprete(s), año y pistas/géneros si encajan con fuentes web):
+
+- Título del álbum: "${title}"
+- Intérprete(s): "${creator || "desconocido"}"
+- Año de referencia (si consta): "${year || "desconocido"}"
+${genres ? `- Géneros o etiquetas conocidas: ${genres}` : ""}
+${tracks != null ? `- Número aproximado de pistas (metadato): ${tracks}` : ""}
+
+Instrucciones:
+1) Usa búsqueda en internet cuando sea necesario para confirmar que las fuentes se refieren al mismo álbum (mismo título e intérprete principal). Si no puedes confirmarlo, dilo con honestidad en 1 frase y no inventes datos.
+2) Escribe UNA sola descripción breve en español (máximo 60 palabras, texto corrido). Tono informativo: estilo, contexto de lanzamiento o recepción general si aparece en fuentes fiables.
+3) No listes canciones ni incluyas URLs ni lista de fuentes.
+4) No menciones IDs, Wikipedia ni que eres un modelo de IA.`;
+}
+
 async function tryGeminiAlbumBlurb(artwork) {
   const agent = getAiAgent();
   if (!agent.configured()) {
@@ -61,36 +117,39 @@ async function tryGeminiAlbumBlurb(artwork) {
     return "";
   }
 
-  const title = String(artwork.title || "").trim();
-  const creator = String(artwork.creator || "").trim();
-  const year = String(artwork.year || "").trim();
-  const genres = genresLine(artwork);
-  const tracks = parseTrackHint(artwork);
+  const prompt = buildAlbumEnrichPrompt(artwork);
+  const generationConfig = { temperature: 0.3, maxOutputTokens: 260 };
 
-  const prompt = `Eres un editor musical. Escribe UNA sola descripción corta en español (máximo 55 palabras, 2-4 frases) del álbum "${title}" de ${creator || "artista desconocido"}${year ? ` (${year})` : ""}.
+  let text = "";
+  try {
+    text = await agent.generateWithGemini(prompt, {
+      purpose: "descripción álbum (grounding web)",
+      timeoutMs: 42000,
+      modelCandidates: ALBUM_BLURB_WITH_WEB_MODELS,
+      tools: GOOGLE_SEARCH_GROUNDING_TOOLS,
+      generationConfig,
+    });
+  } catch (e) {
+    console.warn("[albumDescriptionEnricher] fase con búsqueda web:", e?.message || e);
+  }
 
-Reglas:
-- Tono informativo, sin listar canciones ni argumentar el concepto al detalle.
-- Si conoces el disco, resume estilo o contexto de lanzamiento en pocas líneas.
-- Si no tienes datos fiables sobre este álbum concreto, sé honesto: artista, año si lo tienes, ${genres ? `géneros (${genres})` : "género probable según el nombre"}${tracks != null ? ` y aproximadamente ${tracks} pistas` : ""}; no inventes charts, premios ni fechas dudosas.
-- Sin viñetas ni comillas alrededor del texto.
-- No menciones que eres un modelo de IA.`;
+  let out = normalizeBlurb(text);
+  if (out.length >= 24) return out;
 
   try {
-    const text = await agent.generateWithGemini(prompt, {
-      purpose: "descripción breve álbum",
+    text = await agent.generateWithGemini(prompt, {
+      purpose: "descripción álbum (sin web)",
       timeoutMs: 22000,
-      modelCandidates: ALBUM_BLURB_GEMINI_MODELS,
-      generationConfig: { temperature: 0.35, maxOutputTokens: 160 },
+      modelCandidates: ALBUM_BLURB_FALLBACK_MODELS,
+      generationConfig: { temperature: 0.35, maxOutputTokens: 200 },
     });
-    const out = String(text || "")
-      .trim()
-      .replace(/^["«»]|["«»]$/g, "");
-    return out.length >= 24 ? out : "";
+    out = normalizeBlurb(text);
   } catch (e) {
-    console.warn("[albumDescriptionEnricher] Gemini:", e?.message || e);
+    console.warn("[albumDescriptionEnricher] fase sin web:", e?.message || e);
     return "";
   }
+
+  return out.length >= 24 ? out : "";
 }
 
 /**
@@ -101,7 +160,7 @@ async function enrichSpotifyAlbumDescriptionIfNeeded(artworkPlain) {
   if (!artworkPlain || typeof artworkPlain !== "object") return null;
   if (String(artworkPlain.source || "").trim() !== "Spotify") return null;
   if (!isMusicaCategory(artworkPlain.category)) return null;
-  if (!isGenericSpotifyAlbumDescription(artworkPlain.description)) return null;
+  if (hasStoredDescriptionToKeep(artworkPlain.description)) return null;
 
   const gem = await tryGeminiAlbumBlurb(artworkPlain);
   if (gem) return { description: gem };
@@ -112,5 +171,6 @@ async function enrichSpotifyAlbumDescriptionIfNeeded(artworkPlain) {
 module.exports = {
   enrichSpotifyAlbumDescriptionIfNeeded,
   isGenericSpotifyAlbumDescription,
+  hasStoredDescriptionToKeep,
   isMusicaCategory,
 };

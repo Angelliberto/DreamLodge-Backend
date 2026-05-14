@@ -8,7 +8,8 @@
  *   para catálogo Spotify (parámetro `market`).
  * - CONTENT_LANG: idioma BCP-47 corto para Google Books `langRestrict` e IGDB `Accept-Language`
  *   (ej. es). Alternativas: GOOGLE_BOOKS_LANG_RESTRICT, IGDB_ACCEPT_LANGUAGE.
- * - GOOGLE_BOOKS_LANG_RESTRICT: valor exacto para Books (ej. es o es,en). Si es "off", no se envía langRestrict.
+ * - GOOGLE_BOOKS_LANG_RESTRICT: valor exacto para Books (ej. es o es,en). Si es "off" o sin definir (y sin CONTENT_LANG),
+ *   no se envía langRestrict (más resultados). Usa es o es,en si quieres acotar idioma.
  */
 
 function trim(v) {
@@ -47,6 +48,7 @@ function getSpotifyMarket() {
 /**
  * Restricción de idioma para Google Books API (`langRestrict`).
  * Vacío = no enviar parámetro (todos los idiomas).
+ * Por defecto vacío: `langRestrict=es` excluía muchos volúmenes con metadatos solo en inglés.
  */
 function getGoogleBooksLangRestrict() {
   const explicit = trim(process.env.GOOGLE_BOOKS_LANG_RESTRICT);
@@ -54,7 +56,7 @@ function getGoogleBooksLangRestrict() {
   if (explicit) return explicit;
   const fromContent = firstEnv("CONTENT_LANG");
   if (fromContent) return fromContent;
-  return "es";
+  return "";
 }
 
 /** Cabecera Accept-Language para IGDB (textos localizados cuando existan). */

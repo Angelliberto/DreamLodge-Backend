@@ -10,7 +10,14 @@ const { isNotSupported, isQuota, isTransient } = require("./geminiErrors");
 async function generateWithGemini(
   genAI,
   prompt,
-  { purpose = "respuesta", timeoutMs = 40000, generationConfig = null, modelCandidates = null } = {}
+  {
+    purpose = "respuesta",
+    timeoutMs = 40000,
+    generationConfig = null,
+    modelCandidates = null,
+    tools = null,
+    toolConfig = null,
+  } = {}
 ) {
   if (!genAI) {
     throw new Error("El servicio de IA no está configurado (Gemini no disponible).");
@@ -26,7 +33,14 @@ async function generateWithGemini(
 
   for (const modelName of candidates) {
     tried.push(modelName);
-    const model = genAI.getGenerativeModel({ model: modelName });
+    const modelParams = { model: modelName };
+    if (Array.isArray(tools) && tools.length) {
+      modelParams.tools = tools;
+      if (toolConfig && typeof toolConfig === "object") {
+        modelParams.toolConfig = toolConfig;
+      }
+    }
+    const model = genAI.getGenerativeModel(modelParams);
     try {
       const run = async () => {
         const request = generationConfig
@@ -86,7 +100,14 @@ async function generateWithGemini(
 async function generateWithGeminiStream(
   genAI,
   prompt,
-  { purpose = "respuesta", timeoutMs = 40000, generationConfig = null, modelCandidates = null } = {},
+  {
+    purpose = "respuesta",
+    timeoutMs = 40000,
+    generationConfig = null,
+    modelCandidates = null,
+    tools = null,
+    toolConfig = null,
+  } = {},
   onChunk
 ) {
   if (!genAI) {
@@ -103,7 +124,14 @@ async function generateWithGeminiStream(
 
   for (const modelName of candidates) {
     tried.push(modelName);
-    const model = genAI.getGenerativeModel({ model: modelName });
+    const modelParams = { model: modelName };
+    if (Array.isArray(tools) && tools.length) {
+      modelParams.tools = tools;
+      if (toolConfig && typeof toolConfig === "object") {
+        modelParams.toolConfig = toolConfig;
+      }
+    }
+    const model = genAI.getGenerativeModel(modelParams);
     try {
       const runStream = async () => {
         const request =

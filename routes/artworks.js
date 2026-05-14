@@ -64,9 +64,28 @@ router.delete("/not-interested/:artworkId", authUser, removeFromNotInterested);
 // POST /api/artworks/similar
 router.post("/similar", getSimilarArtworks);
 
-// Descripción breve álbum Spotify (obras del feed aún no en BD o sin GEMINI al guardar)
-// POST /api/artworks/enrich-spotify-album
+// Descripción breve álbum Spotify (POST; dos segmentos para no confundir con GET /:id)
+// POST /api/artworks/spotify/album-enrich  (recomendado)
+router.post("/spotify/album-enrich", postEnrichSpotifyAlbumDescription);
+router.get("/spotify/album-enrich", (req, res) => {
+  console.warn("[artworks] GET /spotify/album-enrich ignorado; usar POST con body { artwork }");
+  res.status(405).set("Allow", "POST").json({
+    message: "Este recurso solo admite POST",
+    hint: "POST /api/artworks/spotify/album-enrich con JSON { artwork }",
+  });
+});
+
+// Alias histórico: un solo segmento — GET aquí antes caía en GET /:id y devolvía 404 confuso
 router.post("/enrich-spotify-album", postEnrichSpotifyAlbumDescription);
+router.get("/enrich-spotify-album", (req, res) => {
+  console.warn(
+    "[artworks] GET /enrich-spotify-album (antes resolvía a /:id y 404). Usa POST /api/artworks/spotify/album-enrich"
+  );
+  res.status(405).set("Allow", "POST").json({
+    message: "Este recurso solo admite POST",
+    hint: "POST /api/artworks/spotify/album-enrich con JSON { artwork }",
+  });
+});
 
 // Obtener una obra por ID (debe ir al final para no interferir con las rutas anteriores)
 // GET /api/artworks/:id

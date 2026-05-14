@@ -29,7 +29,7 @@ class DreamLodgeAIAgent {
 
   /**
    * @param {string} prompt
-   * @param {{ purpose?: string, timeoutMs?: number, generationConfig?: object }} [options]
+   * @param {{ purpose?: string, timeoutMs?: number, generationConfig?: object, modelCandidates?: string[], tools?: object[], toolConfig?: object }} [options]
    */
   async generateWithGemini(prompt, options = {}) {
     return geminiGenerate(this._genAI, prompt, options);
@@ -37,7 +37,7 @@ class DreamLodgeAIAgent {
 
   /**
    * @param {string} prompt
-   * @param {{ purpose?: string, timeoutMs?: number, generationConfig?: object }} [options]
+   * @param {{ purpose?: string, timeoutMs?: number, generationConfig?: object, modelCandidates?: string[], tools?: object[], toolConfig?: object }} [options]
    * @param {(cumulative: string) => void} [onChunk]
    */
   async generateWithGeminiStream(prompt, options = {}, onChunk) {

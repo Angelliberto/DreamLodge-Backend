@@ -6,7 +6,7 @@ const ai = require("../services/ai");
 const { resolveCuratedFeedCandidates } = require("../services/search/feedCandidateResolver");
 const {
   enrichSpotifyAlbumDescriptionIfNeeded,
-  isGenericSpotifyAlbumDescription,
+  hasStoredDescriptionToKeep,
   isMusicaCategory,
 } = require("../services/ai/content/albumDescriptionEnricher");
 
@@ -14,7 +14,7 @@ function scheduleSpotifyAlbumDescriptionEnrichment(mongoId, artworkPlain) {
   if (
     String(artworkPlain?.source || "").trim() !== "Spotify" ||
     !isMusicaCategory(artworkPlain?.category) ||
-    !isGenericSpotifyAlbumDescription(artworkPlain?.description)
+    hasStoredDescriptionToKeep(artworkPlain?.description)
   ) {
     return;
   }
@@ -698,34 +698,50 @@ const removeFromNotInterested = async (req, res) =>
 const getNotInterested = async (req, res) => getUserArtworkList(req, res, "notInterestedArtworks");
 
 /**
- * Obtener 3 obras similares recomendadas por IA para una obra base.
- * POST /api/artworks/similar
- * Body: { artwork: CulturalItem-like, limit?: number }
- */
-/**
- * POST /api/artworks/enrich-spotify-album
+ * POST /api/artworks/spotify/album-enrich (o alias /enrich-spotify-album)
  * Genera descripción breve para álbum Spotify aún no persistido o sin enriquecer (p. ej. ficha desde feed).
  * Body: { artwork: { title, creator, category, source, description?, year?, metadata? } }
  */
 const postEnrichSpotifyAlbumDescription = async (req, res) => {
+  const t0 = Date.now();
+  console.log(
+    "[artworks/spotify/album-enrich] POST",
+    req.originalUrl,
+    "content-type:",
+    req.headers["content-type"],
+    "hasBody:",
+    Boolean(req.body && Object.keys(req.body).length)
+  );
   try {
     const body = req.body && typeof req.body === "object" ? req.body : {};
     const artwork = body.artwork;
     if (!artwork || typeof artwork !== "object") {
+      console.warn("[artworks/spotify/album-enrich] 400: falta artwork en body");
       return handleHTTPError(res, { message: "artwork es requerido" }, 400);
     }
     const enriched = await enrichSpotifyAlbumDescriptionIfNeeded(artwork);
+    console.log(
+      `[artworks/spotify/album-enrich] ok en ${Date.now() - t0}ms, descripción: ${
+        enriched?.description ? `${enriched.description.length} chars` : "null"
+      }`
+    );
     return res.status(200).json({
       data: enriched || { description: null },
     });
   } catch (error) {
-    console.error("Error en enrich-spotify-album:", error);
+    console.error("[artworks/spotify/album-enrich] error:", error?.message || error);
     return handleHTTPError(res, {
       message: "No se pudo generar la descripción del álbum",
       details: process.env.NODE_ENV === "development" ? error.message : undefined,
     }, 500);
   }
 };
+
+/**
+ * Obtener 3 obras similares recomendadas por IA para una obra base.
+ * POST /api/artworks/similar
+ * Body: { artwork: CulturalItem-like, limit?: number }
+ */
 
 const getSimilarArtworks = async (req, res) => {
   try {
