@@ -20,14 +20,14 @@ const GOOGLE_SEARCH_GROUNDING_TOOLS = [
 ];
 
 /** Modelos que suelen admitir googleSearchRetrieval (no usar *-lite aquí). */
-const ALBUM_BLURB_WITH_WEB_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+const ALBUM_BLURB_WITH_WEB_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
 
 /** Fallback barato si la búsqueda web no está disponible en la clave o el modelo. */
 const ALBUM_BLURB_FALLBACK_MODELS = [
   "gemini-2.5-flash-lite",
   "gemini-2.0-flash-lite",
   "gemini-2.0-flash",
-  "gemini-1.5-flash",
+  "gemini-2.5-flash",
 ];
 
 function isMusicaCategory(cat) {

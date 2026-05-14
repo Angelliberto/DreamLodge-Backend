@@ -9,6 +9,9 @@ const {
   hasStoredDescriptionToKeep,
   isMusicaCategory,
 } = require("../services/ai/content/albumDescriptionEnricher");
+const { translateDescriptionToSpanishIfNeeded, MAX_DESCRIPTION_TRANSLATE_CHARS } = require(
+  "../services/ai/content/descriptionSpanishTranslator"
+);
 
 function scheduleSpotifyAlbumDescriptionEnrichment(mongoId, artworkPlain) {
   if (
@@ -82,6 +85,12 @@ function setSimilarCache(key, data) {
   });
 }
 
+/** Solo usar `_id` en la query cuando el param es un ObjectId hex de 24 chars (evita CastError con id lógico tipo music-xxx). */
+function isMongoObjectIdHex(id) {
+  const s = String(id || "").trim();
+  return /^[a-fA-F0-9]{24}$/.test(s);
+}
+
 /**
  * Obtener una obra por su ID
  * GET /api/artworks/:id
@@ -94,13 +103,8 @@ const getArtworkById = async (req, res) => {
       return handleHTTPError(res, { message: "ID es requerido" }, 400);
     }
 
-    // Buscar la obra por ID (puede ser el campo 'id' o '_id')
-    const artwork = await ArtworkModel.findOne({
-      $or: [
-        { id: id },
-        { _id: id }
-      ]
-    });
+    const query = isMongoObjectIdHex(id) ? { $or: [{ id }, { _id: id }] } : { id };
+    const artwork = await ArtworkModel.findOne(query);
 
     if (!artwork) {
       return handleHTTPError(res, { message: "Obra no encontrada" }, 404);
@@ -749,6 +753,50 @@ async function persistEnrichedAlbumDescription(artwork, descriptionText) {
 }
 
 /**
+ * POST /api/artworks/translate-description
+ * Body: { text: string } → { text, alreadySpanish } (Gemini).
+ */
+const postTranslateArtworkDescription = async (req, res) => {
+  const t0 = Date.now();
+  try {
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const text = String(body.text ?? "").trim();
+    if (text.length < 2) {
+      return handleHTTPError(res, { message: "text es requerido" }, 400);
+    }
+    if (text.length > MAX_DESCRIPTION_TRANSLATE_CHARS) {
+      return handleHTTPError(
+        res,
+        { message: `texto demasiado largo (máx. ${MAX_DESCRIPTION_TRANSLATE_CHARS} caracteres)` },
+        413
+      );
+    }
+    if (!ai.isGeminiConfigured()) {
+      return handleHTTPError(
+        res,
+        { message: "Traducción no disponible: configura GEMINI_API_KEY en el servidor." },
+        503
+      );
+    }
+    const out = await translateDescriptionToSpanishIfNeeded(text);
+    console.log(
+      `[artworks/translate-description] ok ${Date.now() - t0}ms alreadySpanish=${out.alreadySpanish} len=${out.text?.length || 0}`
+    );
+    return res.status(200).json({ data: out });
+  } catch (error) {
+    console.error("[artworks/translate-description]", error?.message || error);
+    return handleHTTPError(
+      res,
+      {
+        message: "No se pudo traducir la descripción",
+        details: process.env.NODE_ENV === "development" ? error.message : undefined,
+      },
+      500
+    );
+  }
+};
+
+/**
  * POST /api/artworks/spotify/album-enrich (o alias /enrich-spotify-album)
  * Genera descripción breve para álbum Spotify aún no persistido o sin enriquecer (p. ej. ficha desde feed).
  * Body: { artwork: { title, creator, category, source, description?, year?, metadata? } }
@@ -886,6 +934,7 @@ const getSimilarArtworks = async (req, res) => {
 module.exports = {
   getArtworkById,
   getAllArtworks,
+  postTranslateArtworkDescription,
   postEnrichSpotifyAlbumDescription,
   addToFavorites,
   removeFromFavorites,

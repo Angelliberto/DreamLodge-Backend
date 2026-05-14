@@ -348,7 +348,6 @@ function envModels() {
     "gemini-2.5-flash-lite",
     "gemini-2.0-flash-lite",
     "gemini-2.0-flash",
-    "gemini-1.5-flash",
   ].filter(Boolean);
   return [...new Set(candidates)];
 }
@@ -373,8 +372,6 @@ function chatGeminiCandidates() {
     "gemini-2.5-flash-lite",
     "gemini-2.0-flash",
     "gemini-2.0-flash-lite",
-    "gemini-1.5-pro",
-    "gemini-1.5-flash",
   ];
   const merged = [...primary, ...defaults];
   return [...new Set(merged)];

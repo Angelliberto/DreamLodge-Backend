@@ -4,6 +4,7 @@ const { authUser } = require("../middleware/session");
 const { 
   getArtworkById, 
   getAllArtworks,
+  postTranslateArtworkDescription,
   postEnrichSpotifyAlbumDescription,
   getSimilarArtworks,
   addToFavorites,
@@ -63,6 +64,10 @@ router.delete("/not-interested/:artworkId", authUser, removeFromNotInterested);
 // Similares recomendadas por IA para una obra base
 // POST /api/artworks/similar
 router.post("/similar", getSimilarArtworks);
+
+// Traducir descripción al español (Gemini) si no lo está ya
+// POST /api/artworks/translate-description
+router.post("/translate-description", postTranslateArtworkDescription);
 
 // Descripción breve álbum Spotify (POST; dos segmentos para no confundir con GET /:id)
 // POST /api/artworks/spotify/album-enrich  (recomendado)
