@@ -4,6 +4,7 @@ const { authUser } = require("../middleware/session");
 const { 
   getArtworkById, 
   getAllArtworks,
+  postEnrichSpotifyAlbumDescription,
   getSimilarArtworks,
   addToFavorites,
   removeFromFavorites,
@@ -62,6 +63,10 @@ router.delete("/not-interested/:artworkId", authUser, removeFromNotInterested);
 // Similares recomendadas por IA para una obra base
 // POST /api/artworks/similar
 router.post("/similar", getSimilarArtworks);
+
+// Descripción breve álbum Spotify (obras del feed aún no en BD o sin GEMINI al guardar)
+// POST /api/artworks/enrich-spotify-album
+router.post("/enrich-spotify-album", postEnrichSpotifyAlbumDescription);
 
 // Obtener una obra por ID (debe ir al final para no interferir con las rutas anteriores)
 // GET /api/artworks/:id

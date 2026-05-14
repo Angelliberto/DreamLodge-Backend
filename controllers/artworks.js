@@ -6,7 +6,34 @@ const ai = require("../services/ai");
 const { resolveCuratedFeedCandidates } = require("../services/search/feedCandidateResolver");
 const {
   enrichSpotifyAlbumDescriptionIfNeeded,
+  isGenericSpotifyAlbumDescription,
+  isMusicaCategory,
 } = require("../services/ai/content/albumDescriptionEnricher");
+
+function scheduleSpotifyAlbumDescriptionEnrichment(mongoId, artworkPlain) {
+  if (
+    String(artworkPlain?.source || "").trim() !== "Spotify" ||
+    !isMusicaCategory(artworkPlain?.category) ||
+    !isGenericSpotifyAlbumDescription(artworkPlain?.description)
+  ) {
+    return;
+  }
+  setImmediate(() => {
+    (async () => {
+      try {
+        const enriched = await enrichSpotifyAlbumDescriptionIfNeeded(artworkPlain);
+        if (enriched?.description) {
+          await ArtworkModel.updateOne(
+            { _id: mongoId },
+            { $set: { description: enriched.description } }
+          );
+        }
+      } catch (e) {
+        console.warn("[artworks] enriquecer descripción álbum (bg):", e?.message || e);
+      }
+    })();
+  });
+}
 
 const SIMILAR_CACHE = new Map();
 const SIMILAR_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -165,7 +192,8 @@ const saveOrGetArtwork = async (artworkData) => {
     let artwork = await ArtworkModel.findOne({ id: artworkData.id });
 
     if (artwork) {
-      // Si existe, retornar su ObjectId
+      const plain = typeof artwork.toObject === "function" ? artwork.toObject() : { ...artwork };
+      scheduleSpotifyAlbumDescriptionEnrichment(artwork._id, plain);
       return artwork._id;
     }
 
@@ -194,6 +222,18 @@ const saveOrGetArtwork = async (artworkData) => {
       tone_tags: artworkData.tone_tags || [],
       depth_emotional: artworkData.depth_emotional || null,
       depth_artistic: artworkData.depth_artistic || null
+    });
+
+    scheduleSpotifyAlbumDescriptionEnrichment(artwork._id, {
+      id: artworkData.id,
+      originalId: artworkData.originalId,
+      source: artworkData.source,
+      category: artworkData.category,
+      title: artworkData.title,
+      creator: artworkData.creator,
+      year: artworkData.year,
+      description: artworkData.description,
+      metadata: artworkData.metadata || {},
     });
 
     return artwork._id;
@@ -662,6 +702,31 @@ const getNotInterested = async (req, res) => getUserArtworkList(req, res, "notIn
  * POST /api/artworks/similar
  * Body: { artwork: CulturalItem-like, limit?: number }
  */
+/**
+ * POST /api/artworks/enrich-spotify-album
+ * Genera descripción breve para álbum Spotify aún no persistido o sin enriquecer (p. ej. ficha desde feed).
+ * Body: { artwork: { title, creator, category, source, description?, year?, metadata? } }
+ */
+const postEnrichSpotifyAlbumDescription = async (req, res) => {
+  try {
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const artwork = body.artwork;
+    if (!artwork || typeof artwork !== "object") {
+      return handleHTTPError(res, { message: "artwork es requerido" }, 400);
+    }
+    const enriched = await enrichSpotifyAlbumDescriptionIfNeeded(artwork);
+    return res.status(200).json({
+      data: enriched || { description: null },
+    });
+  } catch (error) {
+    console.error("Error en enrich-spotify-album:", error);
+    return handleHTTPError(res, {
+      message: "No se pudo generar la descripción del álbum",
+      details: process.env.NODE_ENV === "development" ? error.message : undefined,
+    }, 500);
+  }
+};
+
 const getSimilarArtworks = async (req, res) => {
   try {
     const body = req.body && typeof req.body === "object" ? req.body : {};
@@ -733,6 +798,7 @@ const getSimilarArtworks = async (req, res) => {
 module.exports = {
   getArtworkById,
   getAllArtworks,
+  postEnrichSpotifyAlbumDescription,
   addToFavorites,
   removeFromFavorites,
   getFavorites,

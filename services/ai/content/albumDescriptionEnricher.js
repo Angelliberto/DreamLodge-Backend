@@ -3,8 +3,13 @@
  */
 const { getAiAgent } = require("../core/dreamLodgeAiAgent");
 
-/** Modelos baratos (lite); se prueba en orden por compatibilidad de API. */
-const ALBUM_BLURB_GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.0-flash-lite"];
+/** Baratos primero; si la API rechaza lite, se cae a flash estándar (misma cascada que el resto del backend). */
+const ALBUM_BLURB_GEMINI_MODELS = [
+  "gemini-2.5-flash-lite",
+  "gemini-2.0-flash-lite",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+];
 
 function isMusicaCategory(cat) {
   const s = String(cat || "")
@@ -22,13 +27,21 @@ function isGenericSpotifyAlbumDescription(desc) {
   const n = t
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
   return /^album con \d+ canciones\.?$/.test(n);
 }
 
 function parseTrackHint(artwork) {
-  const m = String(artwork?.metadata?.duration || "").match(/(\d+)/);
-  return m ? Number(m[1]) : null;
+  const fromMeta = String(artwork?.metadata?.duration || "").match(/(\d+)/);
+  if (fromMeta) return Number(fromMeta[1]);
+  const desc = String(artwork?.description || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const fromDesc = desc.match(/album con (\d+)/);
+  return fromDesc ? Number(fromDesc[1]) : null;
 }
 
 function genresLine(artwork) {
@@ -43,7 +56,10 @@ function genresLine(artwork) {
 
 async function tryGeminiAlbumBlurb(artwork) {
   const agent = getAiAgent();
-  if (!agent.configured()) return "";
+  if (!agent.configured()) {
+    console.warn("[albumDescriptionEnricher] Gemini no configurado (GEMINI_API_KEY)");
+    return "";
+  }
 
   const title = String(artwork.title || "").trim();
   const creator = String(artwork.creator || "").trim();
@@ -70,8 +86,9 @@ Reglas:
     const out = String(text || "")
       .trim()
       .replace(/^["«»]|["«»]$/g, "");
-    return out.length >= 40 ? out : "";
-  } catch (_) {
+    return out.length >= 24 ? out : "";
+  } catch (e) {
+    console.warn("[albumDescriptionEnricher] Gemini:", e?.message || e);
     return "";
   }
 }
