@@ -376,7 +376,7 @@ const getFavorites = async (req, res) => {
 };
 
 /**
- * Agregar una obra a pendientes
+ * Agregar una obra a guardados (lista "Guardado" / pending en API)
  * POST /api/artworks/pending
  * Body: { artwork: { ...datos de la obra... } }
  */
@@ -418,19 +418,19 @@ const addToPending = async (req, res) => {
       return handleHTTPError(res, { message: "Usuario no encontrado" }, 404);
     }
 
-    // Verificar si la obra ya está en pendientes
+    // Verificar si la obra ya está en guardados
     if (user.pendingArtworks && user.pendingArtworks.includes(artworkId)) {
       if (useTransaction) {
         await session.abortTransaction();
         session.endSession();
       }
       return res.status(200).json({
-        message: "La obra ya está en pendientes",
+        message: "La obra ya está en guardados",
         data: { artworkId }
       });
     }
 
-    // Agregar la obra a pendientes (evitar duplicados)
+    // Agregar la obra a guardados (evitar duplicados)
     const updateOptions = useTransaction ? { session, new: true } : { new: true };
     const updatedUser = await UserModel.findByIdAndUpdate(
       userId,
@@ -445,7 +445,7 @@ const addToPending = async (req, res) => {
     }
 
     return res.status(200).json({
-      message: "Obra agregada a pendientes correctamente",
+      message: "Obra agregada a guardados correctamente",
       data: { artworkId, pendingArtworks: updatedUser.pendingArtworks }
     });
 
@@ -460,16 +460,16 @@ const addToPending = async (req, res) => {
       }
     }
 
-    console.error("Error agregando a pendientes:", error);
+    console.error("Error agregando a guardados:", error);
     return handleHTTPError(res, {
-      message: "Error al agregar la obra a pendientes",
+      message: "Error al agregar la obra a guardados",
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     }, 500);
   }
 };
 
 /**
- * Remover una obra de pendientes
+ * Remover una obra de guardados
  * DELETE /api/artworks/pending/:artworkId
  */
 const removeFromPending = async (req, res) => {
@@ -497,21 +497,21 @@ const removeFromPending = async (req, res) => {
     }
 
     return res.status(200).json({
-      message: "Obra removida de pendientes correctamente",
+      message: "Obra quitada de guardados correctamente",
       data: { pendingArtworks: updatedUser.pendingArtworks }
     });
 
   } catch (error) {
-    console.error("Error removiendo de pendientes:", error);
+    console.error("Error removiendo de guardados:", error);
     return handleHTTPError(res, {
-      message: "Error al remover la obra de pendientes",
+      message: "Error al quitar la obra de guardados",
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     }, 500);
   }
 };
 
 /**
- * Obtener todas las obras pendientes del usuario
+ * Obtener todas las obras guardadas del usuario
  * GET /api/artworks/pending
  */
 const getPending = async (req, res) => {
@@ -533,9 +533,9 @@ const getPending = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error obteniendo pendientes:", error);
+    console.error("Error obteniendo guardados:", error);
     return handleHTTPError(res, {
-      message: "Error al obtener las obras pendientes",
+      message: "Error al obtener las obras guardadas",
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     }, 500);
   }
@@ -646,14 +646,14 @@ const removeFromSeen = async (req, res) =>
 const getSeen = async (req, res) => getUserArtworkList(req, res, "seenArtworks");
 
 const addToNotInterested = async (req, res) =>
-  addToUserArtworkList(req, res, "notInterestedArtworks", "Obra agregada a no me interesa");
+  addToUserArtworkList(req, res, "notInterestedArtworks", "Obra ocultada correctamente");
 const removeFromNotInterested = async (req, res) =>
   removeFromUserArtworkList(
     req,
     res,
     "notInterestedArtworks",
     "artworkId",
-    "Obra removida de no me interesa"
+    "Obra mostrada de nuevo"
   );
 const getNotInterested = async (req, res) => getUserArtworkList(req, res, "notInterestedArtworks");
 

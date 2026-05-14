@@ -36,17 +36,17 @@ router.post("/favorites", authUser, addToFavorites);
 // DELETE /api/artworks/favorites/:artworkId - Remover una obra de favoritos
 router.delete("/favorites/:artworkId", authUser, removeFromFavorites);
 
-// Rutas de pendientes (requieren autenticación)
-// GET /api/artworks/pending - Obtener todas las obras pendientes del usuario
+// Rutas de guardados (pending en API; requieren autenticación)
+// GET /api/artworks/pending - Obras guardadas del usuario
 router.get("/pending", authUser, getPending);
 
-// POST /api/artworks/pending - Agregar una obra a pendientes
+// POST /api/artworks/pending - Añadir obra a guardados
 router.post("/pending", authUser, addToPending);
 
-// DELETE /api/artworks/pending/:artworkId - Remover una obra de pendientes
+// DELETE /api/artworks/pending/:artworkId - Quitar obra de guardados
 router.delete("/pending/:artworkId", authUser, removeFromPending);
 
-// Rutas de feedback explícito (disliked / seen / not-interested)
+// Rutas de feedback explícito (disliked / seen / not-interested = ocultar en feed)
 router.get("/disliked", authUser, getDisliked);
 router.post("/disliked", authUser, addToDisliked);
 router.delete("/disliked/:artworkId", authUser, removeFromDisliked);

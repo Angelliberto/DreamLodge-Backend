@@ -15,7 +15,7 @@ const usersModel = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Artwork'
   }],
-  // Obras que el usuario quiere ver o están pendientes
+  // Obras guardadas para ver después (API: pendingArtworks)
   pendingArtworks: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Artwork'

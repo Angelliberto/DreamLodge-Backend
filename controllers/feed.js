@@ -61,7 +61,7 @@ function norm(v) {
     .trim();
 }
 
-/** Bloqueo estricto solo para "no me interesa" (no confundir con vistas o dislikes). */
+/** Bloqueo estricto para obras marcadas con "Ocultar" (no confundir con vistas o dislikes). */
 function buildNotInterestedBlocklist(userDoc) {
   const titles = new Set();
   const ids = new Set();
