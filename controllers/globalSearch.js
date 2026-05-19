@@ -30,4 +30,4 @@ async function globalSearch(req, res) {
   }
 }
 
-module.exports = { globalSearch };
+module.exports = { globalSearch, parseListParam };

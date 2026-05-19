@@ -11,8 +11,8 @@ if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !proce
 console.log('Google OAuth Strategy initialized with callback URL:', process.env.CALLBACK_URL);
 
 passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,       // Add to your .env
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET, // Add to your .env
+    clientID: process.env.GOOGLE_CLIENT_ID,     
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET, 
     callbackURL: process.env.CALLBACK_URL
   },
   async (accessToken, refreshToken, profile, done) => {
