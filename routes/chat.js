@@ -10,7 +10,6 @@ const {
 } = require("../controllers/chat");
 const { authUser } = require("../middleware/session");
 
-// Validar que las funciones existan antes de usarlas
 if (typeof sendMessage !== 'function') {
   console.error('ERROR: sendMessage no es una función. Tipo:', typeof sendMessage);
   throw new Error('sendMessage debe ser una función');
@@ -38,7 +37,14 @@ if (typeof authUser !== 'function') {
 
 /**
  * @swagger
- * /api/chat/message:
+ * tags:
+ *   name: Chat
+ *   description: Chat con agente IA y gestión de conversaciones
+ */
+
+/**
+ * @swagger
+ * /chat/message:
  *   post:
  *     summary: Enviar un mensaje al agente IA
  *     tags: [Chat]
@@ -64,33 +70,237 @@ if (typeof authUser !== 'function') {
  *                 items:
  *                   type: object
  *                 description: Items de contexto (obras culturales)
+ *               currentTitle:
+ *                 type: string
+ *                 description: Título actual de la conversación
  *     responses:
  *       200:
  *         description: Mensaje procesado correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     response:
+ *                       type: string
+ *                     toolsUsed:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     context:
+ *                       type: object
+ *                     suggestedTitle:
+ *                       type: string
+ *                     serverConversationId:
+ *                       type: string
  *       400:
- *         description: Error en la petición
+ *         description: El mensaje es requerido
+ *       502:
+ *         description: Servicio de IA no disponible
  *       500:
  *         description: Error del servidor
- *       502:
- *         description: Servicio de IA (MCP) no disponible o error al contactarlo
  */
 router.post("/message", authUser, sendMessage);
 
-/** Igual que POST /message pero respuesta NDJSON con chunks (texto acumulado). Requiere stream en cliente. */
+/**
+ * @swagger
+ * /chat/message/stream:
+ *   post:
+ *     summary: Enviar un mensaje al agente IA con respuesta en streaming (NDJSON)
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - message
+ *             properties:
+ *               message:
+ *                 type: string
+ *                 description: Mensaje del usuario
+ *               conversationId:
+ *                 type: string
+ *                 description: ID de la conversación (opcional)
+ *               contextItems:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                 description: Items de contexto
+ *               currentTitle:
+ *                 type: string
+ *                 description: Título actual de la conversación
+ *     responses:
+ *       200:
+ *         description: Stream NDJSON con chunks de texto y evento done al final
+ *         content:
+ *           application/x-ndjson:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 type:
+ *                   type: string
+ *                   enum: [status, chunk, done, error]
+ *                 text:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: El mensaje es requerido
+ *       502:
+ *         description: Servicio de IA no disponible
+ */
 router.post("/message/stream", authUser, sendMessageStream);
 
-/** GET lista de conversaciones persistidas para el usuario */
+/**
+ * @swagger
+ * /chat/conversations:
+ *   get:
+ *     summary: Listar conversaciones del usuario
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 80
+ *         description: Número máximo de conversaciones a devolver
+ *     responses:
+ *       200:
+ *         description: Lista de conversaciones obtenida correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                       updatedAt:
+ *                         type: string
+ *       401:
+ *         description: Usuario no autenticado
+ *       500:
+ *         description: Error del servidor
+ */
 router.get("/conversations", authUser, listChatConversations);
 
-/** GET mensajes; :conversationRef = Mongo _id (24 hex) o clientKey (p. ej. conv_…) */
+/**
+ * @swagger
+ * /chat/conversations/{conversationRef}/messages:
+ *   get:
+ *     summary: Obtener mensajes de una conversación
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: conversationRef
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ObjectId de Mongo o clientKey de la conversación
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 500
+ *         description: Número máximo de mensajes a devolver
+ *     responses:
+ *       200:
+ *         description: Mensajes obtenidos correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     conversation:
+ *                       type: object
+ *                     messages:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           role:
+ *                             type: string
+ *                             enum: [user, assistant]
+ *                           content:
+ *                             type: string
+ *                           createdAt:
+ *                             type: string
+ *       400:
+ *         description: Identificador de conversación requerido
+ *       401:
+ *         description: Usuario no autenticado
+ *       404:
+ *         description: Conversación no encontrada
+ *       500:
+ *         description: Error del servidor
+ */
 router.get("/conversations/:conversationRef/messages", authUser, getChatMessages);
 
-/** DELETE borrado suave */
+/**
+ * @swagger
+ * /chat/conversations/{conversationRef}:
+ *   delete:
+ *     summary: Eliminar una conversación (borrado suave)
+ *     tags: [Chat]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: conversationRef
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ObjectId de Mongo o clientKey de la conversación
+ *     responses:
+ *       200:
+ *         description: Conversación eliminada correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       401:
+ *         description: Usuario no autenticado
+ *       404:
+ *         description: Conversación no encontrada
+ *       500:
+ *         description: Error del servidor
+ */
 router.delete("/conversations/:conversationRef", authUser, deleteChatConversation);
 
 /**
  * @swagger
- * /api/chat/recommendations:
+ * /chat/recommendations:
  *   get:
  *     summary: Obtener recomendaciones personalizadas
  *     tags: [Chat]
@@ -112,12 +322,21 @@ router.delete("/conversations/:conversationRef", authUser, deleteChatConversatio
  *     responses:
  *       200:
  *         description: Recomendaciones generadas correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
  *       401:
  *         description: Usuario no autenticado
+ *       502:
+ *         description: Servicio de IA no disponible
  *       500:
  *         description: Error del servidor
- *       502:
- *         description: Servicio de IA (MCP) no disponible o error al contactarlo
  */
 router.get("/recommendations", authUser, getRecommendations);
 
