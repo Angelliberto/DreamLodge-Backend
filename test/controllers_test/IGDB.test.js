@@ -1,9 +1,9 @@
-const { searchIgdbGames } = require("../services/integrations/igdbClient");
-const { handleHTTPError } = require("../utils/handleHTTPError");
+const { searchIgdbGames } = require("../../services/integrations/igdbClient");
+const { handleHTTPError } = require("../../utils/handleHTTPError");
 const { searchGames } = require("../../controllers/IGDB");
 
-jest.mock("../services/integrations/igdbClient");
-jest.mock("../utils/handleHTTPError");
+jest.mock("../../services/integrations/igdbClient");
+jest.mock("../../utils/handleHTTPError");
 
 const mockRes = () => {
   const res = {};

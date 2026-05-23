@@ -1,6 +1,6 @@
 const request = require('supertest');
 
-jest.mock('../utils/sendMail', () => ({
+jest.mock('../../utils/sendMail', () => ({
     sendEmail: jest.fn().mockResolvedValue(true),
     sendVerificationEmail: jest.fn().mockResolvedValue(true),
     generateVerificationCode: jest.fn(() => '123456')

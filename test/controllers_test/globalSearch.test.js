@@ -1,5 +1,5 @@
-const { runGlobalSearch } = require("../services/search/globalSearchService");
-jest.mock("../services/search/globalSearchService");
+const { runGlobalSearch } = require("../../services/search/globalSearchService");
+jest.mock("../../services/search/globalSearchService");
 const { globalSearch,  parseListParam} = require("../../controllers/globalSearch");
 const mockRes = () => {
   const res = {};

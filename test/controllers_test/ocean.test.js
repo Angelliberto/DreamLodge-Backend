@@ -5,7 +5,7 @@ jest.spyOn(mongoose, 'startSession').mockRejectedValue(
     new Error('Transactions unavailable in test environment')
 );
 
-jest.mock('../services/ai', () => ({
+jest.mock('../../services/ai', () => ({
     isGeminiConfigured: jest.fn(() => true),
     generateArtisticDescription: jest.fn().mockResolvedValue({
         profile: 'Explorador creativo',

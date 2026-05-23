@@ -1,6 +1,6 @@
 const request = require('supertest');
 
-jest.mock('../services/integrations/spotifyClient', () => ({
+jest.mock('../../services/integrations/spotifyClient', () => ({
     getSpotifyClientCredentialsPayload: jest.fn()
 }));
 

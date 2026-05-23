@@ -2,7 +2,7 @@ const {
   getPersonalizedFeedCurated,
   getPersonalizedFeedBuildStatus,
   rebuildPersonalizedFeed,
-} = require("../../controllers/feedController"); // ajusta la ruta
+} = require("../../controllers/feed"); 
 
 const ai = require("../../services/ai");
 const { OceanModel, UserModel } = require("../../models");
